@@ -62,12 +62,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Suspense fallback={null}>
           <ReferralCaptureInner />
         </Suspense>
+        <CookieConsentBanner />
         <AuthProvider>
           <RuntimeTextLocalizer>
             <main className="flex-1">
               {children}
             </main>
-            <CookieConsentBanner />
             <SiteFooter />
           </RuntimeTextLocalizer>
         </AuthProvider>
