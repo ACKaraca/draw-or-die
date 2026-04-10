@@ -1,0 +1,78 @@
+name: Appwrite Deployment
+
+on:
+  push:
+    branches:
+      - deployment
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appwrite-deployment-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy-site:
+    name: Deploy site to Appwrite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create source archive
+        run: |
+          git archive --format=tar.gz -o appwrite-site.tar.gz HEAD
+
+      - name: Upload deployment to Appwrite
+        env:
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+          APPWRITE_SITE_ID: ${{ vars.APPWRITE_SITE_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { Client, Sites, InputFile } from 'node-appwrite';
+
+          const endpoint = process.env.APPWRITE_ENDPOINT?.trim();
+          const projectId = process.env.APPWRITE_PROJECT_ID?.trim();
+          const apiKey = process.env.APPWRITE_API_KEY?.trim();
+          const siteId = process.env.APPWRITE_SITE_ID?.trim();
+
+          for (const [name, value] of Object.entries({ endpoint, projectId, apiKey, siteId })) {
+            if (!value) {
+              throw new Error(`Missing required Appwrite value: ${name}`);
+            }
+          }
+
+          const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+          const sites = new Sites(client);
+
+          const archivePath = 'appwrite-site.tar.gz';
+          if (!fs.existsSync(archivePath)) {
+            throw new Error(`Archive not found: ${archivePath}`);
+          }
+
+          const deployment = await sites.createDeployment({
+            siteId,
+            code: InputFile.fromPath(archivePath, 'appwrite-site.tar.gz'),
+            activate: true,
+          });
+
+          console.log(`Created Appwrite deployment: ${deployment.$id}`);
+          NODE

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://drawordie.ackaraca.me/sitemap.xml
+host: https://drawordie.ackaraca.me
