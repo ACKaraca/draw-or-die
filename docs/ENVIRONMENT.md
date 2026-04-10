@@ -1,0 +1,62 @@
+# Draw or Die — Environment Variables
+
+## `.env.local` (Next.js)
+
+```env
+# Appwrite (client-side)
+NEXT_PUBLIC_APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+NEXT_PUBLIC_APPWRITE_PROJECT_ID=draw-or-die
+
+# Appwrite (server-side — never expose to the client)
+APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
+APPWRITE_PROJECT_ID=draw-or-die
+APPWRITE_API_KEY=your-appwrite-server-api-key
+
+# Optional: dedicated email provider for edu verification emails.
+# If empty, the default configured Appwrite email provider is used.
+APPWRITE_EDU_EMAIL_PROVIDER_ID=your-email-provider-id
+
+# Stripe
+STRIPE_SECRET_KEY=sk_live_xxx
+STRIPE_WEBHOOK_SECRET=whsec_xxx
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx
+
+# App
+NEXT_PUBLIC_APP_URL=https://drawordie.ackaraca.me
+NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+## AI Gateway Variables (Next.js API Route / Server-side)
+
+These are used by `/api/ai-generate` to call the LLM.
+
+| Variable | Description | Default |
+|---|---|---|
+| `AI_API_KEY` | API key for the AI provider | — |
+| `AI_BASE_URL` | OpenAI-compatible endpoint base URL | `https://ai-gateway.vercel.sh/v1` |
+| `AI_MODEL` | Model identifier string | `google/gemini-3.1-pro` |
+| `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.ackaraca.me,https://drawordie.app` |
+
+## Security Rules
+
+1. **Never** store API keys in source code, commits, chat messages, or screen shares.
+2. If any Stripe or third-party API key is exposed, **rotate it immediately** from the relevant dashboard.
+3. `APPWRITE_API_KEY` must only be used server-side (API routes, webhooks). Never include it in client-side code.
+4. All `NEXT_PUBLIC_*` variables are exposed to the client bundle — never put secrets in them.
+5. Stripe secret keys (`sk_live_`) must only be used server-side.
+6. Never use a wildcard (`*`) in `ALLOWED_ORIGINS`.
+
+## Common Issues
+
+### 503 on Checkout
+
+This error typically means `STRIPE_SECRET_KEY` is not set in your Vercel environment.  
+Fix: Vercel Dashboard → Settings → Environment Variables → add `STRIPE_SECRET_KEY`.
+
+### AI requests returning 503
+
+`AI_API_KEY` is not set. Add it as a server-side environment variable (not `NEXT_PUBLIC_`).
+
+### Auth failures after deploy
+
+Verify `APPWRITE_ENDPOINT` and `APPWRITE_PROJECT_ID` match the project in Appwrite Cloud. Also confirm `APPWRITE_API_KEY` has the correct scopes.

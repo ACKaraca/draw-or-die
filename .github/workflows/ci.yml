@@ -1,0 +1,221 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'hooks/**'
+      - 'lib/**'
+      - 'stores/**'
+      - 'types/**'
+      - 'scripts/**'
+      - 'public/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'next.config.ts'
+      - 'tsconfig.json'
+      - 'eslint.config.mjs'
+      - 'postcss.config.mjs'
+      - 'jest.config.js'
+      - 'playwright.config.ts'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'hooks/**'
+      - 'lib/**'
+      - 'stores/**'
+      - 'types/**'
+      - 'scripts/**'
+      - 'public/**'
+      - '.github/workflows/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'next.config.ts'
+      - 'tsconfig.json'
+      - 'eslint.config.mjs'
+      - 'postcss.config.mjs'
+      - 'jest.config.js'
+      - 'playwright.config.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run type check
+        run: npm run typecheck
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+  tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run coverage suite
+        run: npm run test:coverage
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage
+          if-no-files-found: ignore
+
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Check for hardcoded secrets
+        run: |
+          if find app components hooks lib stores types -type f \( \
+              -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \
+            \) -print0 | xargs -0 grep -nH -E "(^|[^A-Za-z0-9_])(sk_live_|pk_live_|AIza|sb_secret_|SUPABASE_SERVICE_ROLE_KEY)"; then
+            echo "❌ Found potential hardcoded secrets"
+            exit 1
+          fi
+          echo "✓ No obvious hardcoded secrets detected"
+
+  deploy-appwrite:
+    name: Deploy to Appwrite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [typecheck, lint, tests, security-audit]
+    if: >
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      (github.repository == 'ahmetcemkaraca/draw-or-die' || github.repository == 'ACKaraca/draw-or-die')
+    environment:
+      name: ${{ github.repository == 'ACKaraca/draw-or-die' && 'production' || 'development' }}
+    env:
+      APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+      APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+      APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+      APPWRITE_SITE_ID: ${{ github.repository == 'ACKaraca/draw-or-die' && vars.APPWRITE_PROD_SITE_ID || vars.APPWRITE_DEV_SITE_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create source archive
+        run: git archive --format=tar.gz -o appwrite-site.tar.gz HEAD
+
+      - name: Deploy archive to Appwrite site
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { Client, InputFile, Sites } from 'node-appwrite';
+
+          const endpoint = process.env.APPWRITE_ENDPOINT?.trim();
+          const projectId = process.env.APPWRITE_PROJECT_ID?.trim();
+          const apiKey = process.env.APPWRITE_API_KEY?.trim();
+          const siteId = process.env.APPWRITE_SITE_ID?.trim();
+
+          for (const [name, value] of Object.entries({ endpoint, projectId, apiKey, siteId })) {
+            if (!value) {
+              throw new Error(`Missing required Appwrite value: ${name}`);
+            }
+          }
+
+          const archivePath = 'appwrite-site.tar.gz';
+          if (!fs.existsSync(archivePath)) {
+            throw new Error(`Archive not found: ${archivePath}`);
+          }
+
+          const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+          const sites = new Sites(client);
+
+          const deployment = await sites.createDeployment({
+            siteId,
+            code: InputFile.fromPath(archivePath, 'appwrite-site.tar.gz'),
+            activate: true,
+          });
+
+          console.log(`Created Appwrite deployment: ${deployment.$id}`);
+          NODE

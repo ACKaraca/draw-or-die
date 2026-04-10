@@ -1,0 +1,310 @@
+name: Release Gate - Appwrite Verification & Production Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/release-gate.yml'
+      - 'scripts/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: release-deployment
+  cancel-in-progress: false
+
+jobs:
+  staging-verification:
+    name: Staging Verification
+    if: github.repository == 'ACKaraca/draw-or-die'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 45
+
+    strategy:
+      matrix:
+        node-version: [20.x]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Verification
+        run: npm run build
+        env:
+          NODE_ENV: production
+        timeout-minutes: 15
+
+      - name: Type Check (Final)
+        run: npm run typecheck
+        timeout-minutes: 10
+
+      - name: Lint (Final Check)
+        run: npm run lint
+        timeout-minutes: 5
+
+      - name: Secret Scan
+        run: npm run check:secrets
+        timeout-minutes: 5
+
+      - name: Unit Tests (Full Suite)
+        run: npm run test:coverage
+        timeout-minutes: 20
+
+      - name: Security Audit (Final)
+        run: npm audit --omit=dev --audit-level=moderate
+        timeout-minutes: 5
+        continue-on-error: true
+
+  smoke-e2e-tests:
+    name: E2E Smoke Tests (Critical Path)
+    if: github.repository == 'ACKaraca/draw-or-die'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 30
+    needs: staging-verification
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E Smoke Tests
+        run: npm run test:e2e:smoke
+        timeout-minutes: 20
+        env:
+          TEST_ENV: staging
+          STRIPE_TEST_KEY: ${{ secrets.STRIPE_TEST_KEY }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: test-results/
+          retention-days: 7
+
+  appwrite-integration-check:
+    name: Appwrite Integration Validation
+    if: github.repository == 'ACKaraca/draw-or-die'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    needs: staging-verification
+    env:
+      APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+      APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+      APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+      APPWRITE_SITE_ID: ${{ vars.APPWRITE_PROD_SITE_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate Appwrite site access
+        run: |
+          node --input-type=module <<'NODE'
+          import { Client, Sites } from 'node-appwrite';
+
+          const endpoint = process.env.APPWRITE_ENDPOINT?.trim();
+          const projectId = process.env.APPWRITE_PROJECT_ID?.trim();
+          const apiKey = process.env.APPWRITE_API_KEY?.trim();
+          const siteId = process.env.APPWRITE_SITE_ID?.trim();
+
+          for (const [name, value] of Object.entries({ endpoint, projectId, apiKey, siteId })) {
+            if (!value) {
+              throw new Error(`Missing required Appwrite value: ${name}`);
+            }
+          }
+
+          const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+          const sites = new Sites(client);
+          const site = await sites.get({ siteId });
+
+          console.log(`Validated Appwrite site: ${site.$id}`);
+          NODE
+
+      - name: Check Stripe configuration
+        run: npm run check:stripe-config
+        timeout-minutes: 5
+
+      - name: Test payment mock fixtures
+        run: npm run test:payment-mocks
+        timeout-minutes: 5
+
+  security-final-check:
+    name: Security & Rate Limiting Check
+    if: github.repository == 'ACKaraca/draw-or-die'
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 10
+    needs: staging-verification
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: 'npm'
+
+      - name: Check hardcoded secrets (final)
+        run: |
+          echo "Checking for hardcoded keys..."
+          if grep -r "sk_live_\|pk_live_\|APPWRITE_API_KEY=.*[A-Za-z0-9]" . --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules --exclude-dir=.git 2>/dev/null; then
+            echo "❌ Found hardcoded production credentials"
+            exit 1
+          fi
+          echo "✓ No hardcoded production credentials detected"
+        timeout-minutes: 5
+
+      - name: Verify rate limiting is enabled
+        run: npm run check:rate-limiting
+        timeout-minutes: 5
+
+  pre-deployment-check:
+    name: Pre-Deployment Checklist
+    runs-on: ubuntu-latest
+    needs: [staging-verification, smoke-e2e-tests, appwrite-integration-check, security-final-check]
+    if: always() && github.repository == 'ACKaraca/draw-or-die'
+
+    steps:
+      - name: Verify all gates passed
+        run: |
+          echo "Staging Verification: ${{ needs.staging-verification.result }}"
+          echo "Smoke E2E Tests: ${{ needs.smoke-e2e-tests.result }}"
+          echo "Appwrite Check: ${{ needs.appwrite-integration-check.result }}"
+          echo "Security Check: ${{ needs.security-final-check.result }}"
+
+          if [ "${{ needs.staging-verification.result }}" != "success" ] || \
+             [ "${{ needs.smoke-e2e-tests.result }}" != "success" ] || \
+             [ "${{ needs.appwrite-integration-check.result }}" != "success" ] || \
+             [ "${{ needs.security-final-check.result }}" != "success" ]; then
+            echo "❌ Release gates failed. Cannot proceed to production."
+            exit 1
+          fi
+
+          echo "✅ All release gates passed. Ready for production deployment."
+
+  production-deployment:
+    name: Production Deployment (Appwrite)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production' && github.repository == 'ACKaraca/draw-or-die'
+    runs-on: ubuntu-latest
+    environment: production
+    needs: [staging-verification, smoke-e2e-tests, appwrite-integration-check, security-final-check, pre-deployment-check]
+    timeout-minutes: 20
+    env:
+      APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+      APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+      APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+      APPWRITE_SITE_ID: ${{ vars.APPWRITE_PROD_SITE_ID }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create source archive
+        run: git archive --format=tar.gz -o appwrite-site.tar.gz HEAD
+
+      - name: Deploy to Appwrite production site
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { Client, InputFile, Sites } from 'node-appwrite';
+
+          const endpoint = process.env.APPWRITE_ENDPOINT?.trim();
+          const projectId = process.env.APPWRITE_PROJECT_ID?.trim();
+          const apiKey = process.env.APPWRITE_API_KEY?.trim();
+          const siteId = process.env.APPWRITE_SITE_ID?.trim();
+
+          for (const [name, value] of Object.entries({ endpoint, projectId, apiKey, siteId })) {
+            if (!value) {
+              throw new Error(`Missing required Appwrite value: ${name}`);
+            }
+          }
+
+          const archivePath = 'appwrite-site.tar.gz';
+          if (!fs.existsSync(archivePath)) {
+            throw new Error(`Archive not found: ${archivePath}`);
+          }
+
+          const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+          const sites = new Sites(client);
+          const deployment = await sites.createDeployment({
+            siteId,
+            code: InputFile.fromPath(archivePath, 'appwrite-site.tar.gz'),
+            activate: true,
+          });
+
+          console.log(`Created Appwrite deployment: ${deployment.$id}`);
+          NODE
+
+      - name: Post-Deploy Health Check
+        run: npm run validate:health-check
+        timeout-minutes: 5
+
+      - name: Verify payment system online
+        run: npm run check:payment-system
+        timeout-minutes: 5
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Production deployment successful!"
+          echo "Commit: ${{ github.sha }}"
+          echo "Time: $(date)"
+          echo "Payment system: ONLINE ✅"
