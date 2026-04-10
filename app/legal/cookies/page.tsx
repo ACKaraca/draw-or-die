@@ -10,7 +10,8 @@ export default function CookiesPage() {
           Platform deneyimini iyileştirmek için zorunlu çerezler ve oturum çerezleri kullanılır.
         </p>
         <p>
-          Google Analytics, sadece kullanıcı açık onay verdiğinde etkinleşir. Onay verilmezse analitik çerezler devre dışı kalır ve sadece zorunlu teknik çerezler çalışır.
+          Google Analytics, sadece kullanici acik onay verdiginde etkinlesir. Onay verildiginde Google Signals, User-ID/kullanici tarafindan saglanan veri olcumu, ayrintili konum-cihaz metrikleri ve reklam kisisellestirme icin gerekli izinler devreye girer.
+          Onay verilmezse analitik ve reklam cerezleri devre disi kalir, sadece zorunlu teknik cerezler calisir.
         </p>
         <p>
           Güvenlik, kimlik doğrulama ve ödeme yönlendirme süreçlerinde teknik çerezler aktif olabilir.

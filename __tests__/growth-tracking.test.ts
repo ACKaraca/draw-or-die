@@ -2,6 +2,7 @@ import {
   applyAnalyticsConsent,
   captureUTMFromCurrentUrl,
   getPersistedUTM,
+  syncAnalyticsConsentFromStorage,
   trackConversionEvent,
 } from '@/lib/growth-tracking';
 
@@ -70,5 +71,32 @@ describe('growth tracking helpers', () => {
     await trackConversionEvent('campaign_landing_view', { source: 'hero' });
 
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('updates all consent mode v2 flags when consent is accepted', () => {
+    window.gtag = jest.fn();
+
+    applyAnalyticsConsent('accepted');
+
+    expect(window.gtag).toHaveBeenCalledWith('consent', 'update', {
+      analytics_storage: 'granted',
+      ad_storage: 'granted',
+      ad_user_data: 'granted',
+      ad_personalization: 'granted',
+    });
+  });
+
+  it('re-applies persisted consent on boot', () => {
+    window.localStorage.setItem('draw_or_die_cookie_consent_v1', 'rejected');
+    window.gtag = jest.fn();
+
+    syncAnalyticsConsentFromStorage();
+
+    expect(window.gtag).toHaveBeenCalledWith('consent', 'update', {
+      analytics_storage: 'denied',
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied',
+    });
   });
 });
