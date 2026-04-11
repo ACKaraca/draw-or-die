@@ -33,26 +33,26 @@ describe('CookieConsentBanner', () => {
   it('accept flow updates consent and hides banner', async () => {
     render(<CookieConsentBanner />);
 
-    await userEvent.click(screen.getByRole('button', { name: /kabul et/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^kabul et$/i }));
 
     expect(mockedApplyAnalyticsConsent).toHaveBeenCalledWith('accepted');
     expect(mockedTrackConversionEvent).toHaveBeenCalledWith('cookie_consent_accepted', { source: 'banner' });
     expect(mockedTrackPageView).toHaveBeenCalledWith('/');
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /kabul et/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^kabul et$/i })).not.toBeInTheDocument();
     });
   });
 
-  it('reject flow updates consent and hides banner', async () => {
+  it('close button also accepts consent and hides banner', async () => {
     render(<CookieConsentBanner />);
 
-    await userEvent.click(screen.getByRole('button', { name: /reddet/i }));
+    await userEvent.click(screen.getByRole('button', { name: /kapat ve kabul et/i }));
 
-    expect(mockedApplyAnalyticsConsent).toHaveBeenCalledWith('rejected');
+    expect(mockedApplyAnalyticsConsent).toHaveBeenCalledWith('accepted');
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /reddet/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /kapat ve kabul et/i })).not.toBeInTheDocument();
     });
   });
 
@@ -63,10 +63,10 @@ describe('CookieConsentBanner', () => {
 
     render(<CookieConsentBanner />);
 
-    await userEvent.click(screen.getByRole('button', { name: /kabul et/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^kabul et$/i }));
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /kabul et/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^kabul et$/i })).not.toBeInTheDocument();
     });
   });
 });
