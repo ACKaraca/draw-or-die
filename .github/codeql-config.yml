@@ -1,0 +1,10 @@
+name: "DrawOrDie CodeQL config"
+
+paths-ignore:
+  - scripts
+  - test-ai.mjs
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - __tests__
+  - jest.setup.js
+  - jest.config.ts

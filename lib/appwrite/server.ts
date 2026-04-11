@@ -239,8 +239,17 @@ export type NormalizedUserProfile = {
 
 export function generateReferralCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const bytes = randomBytes(8);
-  return Array.from(bytes).map((b) => chars[b % chars.length]).join('');
+  const charsLen = chars.length; // 36
+  const limit = 256 - (256 % charsLen); // 252: largest multiple of 36 ≤ 256
+  const result: string[] = [];
+  while (result.length < 8) {
+    const raw = randomBytes(8 - result.length + 4);
+    for (const b of raw) {
+      if (result.length >= 8) break;
+      if (b < limit) result.push(chars[b % charsLen]);
+    }
+  }
+  return result.join('');
 }
 
 function safeParseBadges(raw: unknown): unknown[] {
