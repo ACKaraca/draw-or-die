@@ -42,8 +42,8 @@ export function CookieConsentBanner() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="text-xs leading-relaxed text-slate-300 md:max-w-4xl">
           Site kullanimini olcmek ve urun kalitesini artirmak icin Google Analytics cerezleri kullaniyoruz.
-          &quot;Kabul Et&quot; seceneginde Google Signals, User-ID/kullanici tarafindan saglanan veriler, ayrintili konum-cihaz olcumu ve reklam kisisellestirme dahil analiz ozellikleri etkinlesir.
-          &quot;Reddet&quot; seceneginde analytics ve advertising cerezleri kapali kalir, sadece zorunlu teknik cerezler calisir.
+          &quot;Kabul Et&quot; seçeneğinde Google Signals, User-ID/kullanıcı tarafından sağlanan veriler, ayrıntılı konum-cihaz ölçümü ve reklam kişiselleştirme dahil analiz özellikleri etkinleşir.
+          &quot;Reddet&quot; seçeneğinde analitik ve reklam çerezleri kapalı kalır, sadece zorunlu teknik çerezler çalışır.
           Detaylar icin <Link href="/legal/cookies" className="text-cyan-300 underline underline-offset-2">Cerez Politikasi</Link>.
         </div>
 
