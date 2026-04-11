@@ -75,8 +75,8 @@ export function CookieConsentBanner() {
           <button
             type="button"
             onClick={() => dismiss('accepted')}
-            aria-label="Kapat"
-            title="Kapat"
+            aria-label="Kapat ve kabul et"
+            title="Kapat ve kabul et"
             className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
           >
             <X size={14} />

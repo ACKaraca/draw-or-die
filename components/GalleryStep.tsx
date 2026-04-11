@@ -76,26 +76,39 @@ async function renderImageToJpegPayload(file: File): Promise<{ base64: string; w
 async function renderPdfFirstPageToJpegPayload(file: File): Promise<{ base64: string; width: number; height: number }> {
   const pdfjs = await import('pdfjs-dist');
   const bytes = await file.arrayBuffer();
-  pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+  const workerSources = [
+    '/pdf.worker.min.mjs',
+    `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`,
+  ];
 
-  const pdf = await pdfjs.getDocument({ data: bytes }).promise;
-  const page = await pdf.getPage(1);
-  const viewport = page.getViewport({ scale: 1.8 });
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('PDF JPEG donusumu basarisiz.');
+  for (const workerSrc of workerSources) {
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
+      const pdf = await pdfjs.getDocument({ data: bytes }).promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 1.8 });
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        continue;
+      }
+
+      canvas.width = Math.max(1, Math.floor(viewport.width));
+      canvas.height = Math.max(1, Math.floor(viewport.height));
+      await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+
+      return {
+        base64: extractBase64(canvas.toDataURL('image/jpeg', 0.82)),
+        width: canvas.width,
+        height: canvas.height,
+      };
+    } catch {
+      // Try the next worker source.
+    }
   }
 
-  canvas.width = Math.max(1, Math.floor(viewport.width));
-  canvas.height = Math.max(1, Math.floor(viewport.height));
-  await page.render({ canvasContext: ctx, viewport, canvas }).promise;
-
-  return {
-    base64: extractBase64(canvas.toDataURL('image/jpeg', 0.82)),
-    width: canvas.width,
-    height: canvas.height,
-  };
+  throw new Error('PDF JPEG donusumu basarisiz.');
 }
 
 async function convertShareFileToJpeg(file: File): Promise<{ base64: string; width: number; height: number; mimeType: string }> {

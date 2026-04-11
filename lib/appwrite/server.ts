@@ -33,7 +33,7 @@ function readLocalEnvValue(key: string): string {
         if (separatorIndex < 1) continue;
         const currentKey = trimmed.slice(0, separatorIndex).trim();
         if (currentKey !== key) continue;
-        const value = trimmed.slice(separatorIndex + 1).trim();
+        const value = parseLocalEnvValue(trimmed.slice(separatorIndex + 1));
         return value;
       }
     } catch {
@@ -42,6 +42,53 @@ function readLocalEnvValue(key: string): string {
   }
 
   return '';
+}
+
+function parseLocalEnvValue(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
+    const quote = trimmed[0];
+    let value = '';
+    let escaped = false;
+
+    for (let index = 1; index < trimmed.length; index += 1) {
+      const char = trimmed[index];
+      if (quote === '"' && escaped) {
+        value += char;
+        escaped = false;
+        continue;
+      }
+
+      if (quote === '"' && char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (char === quote) {
+        return value;
+      }
+
+      value += char;
+    }
+
+    return value;
+  }
+
+  let endIndex = trimmed.length;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index];
+    if (char === '#') {
+      const previousChar = index > 0 ? trimmed[index - 1] : '';
+      if (index === 0 || /\s/.test(previousChar)) {
+        endIndex = index;
+        break;
+      }
+    }
+  }
+
+  return trimmed.slice(0, endIndex).trimEnd();
 }
 
 function resolveServerApiKey(): string {

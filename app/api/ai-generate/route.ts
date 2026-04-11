@@ -2026,9 +2026,17 @@ export async function POST(request: NextRequest) {
       typedProfile.rapido_fraction_cents,
     );
 
-    const body = await request.json();
-    const { operation, imageBase64, imageMimeType, params = {} } = body;
-    const payload = params as Record<string, unknown>;
+    const body = await request.json().catch(() => null);
+    const requestBody = body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
+    const operation = requestBody.operation;
+    const imageBase64 = requestBody.imageBase64;
+    const imageMimeType = requestBody.imageMimeType;
+    const paramsValue = requestBody.params;
+    const payload = paramsValue && typeof paramsValue === 'object' && !Array.isArray(paramsValue)
+      ? paramsValue as Record<string, unknown>
+      : {};
     const headerLanguage = resolveLanguageFromAcceptLanguage(
       request.headers.get('accept-language'),
       typedProfile.preferred_language,
@@ -2249,7 +2257,7 @@ export async function POST(request: NextRequest) {
       model: readCleanEnv('AI_MODEL') || DEFAULTS.model,
     };
 
-    const harshnessRaw = (params as Record<string, unknown>).harshness;
+    const harshnessRaw = payload.harshness;
     const harshness = typeof harshnessRaw === 'number' ? harshnessRaw : 3;
     const tone = createToneGuide(harshness, requestLanguage);
     const analysisLength = resolveAnalysisLength(payload, typedProfile, user);
