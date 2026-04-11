@@ -383,6 +383,15 @@ async function setupProfilesTable(tables: TablesDB): Promise<void> {
     ['referral_code'],
     [OrderBy.Asc],
   );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PROFILES_ID,
+    'profiles_referred_by_idx',
+    TablesDBIndexType.Key,
+    ['referred_by'],
+    [OrderBy.Asc],
+  );
 }
 
 async function setupGalleryTable(tables: TablesDB): Promise<void> {

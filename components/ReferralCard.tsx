@@ -4,16 +4,20 @@ import { useState } from 'react';
 import { Share2, Copy, Check } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
+const REFERRAL_BASE_URL = (process.env.NEXT_PUBLIC_REFERRAL_BASE_URL ?? 'https://drawordie.app').replace(/\/$/, '');
+
 export function ReferralCard() {
   const { profile } = useAuth();
   const [copied, setCopied] = useState(false);
 
   const referralCode = profile?.referral_code ?? null;
+  const referralSignupCount = Number.isFinite(profile?.referral_signup_count)
+    ? Math.max(0, Math.trunc(profile?.referral_signup_count ?? 0))
+    : 0;
 
   if (!referralCode) return null;
 
-  const appUrl = (typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '');
-  const referralLink = `${appUrl}/?ref=${referralCode}`;
+  const referralLink = `${REFERRAL_BASE_URL}/?ref=${referralCode}`;
 
   const handleCopy = async () => {
     try {
@@ -50,6 +54,11 @@ export function ReferralCard() {
       <p className="text-xs text-slate-500 mb-4">
         Ödül, email doğrulaması tamamlandıktan sonra otomatik olarak eklenir.
       </p>
+
+      <div className="mb-4 rounded-lg border border-emerald-500/20 bg-black/20 px-3 py-2.5">
+        <p className="text-[11px] font-mono uppercase tracking-wider text-emerald-200">Toplam referral kaydı</p>
+        <p className="mt-1 text-xl font-display text-white">{referralSignupCount}</p>
+      </div>
 
       <div className="flex items-center gap-2">
         <div className="flex-1 min-w-0 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 font-mono text-xs text-slate-300 truncate select-all">

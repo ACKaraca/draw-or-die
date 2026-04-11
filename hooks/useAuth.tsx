@@ -35,6 +35,7 @@ export type UserProfile = {
     referral_code?: string | null
     referred_by?: string | null
     referral_rewarded_at?: string | null
+    referral_signup_count?: number
 }
 
 type AuthContextType = {

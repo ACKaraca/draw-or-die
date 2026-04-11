@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getAuthenticatedUserFromRequest,
+  getReferralSignupCountByCode,
   getOrCreateProfile,
   updateProfileById,
 } from '@/lib/appwrite/server';
@@ -28,7 +29,16 @@ export async function GET(request: NextRequest) {
 
     await ensureCoreAppwriteResources();
     const profile = await getOrCreateProfile(user);
-    return NextResponse.json({ profile });
+    const referralSignupCount = profile.referral_code
+      ? await getReferralSignupCountByCode(profile.referral_code)
+      : 0;
+
+    return NextResponse.json({
+      profile: {
+        ...profile,
+        referral_signup_count: referralSignupCount,
+      },
+    });
   } catch (error) {
     logServerError('api.profile.GET', error);
     return NextResponse.json({ error: 'Profil alınamadı.' }, { status: 500 });

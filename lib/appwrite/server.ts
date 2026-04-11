@@ -234,6 +234,7 @@ export type NormalizedUserProfile = {
   referral_code: string | null;
   referred_by: string | null;
   referral_rewarded_at: string | null;
+  referral_signup_count?: number;
 };
 
 export function generateReferralCode(): string {
@@ -286,6 +287,7 @@ export function normalizeProfileRow(row: UserProfileRow): NormalizedUserProfile 
     referral_code: row.referral_code || null,
     referred_by: row.referred_by || null,
     referral_rewarded_at: row.referral_rewarded_at || null,
+    referral_signup_count: 0,
   };
 }
 
@@ -298,7 +300,34 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
       tableId: APPWRITE_TABLE_PROFILES_ID,
       rowId: user.id,
     });
-    return normalizeProfileRow(row);
+
+    if (typeof row.referral_code === 'string' && row.referral_code.trim()) {
+      return normalizeProfileRow(row);
+    }
+
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const nextCode = generateReferralCode();
+      try {
+        const updated = await tables.updateRow<UserProfileRow>({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_PROFILES_ID,
+          rowId: user.id,
+          data: { referral_code: nextCode },
+        });
+        return normalizeProfileRow(updated);
+      } catch (updateError) {
+        if (!isAppwriteConflict(updateError)) {
+          throw updateError;
+        }
+      }
+    }
+
+    const refreshed = await tables.getRow<UserProfileRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROFILES_ID,
+      rowId: user.id,
+    });
+    return normalizeProfileRow(refreshed);
   } catch (error: any) {
     if (!isAppwriteNotFound(error)) {
       throw error;
@@ -454,6 +483,28 @@ export async function findProfileByReferralCode(code: string): Promise<Normalize
   });
   if (!rows.rows.length) return null;
   return normalizeProfileRow(rows.rows[0]);
+}
+
+export async function getReferralSignupCountByCode(code: string): Promise<number> {
+  const normalized = code.trim().toUpperCase();
+  if (!normalized) return 0;
+
+  const tables = getAdminTables();
+  const rows = await tables.listRows<UserProfileRow>({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_TABLE_PROFILES_ID,
+    queries: [
+      Query.equal('referred_by', normalized),
+      Query.limit(1),
+    ],
+    total: true,
+  });
+
+  if (typeof rows.total === 'number' && Number.isFinite(rows.total)) {
+    return Math.max(0, Math.trunc(rows.total));
+  }
+
+  return rows.rows.length;
 }
 
 export async function findProfileBySubscriptionId(subscriptionId: string): Promise<NormalizedUserProfile | null> {
