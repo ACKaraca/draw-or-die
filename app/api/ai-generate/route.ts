@@ -44,6 +44,16 @@ const DEFAULTS = {
   model: 'google/gemini-3.1-flash-lite-preview',
 };
 
+function readCleanEnv(name: string): string {
+  const raw = process.env[name];
+  if (typeof raw !== 'string') return '';
+
+  const value = raw.trim();
+  if (!value) return '';
+
+  return /[\r\n\0]/.test(value) ? '' : value;
+}
+
 // Maps allowed AI provider hostnames to their canonical base URLs.
 // The hostname from the env var is used ONLY as a lookup key — the returned value
 // is our own hardcoded constant, never the user-provided URL (prevents SSRF).
@@ -250,13 +260,25 @@ async function callAI(
   }
 
   if (!res.ok) {
-    const errBody = await res.text();
-    const providerError = new Error(`AI API ${res.status}: ${errBody.substring(0, 300)}`) as Error & {
+    const providerRequestId =
+      res.headers.get('x-request-id') ||
+      res.headers.get('request-id') ||
+      res.headers.get('x-correlation-id') ||
+      null;
+
+    // Avoid logging provider response body directly to reduce sensitive data exposure.
+    const providerError = new Error(
+      providerRequestId
+        ? `AI API ${res.status} (requestId: ${providerRequestId})`
+        : `AI API ${res.status}`,
+    ) as Error & {
       isProviderFailure: true;
       providerStatus: number;
+      providerRequestId: string | null;
     };
     providerError.isProviderFailure = true;
     providerError.providerStatus = res.status;
+    providerError.providerRequestId = providerRequestId;
     throw providerError;
   }
 
@@ -2207,7 +2229,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const apiKey = process.env.AI_API_KEY?.replace(/[\r\n\s"']/g, '').trim();
+    const apiKey = readCleanEnv('AI_API_KEY');
     if (!apiKey) {
       return respond(
         {
@@ -2222,9 +2244,9 @@ export async function POST(request: NextRequest) {
     }
 
     const cfg: AIConfig = {
-      baseUrl: process.env.AI_BASE_URL?.replace(/[\r\n\s"']/g, '').trim() || DEFAULTS.baseUrl,
+      baseUrl: readCleanEnv('AI_BASE_URL') || DEFAULTS.baseUrl,
       apiKey,
-      model: process.env.AI_MODEL?.replace(/[\r\n\s"']/g, '').trim() || DEFAULTS.model,
+      model: readCleanEnv('AI_MODEL') || DEFAULTS.model,
     };
 
     const harshnessRaw = (params as Record<string, unknown>).harshness;
@@ -3339,12 +3361,18 @@ export async function POST(request: NextRequest) {
       game_state: gameStateResult,
     });
   } catch (error) {
-    const typed = error as { isProviderFailure?: boolean; providerStatus?: number; message?: string };
+    const typed = error as {
+      isProviderFailure?: boolean;
+      providerStatus?: number;
+      providerRequestId?: string | null;
+      message?: string;
+    };
     if (typed?.isProviderFailure) {
       logServerError('api.ai-generate.provider', error, {
         requestId,
         ip,
         providerStatus: typed.providerStatus ?? null,
+        providerRequestId: typed.providerRequestId ?? null,
       });
 
       return respond(
