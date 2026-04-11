@@ -1,4 +1,6 @@
 import { randomBytes } from 'crypto';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { Account, Client, ID, Query, Storage, TablesDB } from 'node-appwrite';
 import type { Models } from 'node-appwrite';
 import type { NextRequest } from 'next/server';
@@ -8,7 +10,105 @@ import { TIER_DEFAULTS } from '@/lib/pricing';
 
 export const APPWRITE_SERVER_ENDPOINT = process.env.APPWRITE_ENDPOINT ?? 'https://fra.cloud.appwrite.io/v1';
 export const APPWRITE_SERVER_PROJECT_ID = process.env.APPWRITE_PROJECT_ID ?? 'draw-or-die';
-export const APPWRITE_SERVER_API_KEY = process.env.APPWRITE_API_KEY ?? '';
+
+function readLocalEnvValue(key: string): string {
+  if (process.env.NODE_ENV !== 'development') {
+    return '';
+  }
+
+  const candidates = [
+    join(process.cwd(), '.env.development.local'),
+    join(process.cwd(), '.env.local'),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      if (!existsSync(filePath)) continue;
+      const content = readFileSync(filePath, 'utf8');
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const separatorIndex = trimmed.indexOf('=');
+        if (separatorIndex < 1) continue;
+        const currentKey = trimmed.slice(0, separatorIndex).trim();
+        if (currentKey !== key) continue;
+        const value = parseLocalEnvValue(trimmed.slice(separatorIndex + 1));
+        return value;
+      }
+    } catch {
+      // Ignore local env parsing failures and fall back to process env.
+    }
+  }
+
+  return '';
+}
+
+function parseLocalEnvValue(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
+    const quote = trimmed[0];
+    let value = '';
+    let escaped = false;
+
+    for (let index = 1; index < trimmed.length; index += 1) {
+      const char = trimmed[index];
+      if (quote === '"' && escaped) {
+        value += char;
+        escaped = false;
+        continue;
+      }
+
+      if (quote === '"' && char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (char === quote) {
+        return value;
+      }
+
+      value += char;
+    }
+
+    return value;
+  }
+
+  let endIndex = trimmed.length;
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index];
+    if (char === '#') {
+      const previousChar = index > 0 ? trimmed[index - 1] : '';
+      if (index === 0 || /\s/.test(previousChar)) {
+        endIndex = index;
+        break;
+      }
+    }
+  }
+
+  return trimmed.slice(0, endIndex).trimEnd();
+}
+
+function resolveServerApiKey(): string {
+  const localOverride = (process.env.APPWRITE_API_KEY_LOCAL ?? '').trim();
+  if (localOverride) {
+    return localOverride;
+  }
+
+  const processKey = (process.env.APPWRITE_API_KEY ?? '').trim();
+  const localFileKey = readLocalEnvValue('APPWRITE_API_KEY').trim();
+
+  if (process.env.NODE_ENV === 'development' && localFileKey && processKey && localFileKey !== processKey) {
+    console.warn('[appwrite] APPWRITE_API_KEY mismatch detected in development. Using key from .env.development.local/.env.local.');
+    return localFileKey;
+  }
+
+  return localFileKey || processKey;
+}
+
+export const APPWRITE_SERVER_API_KEY = resolveServerApiKey();
 
 export const APPWRITE_DATABASE_ID = process.env.APPWRITE_DATABASE_ID ?? 'draw_or_die';
 export const APPWRITE_TABLE_PROFILES_ID = process.env.APPWRITE_TABLE_PROFILES_ID ?? 'profiles';
@@ -239,8 +339,17 @@ export type NormalizedUserProfile = {
 
 export function generateReferralCode(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const bytes = randomBytes(8);
-  return Array.from(bytes).map((b) => chars[b % chars.length]).join('');
+  const charsLen = chars.length; // 36
+  const limit = 256 - (256 % charsLen); // 252: largest multiple of 36 ≤ 256
+  const result: string[] = [];
+  while (result.length < 8) {
+    const raw = randomBytes(8 - result.length + 4);
+    for (const b of raw) {
+      if (result.length >= 8) break;
+      if (b < limit) result.push(chars[b % charsLen]);
+    }
+  }
+  return result.join('');
 }
 
 function safeParseBadges(raw: unknown): unknown[] {

@@ -1,3 +1,5 @@
+import { useLanguage } from "@/components/RuntimeTextLocalizer";
+import { pickLocalized } from "@/lib/i18n";
 import { motion } from 'framer-motion';
 import { Crown, AlertTriangle, RefreshCw, TrendingUp } from 'lucide-react';
 import Markdown from 'react-markdown';
@@ -51,6 +53,7 @@ export function ResultStep({
     handlePreserveAnalysis,
     handleShareToCommunity,
 }: ResultStepProps) {
+    const language = useLanguage();
     const exportRef = useRef<HTMLDivElement>(null);
     const [showCompare, setShowCompare] = useState(false);
 
@@ -148,11 +151,11 @@ export function ResultStep({
                         <div className="absolute inset-0 flex relative border-4 border-neon-red/30">
                             <div className="w-1/2 h-full border-r border-neon-red relative">
                                 {previousProject.mimeType === 'application/pdf' ? (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-500 font-mono text-xs">PDF önizleme karşılaştırması desteklenmiyor</div>
+                                    <div className="w-full h-full flex items-center justify-center text-slate-500 font-mono text-xs">{pickLocalized(language, 'PDF önizleme karşılaştırması desteklenmiyor', 'PDF preview comparison is not supported')}</div>
                                 ) : (
-                                    <img src={previousProject.imageBase64} alt="Önce" className="absolute top-0 left-0 w-[200%] max-w-none h-full object-contain object-left pointer-events-none" />
+                                    <img src={previousProject.imageBase64} alt={pickLocalized(language, 'Önce', 'Before')} className="absolute top-0 left-0 w-[200%] max-w-none h-full object-contain object-left pointer-events-none" />
                                 )}
-                                <span className="absolute top-2 left-2 bg-black/80 text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">Önce</span>
+                                <span className="absolute top-2 left-2 bg-black/80 text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">{pickLocalized(language, 'Önce', 'Before')}</span>
                             </div>
                             <div className="w-1/2 h-full relative overflow-hidden">
                                 {mimeType === 'application/pdf' ? (
@@ -162,9 +165,9 @@ export function ResultStep({
                                         showControls={false}
                                     />
                                 ) : (
-                                    <img src={previewUrl!} alt="Sonra" className="absolute top-0 right-0 w-[200%] max-w-none h-full object-contain object-right pointer-events-none" />
+                                    <img src={previewUrl!} alt={pickLocalized(language, 'Sonra', 'After')} className="absolute top-0 right-0 w-[200%] max-w-none h-full object-contain object-right pointer-events-none" />
                                 )}
-                                <span className="absolute top-2 right-2 bg-neon-red text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">Sonra</span>
+                                <span className="absolute top-2 right-2 bg-neon-red text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">{pickLocalized(language, 'Sonra', 'After')}</span>
                             </div>
                         </div>
                     ) : (
@@ -207,14 +210,14 @@ export function ResultStep({
                         onClick={handleNewProject}
                         className="flex-1 flex items-center justify-center gap-2 py-3 border border-white/20 hover:bg-white/5 transition-colors text-sm font-mono uppercase"
                     >
-                        <RefreshCw size={16} /> Yeni Proje
+                        <RefreshCw size={16} /> {pickLocalized(language, 'Yeni Proje', 'New Project')}
                     </button>
                     {previousProject && (
                         <button
                             onClick={handleRevision}
                             className="flex-1 flex items-center justify-center gap-2 py-3 bg-neon-red/10 border border-neon-red/30 text-neon-red hover:bg-neon-red/20 transition-colors text-sm font-mono uppercase"
                         >
-                            <TrendingUp size={16} /> Revizyon Yükle
+                            <TrendingUp size={16} /> {pickLocalized(language, 'Revizyon Yükle', 'Upload Revision')}
                         </button>
                     )}
                 </div>
@@ -226,10 +229,10 @@ export function ResultStep({
                     <div className="absolute top-0 left-0 w-1 h-full bg-neon-red"></div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-6 border-b border-white/10 pb-4">
                         <AlertTriangle className="text-neon-red" size={28} />
-                        <h2 className="font-display text-2xl font-bold uppercase tracking-wider text-white">Jüri Raporu</h2>
+                        <h2 className="font-display text-2xl font-bold uppercase tracking-wider text-white">{pickLocalized(language, 'Jüri Raporu', 'Jury Report')}</h2>
                         {lastProgression !== null && (
                             <span className="ml-4 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded text-xs font-mono text-emerald-400 flex items-center gap-1">
-                                <TrendingUp size={14} /> +{lastProgression} Gelişim
+                                <TrendingUp size={14} /> +{lastProgression} {pickLocalized(language, 'Gelişim', 'Progression')}
                             </span>
                         )}
                         <span className="ml-auto px-3 py-1 bg-white/5 border border-white/10 rounded text-xs font-mono text-slate-400">

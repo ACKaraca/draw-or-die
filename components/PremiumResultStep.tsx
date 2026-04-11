@@ -1,3 +1,5 @@
+import { useLanguage } from "@/components/RuntimeTextLocalizer";
+import { pickLocalized } from "@/lib/i18n";
 import { motion } from 'framer-motion';
 import { PenTool, X, ShieldAlert, CheckCircle2, GraduationCap, Layers3, FileImage } from 'lucide-react';
 import { DefenseMessage, PremiumData } from '@/types';
@@ -60,6 +62,7 @@ export function PremiumResultStep({
 }: PremiumResultStepProps) {
   const exportRef = useRef<HTMLDivElement>(null);
   const [showCompare, setShowCompare] = useState(false);
+    const language = useLanguage();
 
   const pages = useMemo<DisplayPage[]>(() => {
     if (premiumData.pages && premiumData.pages.length > 0) {
@@ -99,11 +102,15 @@ export function PremiumResultStep({
     return pages[0]?.page ?? 1;
   }, [manualActivePage, pages, selectedFlawPage]);
 
-  const activePageEntry = pages.find((entry) => entry.page === activePage) ?? pages[0] ?? null;
-  const activePageIndex = Math.max(
-    0,
-    pages.findIndex((entry) => entry.page === (activePageEntry?.page ?? 1)),
+  const activePageEntry = useMemo(
+    () => pages.find((entry) => entry.page === activePage) ?? pages[0] ?? null,
+    [activePage, pages],
   );
+  const activePageIndex = useMemo(() => {
+    if (!activePageEntry) return 0;
+    const index = pages.findIndex((entry) => entry.page === activePageEntry.page);
+    return index >= 0 ? index : 0;
+  }, [activePageEntry, pages]);
 
   const flawRows = useMemo(
     () =>
@@ -214,11 +221,11 @@ export function PremiumResultStep({
           {showCompare && previousPreview && currentPreview ? (
             <div className="absolute inset-0 flex relative border-4 border-yellow-500/30">
               <div className="w-1/2 h-full border-r border-yellow-500 relative bg-black">
-                <img src={previousPreview} alt="Önce" className="absolute top-0 left-0 w-[200%] max-w-none h-full object-contain object-left pointer-events-none opacity-70 grayscale" />
-                <span className="absolute top-2 left-2 bg-black/80 text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">Önceki Hali</span>
+                <img src={previousPreview} alt={pickLocalized(language, 'Önce', 'Before')} className="absolute top-0 left-0 w-[200%] max-w-none h-full object-contain object-left pointer-events-none opacity-70 grayscale" />
+                <span className="absolute top-2 left-2 bg-black/80 text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">{pickLocalized(language, 'Önceki Hali', 'Previous State')}</span>
               </div>
               <div className="w-1/2 h-full relative overflow-hidden bg-black">
-                <img src={currentPreview} alt="Sonra" className="absolute top-0 right-0 w-[200%] max-w-none h-full object-contain object-right pointer-events-none" />
+                <img src={currentPreview} alt={pickLocalized(language, 'Sonra', 'After')} className="absolute top-0 right-0 w-[200%] max-w-none h-full object-contain object-right pointer-events-none" />
                 <span className="absolute top-2 right-2 bg-yellow-500 text-black px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">Revize Edilmiş</span>
               </div>
             </div>

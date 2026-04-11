@@ -16,3 +16,4 @@ nul
 test-results/.last-run.json
 playwright-report/index.html
 env.md
+docs/internal

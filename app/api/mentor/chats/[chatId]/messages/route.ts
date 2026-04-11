@@ -12,6 +12,7 @@ import {
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { isAppwriteColumnNotAvailable } from '@/lib/appwrite/error-utils';
 import { logServerError } from '@/lib/logger';
+import { pickLocalized, resolveLanguageFromAcceptLanguage } from '@/lib/i18n';
 
 const MAX_PAGE_SIZE = 200;
 
@@ -46,15 +47,22 @@ export async function GET(
   context: { params: Promise<{ chatId: string }> },
 ) {
   const { chatId } = await context.params;
+  const headerLang = resolveLanguageFromAcceptLanguage(request.headers.get('accept-language'), 'tr');
 
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Giriş yapmanız gerekiyor.', 'You must sign in.') },
+        { status: 401 },
+      );
     }
 
     if (!chatId) {
-      return NextResponse.json({ error: 'Sohbet kimliği gerekli.' }, { status: 400 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Sohbet kimliği gerekli.', 'Chat ID is required.') },
+        { status: 400 },
+      );
     }
 
     await ensureCoreAppwriteResources();
@@ -66,7 +74,12 @@ export async function GET(
     }));
 
     if (chat.user_id !== user.id) {
-      return NextResponse.json({ error: 'Bu sohbete erişim yetkiniz yok.' }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: pickLocalized(headerLang, 'Bu sohbete erişim yetkiniz yok.', 'You do not have access to this chat.'),
+        },
+        { status: 403 },
+      );
     }
 
     const params = request.nextUrl.searchParams;
@@ -99,10 +112,16 @@ export async function GET(
   } catch (error: unknown) {
     const typed = error as { code?: number };
     if (typed?.code === 404) {
-      return NextResponse.json({ error: 'Sohbet bulunamadı.' }, { status: 404 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Sohbet bulunamadı.', 'Chat not found.') },
+        { status: 404 },
+      );
     }
 
     logServerError('api.mentor.chats.messages.GET', error, { chatId });
-    return NextResponse.json({ error: 'Sohbet mesajları alınamadı.' }, { status: 500 });
+    return NextResponse.json(
+      { error: pickLocalized(headerLang, 'Sohbet mesajları alınamadı.', 'Could not load chat messages.') },
+      { status: 500 },
+    );
   }
 }

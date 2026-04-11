@@ -205,7 +205,7 @@ async function getPromoUsageCounts(promo: NormalizedPromoCode, userId: string): 
   };
 }
 
-function isPromoInWindow(promo: NormalizedPromoCode): boolean {
+export function isPromoInWindow(promo: NormalizedPromoCode): boolean {
   const now = Date.now();
   if (promo.startsAt) {
     const startsAt = Date.parse(promo.startsAt);
@@ -220,7 +220,7 @@ function isPromoInWindow(promo: NormalizedPromoCode): boolean {
   return true;
 }
 
-function matchesScope(promo: NormalizedPromoCode, user: AppwriteAuthUser, profile: NormalizedUserProfile): boolean {
+export function matchesScope(promo: NormalizedPromoCode, user: AppwriteAuthUser, profile: NormalizedUserProfile): boolean {
   switch (promo.targetScope) {
     case 'guest':
       return !user.email;
@@ -237,7 +237,7 @@ function matchesScope(promo: NormalizedPromoCode, user: AppwriteAuthUser, profil
   }
 }
 
-function matchesCheckoutMode(promo: NormalizedPromoCode, mode: PromoCheckoutMode): boolean {
+export function matchesCheckoutMode(promo: NormalizedPromoCode, mode: PromoCheckoutMode): boolean {
   if (!promo.checkoutModes.length) return true;
   return promo.checkoutModes.includes(mode);
 }
@@ -355,7 +355,7 @@ export async function resolveCheckoutPromo(options: {
 
 export function buildCheckoutAdjustment(
   promo: NormalizedPromoCode,
-  baseAmountCents: number,
+  _baseAmountCents: number,
 ): PromoCheckoutAdjustment {
   if (promo.rewardKind === 'discount_percent') {
     return {

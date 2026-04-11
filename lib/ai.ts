@@ -2,12 +2,15 @@ import { account } from '@/lib/appwrite';
 import { OperationType } from '@/lib/pricing';
 import type { Badge } from '@/types';
 import { reportClientError } from '@/lib/logger';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
 export interface AICallOptions {
     operation: OperationType | 'PREMIUM_RESCUE' | 'AUTO_FILL_FORM';
     imageBase64?: string;
     imageMimeType?: string;
     params?: Record<string, unknown>;
+    /** Locale for user-facing error strings and Accept-Language on the API request. */
+    locale?: SupportedLanguage;
 }
 
 export interface GameStateUpdate {
@@ -36,7 +39,7 @@ export interface AIError {
 
 const AI_TIMEOUT_MS = 120_000;
 
-const formatStructuredAIError = (err: AIError): Error => {
+const formatStructuredAIError = (err: AIError, lang: SupportedLanguage): Error => {
     if (err.code === 'PREMIUM_REQUIRED') {
         return new Error('PREMIUM_REQUIRED');
     }
@@ -58,17 +61,32 @@ const formatStructuredAIError = (err: AIError): Error => {
     }
     if (err.code === 'AI_PROVIDER_FAILURE') {
         const providerStatus = Number.isFinite(err.providerStatus) ? Number(err.providerStatus) : err.status;
-        return new Error(`AI sağlayıcısı geçici bir hata döndürdü (${providerStatus ?? 'bilinmiyor'}). Lütfen tekrar deneyin.`);
+        const unknown = pickLocalized(lang, 'bilinmiyor', 'unknown');
+        return new Error(
+            pickLocalized(
+                lang,
+                `AI sağlayıcısı geçici bir hata döndürdü (${providerStatus ?? unknown}). Lütfen tekrar deneyin.`,
+                `The AI provider returned a temporary error (${providerStatus ?? unknown}). Please try again.`,
+            ),
+        );
     }
 
-    const requestIdSuffix = err.requestId ? ` (Request ID: ${err.requestId})` : '';
+    const requestIdSuffix = err.requestId
+        ? pickLocalized(lang, ` (İstek ID: ${err.requestId})`, ` (Request ID: ${err.requestId})`)
+        : '';
     if (typeof err.error === 'string' && err.error.trim()) {
         return new Error(`${err.error.trim()}${requestIdSuffix}`);
     }
     if (typeof err.status === 'number') {
-        return new Error(`AI servisi HTTP ${err.status} hatası döndürdü.${requestIdSuffix}`);
+        return new Error(
+            pickLocalized(
+                lang,
+                `AI servisi HTTP ${err.status} hatası döndürdü.${requestIdSuffix}`,
+                `AI service returned HTTP ${err.status}.${requestIdSuffix}`,
+            ),
+        );
     }
-    return new Error(`API hatası${requestIdSuffix}`);
+    return new Error(`${pickLocalized(lang, 'API hatası', 'API error')}${requestIdSuffix}`);
 };
 
 const tryExtractEdgeError = async (error: unknown): Promise<AIError | null> => {
@@ -125,12 +143,13 @@ const tryExtractEdgeError = async (error: unknown): Promise<AIError | null> => {
  * (SINGLE_JURY, REVISION_SAME, DEFENSE).
  */
 export const generateAIResponse = async (options: AICallOptions): Promise<AIResponse | null> => {
+    const lang: SupportedLanguage = options.locale ?? 'tr';
     let jwt: string;
     try {
         const jwtRes = await account.createJWT();
         jwt = jwtRes.jwt;
     } catch {
-        throw new Error('Oturum bulunamadı. Lütfen giriş yapın.');
+        throw new Error(pickLocalized(lang, 'Oturum bulunamadı. Lütfen giriş yapın.', 'No session found. Please sign in.'));
     }
 
     const invokePromise = (async () => {
@@ -140,6 +159,7 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${jwt}`,
+                    'Accept-Language': lang === 'en' ? 'en' : 'tr',
                 },
                 body: JSON.stringify({
                     operation: options.operation,
@@ -198,7 +218,7 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
 
         if (error) {
             const edgeErr = await tryExtractEdgeError(error);
-            if (edgeErr) throw formatStructuredAIError(edgeErr);
+            if (edgeErr) throw formatStructuredAIError(edgeErr, lang);
 
             const errMsg = typeof error === 'object' && error !== null && 'message' in error
                 ? (error as { message?: string }).message
@@ -206,7 +226,7 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
             if (errMsg?.includes('PREMIUM_REQUIRED')) throw new Error('PREMIUM_REQUIRED');
             if (errMsg?.includes('INSUFFICIENT_RAPIDO')) throw new Error(errMsg);
             if (errMsg?.includes('RATE_LIMITED')) throw new Error(errMsg);
-            throw new Error(errMsg || 'API hatası');
+            throw new Error(errMsg || pickLocalized(lang, 'API hatası', 'API error'));
         }
 
         const res = data as Record<string, unknown>;
@@ -228,10 +248,12 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
     } catch (err) {
         if (err instanceof Error) {
             if (err.message === 'AbortError') {
-                throw new Error('İstek zaman aşımına uğradı. Tekrar deneyin.');
+                throw new Error(pickLocalized(lang, 'İstek zaman aşımına uğradı. Tekrar deneyin.', 'Request timed out. Try again.'));
             }
             if (/HTTP\s*413|status\s*413/i.test(err.message)) {
-                throw new Error('Dosya çok büyük. Lütfen daha küçük bir dosya deneyin.');
+                throw new Error(
+                    pickLocalized(lang, 'Dosya çok büyük. Lütfen daha küçük bir dosya deneyin.', 'File is too large. Try a smaller file.'),
+                );
             }
             if (/failed to fetch|networkerror|load failed/i.test(err.message)) {
                 void reportClientError({
@@ -242,10 +264,16 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
                         error: err.message,
                     },
                 });
-                throw new Error('Bağlantı hatası oluştu veya dosya çok büyük. Dosyayı küçültüp tekrar deneyin.');
+                throw new Error(
+                    pickLocalized(
+                        lang,
+                        'Bağlantı hatası oluştu veya dosya çok büyük. Dosyayı küçültüp tekrar deneyin.',
+                        'Connection failed or file is too large. Reduce the file size and try again.',
+                    ),
+                );
             }
             throw err;
         }
-        throw new Error('Beklenmeyen hata.');
+        throw new Error(pickLocalized(lang, 'Beklenmeyen hata.', 'Unexpected error.'));
     }
 };

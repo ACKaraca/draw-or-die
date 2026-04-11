@@ -1,4 +1,3 @@
-import { ID, Query } from 'node-appwrite';
 import {
   getAdminTables,
   getFeatureFlag,
@@ -16,7 +15,8 @@ const DEFAULT_REFERRAL_RAPIDO = 5;
 export async function getReferralConfig(): Promise<{ enabled: boolean; rapido: number }> {
   try {
     const flag = await getFeatureFlag(REFERRAL_FLAG_KEY);
-    if (!flag) return { enabled: false, rapido: DEFAULT_REFERRAL_RAPIDO };
+    // Keep referral active by default unless explicitly disabled via feature flag.
+    if (!flag) return { enabled: true, rapido: DEFAULT_REFERRAL_RAPIDO };
 
     let rapido = DEFAULT_REFERRAL_RAPIDO;
     if (flag.value_json) {
@@ -32,7 +32,7 @@ export async function getReferralConfig(): Promise<{ enabled: boolean; rapido: n
 
     return { enabled: flag.enabled, rapido };
   } catch {
-    return { enabled: false, rapido: DEFAULT_REFERRAL_RAPIDO };
+    return { enabled: true, rapido: DEFAULT_REFERRAL_RAPIDO };
   }
 }
 

@@ -75,7 +75,13 @@ type ModerationResult = {
 };
 
 function sanitizeEnv(name: string): string {
-  return process.env[name]?.replace(/[\r\n\s"']/g, '').trim() ?? '';
+  const raw = process.env[name];
+  if (typeof raw !== 'string') return '';
+
+  const value = raw.trim();
+  if (!value) return '';
+
+  return /[\r\n\0]/.test(value) ? '' : value;
 }
 
 function safeParseObject(value: string): Record<string, unknown> {

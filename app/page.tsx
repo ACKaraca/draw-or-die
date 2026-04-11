@@ -14,6 +14,18 @@ import { Header } from '@/components/Header';
 import { AuthModal } from '@/components/AuthModal';
 import { StepRouter } from '@/components/StepRouter';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
+import type { StepType } from '@/types';
+
+/** Full-height pages that should start below the header instead of vertical centering */
+const TOP_ALIGNED_STEPS: ReadonlySet<StepType> = new Set([
+  'gallery',
+  'history',
+  'profile',
+  'account-details',
+  'ai-mentor',
+  'premium-upgrade',
+  'rapido-shop',
+]);
 
 const ROOT_PRESERVED_STEPS = new Set([
   'upload',
@@ -233,8 +245,10 @@ export default function Home() {
     badge: 'bg-yellow-500/90 text-black',
   };
 
+  const shellJustify = TOP_ALIGNED_STEPS.has(step) ? 'justify-start' : 'justify-center';
+
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center pt-24 p-4">
+    <div className={`min-h-screen w-full flex flex-col items-center ${shellJustify} pt-24 p-4`}>
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
 
       {/* Stripe checkout banner */}

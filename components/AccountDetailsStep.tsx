@@ -244,7 +244,7 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-7xl mt-20"
+      className="w-full max-w-7xl mt-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <button

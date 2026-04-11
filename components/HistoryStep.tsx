@@ -278,7 +278,7 @@ export function HistoryStep() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-7xl flex flex-col mt-20"
+      className="w-full max-w-7xl flex flex-col mt-4"
     >
       <div className="flex items-center justify-between gap-4 mb-8">
         <div>

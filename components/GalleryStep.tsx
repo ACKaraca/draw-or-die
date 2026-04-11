@@ -76,20 +76,23 @@ async function renderImageToJpegPayload(file: File): Promise<{ base64: string; w
 async function renderPdfFirstPageToJpegPayload(file: File): Promise<{ base64: string; width: number; height: number }> {
   const pdfjs = await import('pdfjs-dist');
   const bytes = await file.arrayBuffer();
-  const workers = [
+  const workerSources = [
     '/pdf.worker.min.mjs',
     `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`,
   ];
 
-  for (const worker of workers) {
+  for (const workerSrc of workerSources) {
     try {
-      pdfjs.GlobalWorkerOptions.workerSrc = worker;
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
       const pdf = await pdfjs.getDocument({ data: bytes }).promise;
       const page = await pdf.getPage(1);
       const viewport = page.getViewport({ scale: 1.8 });
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      if (!ctx) continue;
+      if (!ctx) {
+        continue;
+      }
 
       canvas.width = Math.max(1, Math.floor(viewport.width));
       canvas.height = Math.max(1, Math.floor(viewport.height));
@@ -101,7 +104,7 @@ async function renderPdfFirstPageToJpegPayload(file: File): Promise<{ base64: st
         height: canvas.height,
       };
     } catch {
-      continue;
+      // Try the next worker source.
     }
   }
 
@@ -323,7 +326,7 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-7xl flex flex-col mt-20"
+      className="w-full max-w-7xl flex flex-col mt-4"
     >
       <div className="flex items-center justify-center flex-wrap gap-2 md:gap-4 mb-10">
         <button
@@ -466,6 +469,32 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
         )}
       </div>
 
+      {hasMore && filteredItems.length > 0 && (
+        <div className="flex justify-center mt-12">
+          <button
+            onClick={() => void loadMore()}
+            disabled={isLoading}
+            className="px-8 py-3 bg-white/5 border border-white/20 text-white font-bold uppercase tracking-wider text-sm hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" /> Yukleniyor...
+              </>
+            ) : (
+              <>
+                <RefreshCcw size={16} /> Daha Fazla Yukle
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {isLoading && filteredItems.length === 0 && (
+        <div className="flex justify-center py-20">
+          <Loader2 size={32} className="animate-spin text-slate-500" />
+        </div>
+      )}
+
       {canManage && (
         <div className="mt-12 rounded-xl border border-white/10 bg-[#101827] p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
@@ -505,32 +534,6 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {hasMore && filteredItems.length > 0 && (
-        <div className="flex justify-center mt-12">
-          <button
-            onClick={() => void loadMore()}
-            disabled={isLoading}
-            className="px-8 py-3 bg-white/5 border border-white/20 text-white font-bold uppercase tracking-wider text-sm hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 size={16} className="animate-spin" /> Yukleniyor...
-              </>
-            ) : (
-              <>
-                <RefreshCcw size={16} /> Daha Fazla Yukle
-              </>
-            )}
-          </button>
-        </div>
-      )}
-
-      {isLoading && filteredItems.length === 0 && (
-        <div className="flex justify-center py-20">
-          <Loader2 size={32} className="animate-spin text-slate-500" />
         </div>
       )}
     </motion.div>

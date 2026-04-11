@@ -42,7 +42,6 @@ export function Header({
                 history: 'Analysis History',
                 rapidoShop: 'Rapido Shop',
                 buyPremium: 'Buy Premium',
-                premiumManagement: 'Premium Management',
                 upgrade: 'Upgrade',
                 premiumLabel: 'Premium',
                 goPremium: 'Go Premium',
@@ -67,7 +66,6 @@ export function Header({
             history: 'Analiz Gecmisi',
             rapidoShop: 'Rapido Magaza',
             buyPremium: 'Premium Satin Al',
-            premiumManagement: 'Premium Yonetimi',
             upgrade: 'Upgrade',
             premiumLabel: 'Premium',
             goPremium: 'Premiuma Gec',
@@ -136,7 +134,7 @@ export function Header({
                     </button>
 
                     <nav className="hidden xl:flex items-center gap-5 font-mono text-xs uppercase tracking-widest text-slate-400">
-                        <button onClick={goHome} className="hover:text-white transition-colors">{copy.navStudioDesk}</button>
+                        <button onClick={() => goTo('upload')} className="hover:text-white transition-colors">{copy.navStudioDesk}</button>
                         <button onClick={() => goToGallery('COMMUNITY')} className="hover:text-white transition-colors text-cyan-300">{copy.navCommunity}</button>
                         <button onClick={() => goTo('ai-mentor')} className="hover:text-white transition-colors text-yellow-400 font-bold flex items-center gap-1"><Sparkles size={12} /> {copy.navAiMentor}</button>
                         <button onClick={() => goToGallery('HALL_OF_FAME')} className="hover:text-white transition-colors text-emerald-400">{copy.navHallOfFame}</button>
@@ -182,7 +180,6 @@ export function Header({
                                         <button onClick={() => goTo('history')} className="w-full text-left px-3 py-2 rounded-lg text-xs font-mono uppercase tracking-wider text-cyan-200 hover:bg-white/10">{copy.history}</button>
                                         <button onClick={() => goTo('rapido-shop')} className="w-full text-left px-3 py-2 rounded-lg text-xs font-mono uppercase tracking-wider text-neon-red hover:bg-white/10">{copy.rapidoShop}</button>
                                         <button onClick={() => goTo('premium-upgrade')} className="w-full text-left px-3 py-2 rounded-lg text-xs font-mono uppercase tracking-wider text-yellow-300 hover:bg-white/10">{copy.buyPremium}</button>
-                                        <button onClick={() => goTo('account-details')} className="w-full text-left px-3 py-2 rounded-lg text-xs font-mono uppercase tracking-wider text-indigo-200 hover:bg-white/10">{copy.premiumManagement}</button>
                                     </div>
                                 )}
                             </div>
@@ -240,14 +237,13 @@ export function Header({
                     )}
 
                     <div className="grid grid-cols-2 gap-2 text-xs font-mono uppercase tracking-wider">
-                        <button onClick={() => { goHome(); setIsMobileMenuOpen(false); }} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-slate-200 hover:bg-white/10">{copy.navStudioDesk}</button>
+                        <button onClick={() => { goTo('upload'); setIsMobileMenuOpen(false); }} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-slate-200 hover:bg-white/10">{copy.navStudioDesk}</button>
                         <button onClick={() => goToGallery('COMMUNITY')} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-cyan-200 hover:bg-cyan-500/20">{copy.navCommunity}</button>
                         <button onClick={() => goTo('ai-mentor')} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-yellow-300 hover:bg-white/10">{copy.navAiMentor}</button>
                         <button onClick={() => goTo('profile')} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-slate-100 hover:bg-white/10">{copy.profile}</button>
                         <button onClick={() => goTo('history')} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-cyan-200 hover:bg-white/10">{copy.history}</button>
                         <button onClick={() => goTo('rapido-shop')} className="rounded-lg border border-neon-red/40 bg-neon-red/10 px-3 py-2 text-neon-red hover:bg-neon-red/20">{copy.rapidoShop}</button>
                         <button onClick={() => goTo('premium-upgrade')} className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-yellow-300 hover:bg-yellow-500/20">{copy.premiumShort}</button>
-                        <button onClick={() => goTo('account-details')} className="rounded-lg border border-indigo-500/40 bg-indigo-500/10 px-3 py-2 text-indigo-200 hover:bg-indigo-500/20">{copy.premiumManagement}</button>
                         <button onClick={() => goToGallery('HALL_OF_FAME')} className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-emerald-200 hover:bg-emerald-500/20">{copy.navHallOfFame}</button>
                         <button onClick={() => goToGallery('WALL_OF_DEATH')} className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-red-200 hover:bg-red-500/20">{copy.navWallOfDeath}</button>
                     </div>

@@ -43,18 +43,14 @@ describe('presentation components', () => {
     expect(onAuthClick).toHaveBeenCalledTimes(1);
   });
 
-  it('renders the hero CTA and gallery shortcut', () => {
-    render(
-      <HeroStep
-        setStep={jest.fn()}
-        setCurrentGallery={jest.fn()}
-        galleryItems={[]}
-      />,
-    );
+  it('renders the hero CTA and Studio Desk actions', () => {
+    const setStep = jest.fn();
+    render(<HeroStep setStep={setStep} />);
 
-    expect(screen.getByRole('heading', { name: /sisteme paftanı at ve jüriyle yüzleş/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /studio desk'e geç/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /tümünü gör/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /paftanı yükle/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /studio desk/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /studio desk/i }));
+    expect(setStep).toHaveBeenCalledWith('upload');
   });
 
   it('hides the defense panel for non-premium users and renders the chat flow for premium users', () => {

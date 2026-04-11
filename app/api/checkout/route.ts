@@ -6,14 +6,40 @@ import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwr
 import { ensureCommerceAppwriteResources, ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { validatePromoForCheckout } from '@/lib/promo-codes';
 
+function readCleanEnv(name: string): string {
+    const raw = process.env[name];
+    if (typeof raw !== 'string') return '';
+
+    const value = raw.trim();
+    if (!value) return '';
+
+    return /[\r\n\0]/.test(value) ? '' : value;
+}
+
+function parseAllowedOrigin(value: string): string | null {
+    const trimmed = value.trim();
+    if (!trimmed || /[\r\n\0]/.test(trimmed)) return null;
+
+    try {
+        const url = new URL(trimmed);
+        if (!['http:', 'https:'].includes(url.protocol)) {
+            return null;
+        }
+        return url.origin;
+    } catch {
+        return null;
+    }
+}
+
+function resolveSafeOrigin(originHeader: string | null, fallbackRaw: string): string {
+    const fallback = parseAllowedOrigin(fallbackRaw) ?? 'http://localhost:3000';
+    return parseAllowedOrigin(originHeader ?? '') ?? fallback;
+}
+
 let _stripe: Stripe | null = null;
 function getStripe() {
     if (!_stripe) {
-        const raw = process.env.STRIPE_SECRET_KEY;
-        if (!raw) {
-            throw new Error('MISSING_STRIPE_SECRET_KEY');
-        }
-        const stripeSecretKey = raw.replace(/[\r\n\s"']/g, '').trim();
+        const stripeSecretKey = readCleanEnv('STRIPE_SECRET_KEY');
         if (!stripeSecretKey) {
             throw new Error('MISSING_STRIPE_SECRET_KEY');
         }
@@ -263,7 +289,10 @@ export async function POST(request: NextRequest) {
             checkoutMode = 'subscription';
         }
 
-        const origin = request.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+        const origin = resolveSafeOrigin(
+            request.headers.get('origin'),
+            process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
+        );
 
         const session = await stripe.checkout.sessions.create({
             customer_email: email || undefined,

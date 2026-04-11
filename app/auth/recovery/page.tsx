@@ -2,10 +2,13 @@
 
 import { Suspense, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 import { account } from '@/lib/appwrite';
 
 function RecoveryContent() {
   const router = useRouter();
+  const language = useLanguage();
   const searchParams = useSearchParams();
   const userId = useMemo(() => searchParams.get('userId') || '', [searchParams]);
   const secret = useMemo(() => searchParams.get('secret') || '', [searchParams]);
@@ -57,7 +60,7 @@ function RecoveryContent() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div className="space-y-1">
-            <label className="text-xs font-mono text-slate-400 uppercase tracking-wider">Yeni Şifre</label>
+            <label className="text-xs font-mono text-slate-400 uppercase tracking-wider">{pickLocalized(language, 'Yeni Şifre', 'New Password')}</label>
             <input
               type="password"
               value={password}
@@ -67,7 +70,7 @@ function RecoveryContent() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-mono text-slate-400 uppercase tracking-wider">Yeni Şifre Tekrar</label>
+            <label className="text-xs font-mono text-slate-400 uppercase tracking-wider">{pickLocalized(language, 'Yeni Şifre Tekrar', 'New Password Again')}</label>
             <input
               type="password"
               value={confirmPassword}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  APPWRITE_SERVER_API_KEY,
   getAuthenticatedUserFromRequest,
   getReferralSignupCountByCode,
   getOrCreateProfile,
@@ -10,7 +11,7 @@ import { logServerError } from '@/lib/logger';
 import { normalizeLanguage } from '@/lib/i18n';
 
 function isAppwriteServerUnavailable(): boolean {
-  return !process.env.APPWRITE_API_KEY?.trim();
+  return !APPWRITE_SERVER_API_KEY.trim();
 }
 
 export async function GET(request: NextRequest) {

@@ -51,4 +51,20 @@ describe('ReferralCard', () => {
 
     expect(container.firstChild).toBeNull();
   });
+
+  it('shows only entered referral code after one-time usage', () => {
+    mockedUseAuth.mockReturnValue({
+      profile: {
+        referral_code: 'OWNER123',
+        referral_signup_count: 3,
+        referred_by: 'USED456',
+      },
+    });
+
+    render(<ReferralCard />);
+
+    expect(screen.getByText('Girilen referral kodu')).toBeInTheDocument();
+    expect(screen.getByText('USED456')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /kodu uygula/i })).not.toBeInTheDocument();
+  });
 });

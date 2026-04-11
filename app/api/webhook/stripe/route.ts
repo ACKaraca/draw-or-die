@@ -70,7 +70,6 @@ export async function POST(request: NextRequest) {
 
     // Idempotency: skip already-processed events
     if (await isEventAlreadyProcessed(event.id)) {
-        console.log(`[webhook] Skipping duplicate event: ${event.id}`);
         return NextResponse.json({ received: true });
     }
 
