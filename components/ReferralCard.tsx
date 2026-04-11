@@ -2,12 +2,15 @@
 
 import { useState } from 'react';
 import { Share2, Copy, Check } from 'lucide-react';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 import { account } from '@/lib/appwrite';
 import { useAuth } from '@/hooks/useAuth';
 
 const REFERRAL_BASE_URL = (process.env.NEXT_PUBLIC_REFERRAL_BASE_URL ?? 'https://drawordie.app').replace(/\/$/, '');
 
 export function ReferralCard() {
+  const language = useLanguage();
   const { profile, refreshProfile } = useAuth();
   const [copied, setCopied] = useState(false);
   const [manualCode, setManualCode] = useState('');
@@ -115,7 +118,7 @@ export function ReferralCard() {
       </p>
 
       <div className="mb-4 rounded-lg border border-emerald-500/20 bg-black/20 px-3 py-2.5">
-        <p className="text-[11px] font-mono uppercase tracking-wider text-emerald-200">Toplam referral kaydı</p>
+        <p className="text-[11px] font-mono uppercase tracking-wider text-emerald-200">{pickLocalized(language, 'Toplam referral kaydı', 'Total referral signups')}</p>
         <p className="mt-1 text-xl font-display text-white">{referralSignupCount}</p>
       </div>
 
@@ -129,7 +132,7 @@ export function ReferralCard() {
           className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5 text-emerald-200 text-xs font-mono uppercase tracking-wider hover:bg-emerald-500/20 transition-colors"
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
-          {copied ? 'Kopyalandı' : 'Kopyala'}
+          {copied ? pickLocalized(language, 'Kopyalandı', 'Copied') : pickLocalized(language, 'Kopyala', 'Copy')}
         </button>
       </div>
 
