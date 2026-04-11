@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { ShieldAlert, ArrowRight, ChevronDown, Sparkles, Layers, Cpu } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -136,20 +137,27 @@ export function HeroStep({ setStep }: HeroStepProps) {
         </div>
 
         <div className="grid md:grid-cols-3 gap-6 mb-16">
-          {HERO_MOCK_VISUALS.map((visual) => (
+          {HERO_MOCK_VISUALS.map((visual, idx) => (
             <figure
               key={visual.id}
               className="group rounded-xl border border-white/10 bg-black/40 overflow-hidden flex flex-col"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={visual.src}
-                alt={language === 'en' ? visual.altEn : visual.altTr}
-                className="w-full aspect-[5/3] object-cover opacity-90 group-hover:opacity-100 transition-opacity"
-              />
-              <figcaption className="p-4 text-left">
-                <p className="text-[11px] font-mono uppercase tracking-wider text-slate-500">
-                  {pickLocalized(language, 'Yer tutucu görsel', 'Placeholder art')}
+              <div className="relative w-full aspect-[5/3]">
+                <Image
+                  src={visual.src}
+                  alt={language === 'en' ? visual.altEn : visual.altTr}
+                  fill
+                  sizes="(max-width: 768px) 100vw, 33vw"
+                  className="object-cover opacity-90 transition-opacity group-hover:opacity-100"
+                  priority={idx === 0}
+                />
+              </div>
+              <figcaption className="p-4 text-left flex flex-col gap-2 flex-1">
+                <h3 className="font-display text-base uppercase tracking-wide text-white leading-snug">
+                  {language === 'en' ? visual.titleEn : visual.titleTr}
+                </h3>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  {language === 'en' ? visual.captionEn : visual.captionTr}
                 </p>
               </figcaption>
             </figure>
