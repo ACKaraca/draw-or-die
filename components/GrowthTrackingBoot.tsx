@@ -3,12 +3,14 @@
 import { useEffect } from 'react';
 import {
   captureUTMFromCurrentUrl,
+  syncAnalyticsConsentFromStorage,
   trackPageView,
   trackConversionEvent,
 } from '@/lib/growth-tracking';
 
 export function GrowthTrackingBoot() {
   useEffect(() => {
+    syncAnalyticsConsentFromStorage();
     trackPageView(window.location.pathname);
 
     const utm = captureUTMFromCurrentUrl();

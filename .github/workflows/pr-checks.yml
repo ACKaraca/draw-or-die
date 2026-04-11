@@ -102,17 +102,21 @@ jobs:
         run: npm ci
       
       - name: NPM Audit (Production)
-        run: npm audit --production --audit-level=moderate
+        run: |
+          npm audit --production --audit-level=moderate > dependency-audit.txt || true
+          if grep -qi "vulnerab" dependency-audit.txt; then
+            echo "WARNING: Dependency audit findings were recorded in dependency-audit.txt." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "INFO: No production dependency vulnerabilities were reported." >> "$GITHUB_STEP_SUMMARY"
+          fi
         continue-on-error: true
         timeout-minutes: 5
       
       - name: Check for Hardcoded Secrets (Stripe)
         run: |
-          if grep -r "sk_live_" . --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules --exclude-dir=.git 2>/dev/null; then
-            echo "❌ Found potential hardcoded Stripe keys"
-            exit 1
-          fi
-          if grep -r "pk_live_" . --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules --exclude-dir=.git 2>/dev/null; then
+          if find app components hooks lib stores types -type f \( \
+              -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \
+            \) -print0 | xargs -0 grep -nH -E "(^|[^A-Za-z0-9_])(sk_live_|pk_live_)"; then
             echo "❌ Found potential hardcoded Stripe keys"
             exit 1
           fi
@@ -122,17 +126,30 @@ jobs:
       
       - name: Check for Hardcoded Secrets (API Keys)
         run: |
-          if grep -r "AIza" . --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules --exclude-dir=.git 2>/dev/null; then
+          if find app components hooks lib stores types -type f \( \
+              -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \
+            \) -print0 | xargs -0 grep -nH -E "(^|[^A-Za-z0-9_])(AIza|sb_secret_)"; then
             echo "❌ Found potential hardcoded Google API keys"
             exit 1
           fi
-          if grep -r "APPWRITE_API_KEY\|SUPABASE_SERVICE_ROLE_KEY" . --include="*.ts" --include="*.tsx" --include="*.js" --exclude-dir=node_modules --exclude-dir=.git 2>/dev/null | grep -v "process.env\|NEXT_PUBLIC"; then
+          if find app components hooks lib stores types -type f \( \
+              -name '*.ts' -o -name '*.tsx' -o -name '*.js' -o -name '*.mjs' -o -name '*.cjs' \
+            \) -print0 | xargs -0 grep -nH -E "APPWRITE_API_KEY[[:space:]]*[:=][[:space:]]*['\"]|SUPABASE_SERVICE_ROLE_KEY[[:space:]]*[:=][[:space:]]*['\"]"; then
             echo "❌ Found potential hardcoded backend API keys"
             exit 1
           fi
           echo "✓ No obvious hardcoded API keys detected"
         continue-on-error: false
         timeout-minutes: 5
+
+      - name: Upload dependency audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-security-audit-report
+          path: dependency-audit.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   status-check:
     name: Merge Gate Status

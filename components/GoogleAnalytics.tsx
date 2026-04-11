@@ -1,11 +1,45 @@
 import Script from 'next/script';
 
-const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim() ?? 'G-53LBVDCHC6';
+const DEFAULT_GA_DESTINATION_IDS = ['GT-5TCMV7L2', 'G-1159TDRHXC', 'G-53LBVDCHC6'] as const;
+const COOKIE_CONSENT_STORAGE_KEY = 'draw_or_die_cookie_consent_v1';
+
+function parseIds(rawValue?: string): string[] {
+  if (!rawValue) {
+    return [];
+  }
+
+  return rawValue
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function resolveDestinationIds(): string[] {
+  const configured = Array.from(new Set([
+    ...parseIds(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID),
+    ...parseIds(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID),
+    ...parseIds(process.env.NEXT_PUBLIC_GA_SECONDARY_MEASUREMENT_ID),
+    ...parseIds(process.env.NEXT_PUBLIC_GA_DESTINATION_IDS),
+  ]));
+
+  if (configured.length > 0) {
+    return configured;
+  }
+
+  return [...DEFAULT_GA_DESTINATION_IDS];
+}
+
+const GA_DESTINATION_IDS = resolveDestinationIds();
+const GA_SCRIPT_ID = GA_DESTINATION_IDS.find((id) => id.startsWith('GT-')) ?? GA_DESTINATION_IDS[0] ?? '';
 
 export function GoogleAnalytics() {
-  if (!GA_MEASUREMENT_ID) {
+  if (!GA_SCRIPT_ID || GA_DESTINATION_IDS.length === 0) {
     return null;
   }
+
+  const configCommands = GA_DESTINATION_IDS
+    .map((id) => `window.gtag('config', '${id}', { send_page_view: false, anonymize_ip: true });`)
+    .join('\n');
 
   return (
     <>
@@ -17,18 +51,30 @@ export function GoogleAnalytics() {
             analytics_storage: 'denied',
             ad_storage: 'denied',
             ad_user_data: 'denied',
-            ad_personalization: 'denied'
+            ad_personalization: 'denied',
+            wait_for_update: 500
           });
+          try {
+            var storedConsent = window.localStorage.getItem('${COOKIE_CONSENT_STORAGE_KEY}');
+            if (storedConsent === 'accepted' || storedConsent === 'rejected') {
+              var consentValue = storedConsent === 'accepted' ? 'granted' : 'denied';
+              window.gtag('consent', 'update', {
+                analytics_storage: consentValue,
+                ad_storage: consentValue,
+                ad_user_data: consentValue,
+                ad_personalization: consentValue
+              });
+            }
+          } catch (error) {
+            // Privacy modes may block localStorage. Keep default denied in that case.
+          }
           window.gtag('js', new Date());
-          window.gtag('config', '${GA_MEASUREMENT_ID}', {
-            send_page_view: false,
-            anonymize_ip: true
-          });
+          ${configCommands}
         `}
       </Script>
       <Script
         id="ga-library"
-        src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+        src={`https://www.googletagmanager.com/gtag/js?id=${GA_SCRIPT_ID}`}
         strategy="afterInteractive"
       />
     </>

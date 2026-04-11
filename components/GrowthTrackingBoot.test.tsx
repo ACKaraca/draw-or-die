@@ -1,14 +1,16 @@
 import { render } from '@testing-library/react';
 import { GrowthTrackingBoot } from '@/components/GrowthTrackingBoot';
-import { captureUTMFromCurrentUrl, trackConversionEvent, trackPageView } from '@/lib/growth-tracking';
+import { captureUTMFromCurrentUrl, syncAnalyticsConsentFromStorage, trackConversionEvent, trackPageView } from '@/lib/growth-tracking';
 
 jest.mock('@/lib/growth-tracking', () => ({
   captureUTMFromCurrentUrl: jest.fn(),
+  syncAnalyticsConsentFromStorage: jest.fn(),
   trackConversionEvent: jest.fn(),
   trackPageView: jest.fn(),
 }));
 
 const mockedCapture = jest.mocked(captureUTMFromCurrentUrl);
+const mockedSyncConsent = jest.mocked(syncAnalyticsConsentFromStorage);
 const mockedTrack = jest.mocked(trackConversionEvent);
 const mockedTrackPageView = jest.mocked(trackPageView);
 
@@ -22,6 +24,7 @@ describe('GrowthTrackingBoot', () => {
 
     render(<GrowthTrackingBoot />);
 
+    expect(mockedSyncConsent).toHaveBeenCalledTimes(1);
     expect(mockedTrackPageView).toHaveBeenCalledWith('/');
   });
 

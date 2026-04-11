@@ -8,8 +8,19 @@ import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
 import { normalizeLanguage } from '@/lib/i18n';
 
+function isAppwriteServerUnavailable(): boolean {
+  return !process.env.APPWRITE_API_KEY?.trim();
+}
+
 export async function GET(request: NextRequest) {
   try {
+    if (isAppwriteServerUnavailable()) {
+      return NextResponse.json(
+        { error: 'Profil servisi şu anda kullanılamıyor.' },
+        { status: 503 },
+      );
+    }
+
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
@@ -26,6 +37,13 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    if (isAppwriteServerUnavailable()) {
+      return NextResponse.json(
+        { error: 'Profil servisi şu anda kullanılamıyor.' },
+        { status: 503 },
+      );
+    }
+
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
