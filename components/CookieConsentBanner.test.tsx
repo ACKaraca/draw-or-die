@@ -30,8 +30,30 @@ describe('CookieConsentBanner', () => {
     mockedCaptureUTMFromCurrentUrl.mockReturnValue({});
   });
 
+  it('renders banner when consent is unset', async () => {
+    render(<CookieConsentBanner />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^kabul et$/i })).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: /^reddet$/i })).toBeInTheDocument();
+  });
+
+  it('does not render when consent is already accepted', async () => {
+    mockedGetCookieConsentStatus.mockReturnValue('accepted');
+    render(<CookieConsentBanner />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^kabul et$/i })).not.toBeInTheDocument();
+    });
+  });
+
   it('accept flow updates consent and hides banner', async () => {
     render(<CookieConsentBanner />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^kabul et$/i })).toBeInTheDocument();
+    });
 
     await userEvent.click(screen.getByRole('button', { name: /^kabul et$/i }));
 
@@ -44,15 +66,35 @@ describe('CookieConsentBanner', () => {
     });
   });
 
-  it('close button also accepts consent and hides banner', async () => {
+  it('reject flow updates consent and hides banner', async () => {
     render(<CookieConsentBanner />);
 
-    await userEvent.click(screen.getByRole('button', { name: /kapat ve kabul et/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^reddet$/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /^reddet$/i }));
+
+    expect(mockedApplyAnalyticsConsent).toHaveBeenCalledWith('rejected');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^reddet$/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('close button accepts consent and hides banner', async () => {
+    render(<CookieConsentBanner />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /kapat/i })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /kapat/i }));
 
     expect(mockedApplyAnalyticsConsent).toHaveBeenCalledWith('accepted');
 
     await waitFor(() => {
-      expect(screen.queryByRole('button', { name: /kapat ve kabul et/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /kapat/i })).not.toBeInTheDocument();
     });
   });
 
@@ -62,6 +104,10 @@ describe('CookieConsentBanner', () => {
     });
 
     render(<CookieConsentBanner />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^kabul et$/i })).toBeInTheDocument();
+    });
 
     await userEvent.click(screen.getByRole('button', { name: /^kabul et$/i }));
 

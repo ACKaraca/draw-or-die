@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import {
   applyAnalyticsConsent,
@@ -13,68 +13,73 @@ import {
 } from '@/lib/growth-tracking';
 
 export function CookieConsentBanner() {
-  const [status, setStatus] = useState<CookieConsentStatus>(() => {
-    if (typeof window === 'undefined') return 'unset';
-    return getCookieConsentStatus();
-  });
+  const [visible, setVisible] = useState(false);
 
-  if (status !== 'unset') {
-    return null;
-  }
+  useEffect(() => {
+    setVisible(getCookieConsentStatus() === 'unset');
+  }, []);
 
-  const updateConsent = (nextStatus: Exclude<CookieConsentStatus, 'unset'>) => {
-    setStatus(nextStatus);
+  if (!visible) return null;
+
+  const dismiss = (nextStatus: Exclude<CookieConsentStatus, 'unset'>) => {
+    setVisible(false);
     try {
       applyAnalyticsConsent(nextStatus);
     } catch {
       // Banner should still close even if analytics bridge fails.
     }
-  };
-
-  const accept = () => {
-    updateConsent('accepted');
-    try {
-      const utm = captureUTMFromCurrentUrl();
-      void trackConversionEvent('cookie_consent_accepted', { source: 'banner' });
-      if (Object.keys(utm).length > 0) {
-        void trackConversionEvent('campaign_landing_view', { source: 'consent_accept' });
+    if (nextStatus === 'accepted') {
+      try {
+        const utm = captureUTMFromCurrentUrl();
+        void trackConversionEvent('cookie_consent_accepted', { source: 'banner' });
+        if (Object.keys(utm).length > 0) {
+          void trackConversionEvent('campaign_landing_view', { source: 'consent_accept' });
+        }
+        trackPageView(window.location.pathname);
+      } catch {
+        // No-op.
       }
-      trackPageView(window.location.pathname);
-    } catch {
-      // No-op.
     }
   };
 
-  const reject = () => {
-    updateConsent('rejected');
-  };
-
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[2147483647] pointer-events-auto border-t border-white/15 bg-[#0a0f1a]/95 backdrop-blur px-4 py-4 relative">
-      <button
-        type="button"
-        onClick={accept}
-        aria-label="Kapat ve kabul et"
-        title="Kapat ve kabul et"
-        className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/40 text-slate-200 hover:bg-white/10"
-      >
-        <X size={16} />
-      </button>
-
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="text-xs leading-relaxed text-slate-300 md:max-w-4xl">
+    <div
+      style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2147483647 }}
+      className="border-t border-white/15 bg-[#0a0f1a]/95 backdrop-blur px-4 py-4"
+    >
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-xs leading-relaxed text-slate-300 sm:max-w-3xl pr-2">
           Site kullanimini olcmek ve urun kalitesini artirmak icin Google Analytics cerezleri kullaniyoruz.
-          &quot;Kabul Et&quot; ile analitik ve reklam çerezlerine izin verirsin.
-          Detaylar icin <Link href="/legal/cookies" className="text-cyan-300 underline underline-offset-2">Cerez Politikasi</Link>.
-        </div>
+          Detaylar icin{' '}
+          <Link href="/legal/cookies" className="text-cyan-300 underline underline-offset-2">
+            Cerez Politikasi
+          </Link>
+          .
+        </p>
 
-        <div className="flex flex-shrink-0 gap-2">
+        <div className="flex flex-shrink-0 items-center gap-2">
           <button
             type="button"
-            onClick={accept}
-            className="pointer-events-auto touch-manipulation rounded-md border border-emerald-400/40 bg-emerald-500/20 px-4 py-2 text-xs font-mono uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/30"
+            onClick={() => dismiss('rejected')}
+            className="rounded-md border border-white/20 bg-white/5 px-4 py-2 text-xs font-mono uppercase tracking-wide text-slate-300 hover:bg-white/10 transition-colors"
+          >
+            Reddet
+          </button>
+          <button
+            type="button"
+            onClick={() => dismiss('accepted')}
+            className="rounded-md border border-emerald-400/40 bg-emerald-500/20 px-4 py-2 text-xs font-mono uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/30 transition-colors"
           >
             Kabul Et
+          </button>
+          <button
+            type="button"
+            onClick={() => dismiss('accepted')}
+            aria-label="Kapat"
+            title="Kapat"
+            className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            <X size={14} />
           </button>
         </div>
       </div>
