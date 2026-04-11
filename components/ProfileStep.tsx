@@ -238,7 +238,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
-        className="w-full max-w-3xl mt-24"
+        className="w-full max-w-3xl mx-auto mt-4"
       >
         <div className="rounded-2xl border border-white/10 bg-[#0E1628] p-8 text-center">
           <UserCircle2 className="mx-auto text-slate-400 mb-4" size={40} />
@@ -271,7 +271,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-6xl mt-20"
+      className="w-full max-w-4xl mx-auto mt-4"
     >
       <div className="flex items-center justify-between gap-4 mb-8">
         <div>

@@ -313,7 +313,7 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="w-full max-w-7xl flex flex-col mt-20"
+      className="w-full max-w-7xl flex flex-col mt-4"
     >
       <div className="flex items-center justify-center flex-wrap gap-2 md:gap-4 mb-10">
         <button
@@ -456,6 +456,32 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
         )}
       </div>
 
+      {hasMore && filteredItems.length > 0 && (
+        <div className="flex justify-center mt-12">
+          <button
+            onClick={() => void loadMore()}
+            disabled={isLoading}
+            className="px-8 py-3 bg-white/5 border border-white/20 text-white font-bold uppercase tracking-wider text-sm hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" /> Yukleniyor...
+              </>
+            ) : (
+              <>
+                <RefreshCcw size={16} /> Daha Fazla Yukle
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {isLoading && filteredItems.length === 0 && (
+        <div className="flex justify-center py-20">
+          <Loader2 size={32} className="animate-spin text-slate-500" />
+        </div>
+      )}
+
       {canManage && (
         <div className="mt-12 rounded-xl border border-white/10 bg-[#101827] p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
@@ -495,32 +521,6 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {hasMore && filteredItems.length > 0 && (
-        <div className="flex justify-center mt-12">
-          <button
-            onClick={() => void loadMore()}
-            disabled={isLoading}
-            className="px-8 py-3 bg-white/5 border border-white/20 text-white font-bold uppercase tracking-wider text-sm hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 size={16} className="animate-spin" /> Yukleniyor...
-              </>
-            ) : (
-              <>
-                <RefreshCcw size={16} /> Daha Fazla Yukle
-              </>
-            )}
-          </button>
-        </div>
-      )}
-
-      {isLoading && filteredItems.length === 0 && (
-        <div className="flex justify-center py-20">
-          <Loader2 size={32} className="animate-spin text-slate-500" />
         </div>
       )}
     </motion.div>
