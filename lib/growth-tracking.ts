@@ -76,8 +76,8 @@ function emitGtag(...args: unknown[]): void {
   if (typeof window === 'undefined') return;
   window.dataLayer = window.dataLayer ?? [];
   if (typeof window.gtag !== 'function') {
-    window.gtag = (...queueArgs: unknown[]) => {
-      window.dataLayer?.push(queueArgs);
+    window.gtag = function () {
+      window.dataLayer?.push(arguments);
     };
   }
 
