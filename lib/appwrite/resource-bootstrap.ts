@@ -1,7 +1,9 @@
 import {
+  ID,
   Compression,
   OrderBy,
   Permission,
+  Query,
   Role,
   Storage,
   TablesDB,
@@ -256,6 +258,41 @@ async function ensureIndex(
       if (isResourceLimitError(createError)) return;
       if (!isConflict(createError)) throw createError;
     }
+  }
+}
+
+async function ensureFeatureFlagRow(
+  tables: TablesDB,
+  flagKey: string,
+  enabled: boolean,
+  valueJson: string,
+): Promise<void> {
+  const existing = await tables.listRows({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_TABLE_FEATURE_FLAGS_ID,
+    queries: [
+      Query.equal('flag_key', flagKey),
+      Query.limit(1),
+    ],
+  });
+
+  if (existing.rows.length > 0) {
+    return;
+  }
+
+  try {
+    await tables.createRow({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_FEATURE_FLAGS_ID,
+      rowId: ID.unique(),
+      data: {
+        flag_key: flagKey,
+        enabled,
+        value_json: valueJson,
+      },
+    });
+  } catch (createError) {
+    if (!isConflict(createError)) throw createError;
   }
 }
 
@@ -663,6 +700,13 @@ async function setupFeatureFlagsTable(tables: TablesDB): Promise<void> {
     TablesDBIndexType.Unique,
     ['flag_key'],
     [OrderBy.Asc],
+  );
+
+  await ensureFeatureFlagRow(
+    tables,
+    'referral_system',
+    true,
+    JSON.stringify({ referral_rapido: 5 }),
   );
 }
 

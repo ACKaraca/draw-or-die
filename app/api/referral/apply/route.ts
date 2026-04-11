@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAuthenticatedUserFromRequest } from '@/lib/appwrite/server';
+import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { applyReferralReward } from '@/lib/referral';
 import { logServerError } from '@/lib/logger';
@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     await ensureCoreAppwriteResources();
+    await getOrCreateProfile(user);
 
     const result = await applyReferralReward(user.id);
 

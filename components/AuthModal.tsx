@@ -163,7 +163,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                         : null
                     if (pendingCode) {
                         const jwt = await account.createJWT()
-                        await fetch('/api/referral/link', {
+                        const referralResponse = await fetch('/api/referral/link', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -171,7 +171,9 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                             },
                             body: JSON.stringify({ referral_code: pendingCode }),
                         })
-                        window.localStorage.removeItem(REFERRAL_STORAGE_KEY)
+                        if (referralResponse.ok) {
+                            window.localStorage.removeItem(REFERRAL_STORAGE_KEY)
+                        }
                     }
                 } catch {
                     // Referral hatası kayıt sürecini engellemez

@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     await ensureCoreAppwriteResources();
+    await getOrCreateProfile(user);
 
     const result = await linkReferralToUser(user.id, code);
 
