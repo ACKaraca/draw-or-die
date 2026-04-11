@@ -412,6 +412,7 @@ export function UploadStep({
 
     try {
       const response = await generateAIResponse({
+        locale: preferredLanguage,
         operation: 'AUTO_FILL_FORM',
         imageBase64,
         imageMimeType: mimeType,

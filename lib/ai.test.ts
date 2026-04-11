@@ -52,7 +52,10 @@ describe('generateAIResponse', () => {
       '/api/ai-generate',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({ Authorization: 'Bearer refreshed-token' }),
+        headers: expect.objectContaining({
+          Authorization: 'Bearer refreshed-token',
+          'Accept-Language': 'tr',
+        }),
         body: expect.any(String),
       })
     );

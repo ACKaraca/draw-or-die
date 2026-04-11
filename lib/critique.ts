@@ -1,3 +1,5 @@
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
+
 function stripFence(value: string): string {
   return value
     .replace(/^```json\s*/i, '')
@@ -47,7 +49,7 @@ export function normalizeCritiqueText(value: unknown): string {
   return text.replace(/\n{3,}/g, '\n\n').trim();
 }
 
-export function ensureAtLeastTwoParagraphs(value: string): string {
+export function ensureAtLeastTwoParagraphs(value: string, language: SupportedLanguage = 'tr'): string {
   const text = normalizeCritiqueText(value);
   if (!text) return '';
 
@@ -70,5 +72,11 @@ export function ensureAtLeastTwoParagraphs(value: string): string {
     return `${sentences.slice(0, middle).join(' ')}\n\n${sentences.slice(middle).join(' ')}`.trim();
   }
 
-  return `${paragraphs[0]}\n\nUygulama adimi: paftada kararlarini plan, kesit ve cephe uzerinde ayni hiyerarsiyle netlestir; her kritik noktaya olcekli ve okunur aciklama ekle.`;
+  const filler = pickLocalized(
+    language,
+    'Uygulama adimi: paftada kararlarini plan, kesit ve cephe uzerinde ayni hiyerarsiyle netlestir; her kritik noktaya olcekli ve okunur aciklama ekle.',
+    'Next step: clarify your decisions on plan, section, and elevation with the same hierarchy; add scaled, readable notes at each critical point.',
+  );
+
+  return `${paragraphs[0]}\n\n${filler}`;
 }

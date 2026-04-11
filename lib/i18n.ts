@@ -38,3 +38,12 @@ export function resolveLanguageFromAcceptLanguage(
 export function pickLocalized(language: SupportedLanguage, trText: string, enText: string): string {
   return language === 'en' ? enText : trText;
 }
+
+/** Instruction fragment for LLM prompts: critique and mentor text must match UI locale. */
+export function responseLanguageClause(language: SupportedLanguage): string {
+  return pickLocalized(
+    language,
+    'Tum kullaniciya donuk metin alanlari (critique, ozet, mentor yaniti vb.) Turkce yazilsin.',
+    'All user-facing text fields (critique, summary, mentor reply, etc.) must be written in English.',
+  );
+}

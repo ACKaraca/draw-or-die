@@ -20,6 +20,12 @@ import {
   estimateTokenCount,
   getCurrentMonthKey,
 } from '@/lib/mentor-limits';
+import {
+  normalizeLanguage,
+  pickLocalized,
+  resolveLanguageFromAcceptLanguage,
+  type SupportedLanguage,
+} from '@/lib/i18n';
 
 const MAX_PAGE_SIZE = 30;
 const MAX_DELETE_PAGE_SIZE = 100;
@@ -60,8 +66,12 @@ function toChatDto(row: MentorChatRow) {
   };
 }
 
-function getDefaultWelcomeText(): string {
-  return 'Merhaba, ben AI mentorun. Hedefini yaz; konsept, pafta dili, savunma stratejisi ve iyilestirme adimlarini birlikte netlestirelim.';
+function getDefaultWelcomeText(language: SupportedLanguage): string {
+  return pickLocalized(
+    language,
+    'Merhaba, ben AI mentorun. Hedefini yaz; konsept, pafta dili, savunma stratejisi ve iyilestirme adimlarini birlikte netlestirelim.',
+    'Hello, I am your AI mentor. Share your goal; we will clarify concept, board language, defense strategy, and improvement steps together.',
+  );
 }
 
 async function runWithResourceRetry<T>(operation: () => Promise<T>): Promise<T> {
@@ -78,10 +88,14 @@ async function runWithResourceRetry<T>(operation: () => Promise<T>): Promise<T> 
 }
 
 export async function GET(request: NextRequest) {
+  const headerLang = resolveLanguageFromAcceptLanguage(request.headers.get('accept-language'), 'tr');
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Giriş yapmanız gerekiyor.', 'You must sign in.') },
+        { status: 401 },
+      );
     }
 
     await ensureCoreAppwriteResources();
@@ -112,20 +126,28 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logServerError('api.mentor.chats.GET', error);
-    return NextResponse.json({ error: 'Mentor sohbetleri yüklenemedi.' }, { status: 500 });
+    return NextResponse.json(
+      { error: pickLocalized(headerLang, 'Mentor sohbetleri yüklenemedi.', 'Could not load mentor chats.') },
+      { status: 500 },
+    );
   }
 }
 
 export async function POST(request: NextRequest) {
+  const headerLang = resolveLanguageFromAcceptLanguage(request.headers.get('accept-language'), 'tr');
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Giriş yapmanız gerekiyor.', 'You must sign in.') },
+        { status: 401 },
+      );
     }
 
     await ensureCoreAppwriteResources();
 
     const profile = await getOrCreateProfile(user);
+    const lang = normalizeLanguage(profile.preferred_language, headerLang);
     const isPremium = profile.is_premium;
     const monthKey = getCurrentMonthKey();
     const tokenLimit = isPremium ? MENTOR_TOKEN_LIMITS.PREMIUM_PER_CHAT : MENTOR_TOKEN_LIMITS.FREE_PER_CHAT;
@@ -134,12 +156,13 @@ export async function POST(request: NextRequest) {
       title?: string;
     };
 
-    const title = (body.title ?? '').trim() || 'Yeni Mentorluk Sohbeti';
+    const defaultTitle = pickLocalized(lang, 'Yeni Mentorluk Sohbeti', 'New mentor chat');
+    const title = (body.title ?? '').trim() || defaultTitle;
 
     const tables = getAdminTables();
 
     const nowIso = new Date().toISOString();
-    const welcomeText = getDefaultWelcomeText();
+    const welcomeText = getDefaultWelcomeText(lang);
     const welcomeTokens = estimateTokenCount(welcomeText);
 
     const chat = await runWithResourceRetry(() => tables.createRow<MentorChatRow>({
@@ -177,15 +200,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ item: toChatDto(chat) });
   } catch (error) {
     logServerError('api.mentor.chats.POST', error);
-    return NextResponse.json({ error: 'Mentor sohbeti oluşturulamadı.' }, { status: 500 });
+    return NextResponse.json(
+      { error: pickLocalized(headerLang, 'Mentor sohbeti oluşturulamadı.', 'Could not create mentor chat.') },
+      { status: 500 },
+    );
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const headerLang = resolveLanguageFromAcceptLanguage(request.headers.get('accept-language'), 'tr');
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Giriş yapmanız gerekiyor.', 'You must sign in.') },
+        { status: 401 },
+      );
     }
 
     await ensureCoreAppwriteResources();
@@ -193,7 +223,10 @@ export async function DELETE(request: NextRequest) {
     const body = (await request.json().catch(() => ({}))) as { chatId?: unknown };
     const chatId = typeof body.chatId === 'string' ? body.chatId.trim() : '';
     if (!chatId) {
-      return NextResponse.json({ error: 'chatId gerekli.' }, { status: 400 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'chatId gerekli.', 'chatId is required.') },
+        { status: 400 },
+      );
     }
 
     const tables = getAdminTables();
@@ -206,11 +239,17 @@ export async function DELETE(request: NextRequest) {
         rowId: chatId,
       });
     } catch {
-      return NextResponse.json({ error: 'Mentor sohbeti bulunamadı.' }, { status: 404 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Mentor sohbeti bulunamadı.', 'Mentor chat not found.') },
+        { status: 404 },
+      );
     }
 
     if (chat.user_id !== user.id) {
-      return NextResponse.json({ error: 'Bu mentor sohbeti size ait değil.' }, { status: 403 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Bu mentor sohbeti size ait değil.', 'This mentor chat does not belong to you.') },
+        { status: 403 },
+      );
     }
 
     const collectedMessages: MentorMessageRow[] = [];
@@ -282,12 +321,18 @@ export async function DELETE(request: NextRequest) {
       });
     } catch (error) {
       logServerError('api.mentor.chats.DELETE', error, { chatId });
-      return NextResponse.json({ error: 'Mentor sohbeti silinemedi.' }, { status: 500 });
+      return NextResponse.json(
+        { error: pickLocalized(headerLang, 'Mentor sohbeti silinemedi.', 'Could not delete mentor chat.') },
+        { status: 500 },
+      );
     }
 
     return NextResponse.json({ success: true });
   } catch (error) {
     logServerError('api.mentor.chats.DELETE', error);
-    return NextResponse.json({ error: 'Mentor sohbeti silinemedi.' }, { status: 500 });
+    return NextResponse.json(
+      { error: pickLocalized(headerLang, 'Mentor sohbeti silinemedi.', 'Could not delete mentor chat.') },
+      { status: 500 },
+    );
   }
 }

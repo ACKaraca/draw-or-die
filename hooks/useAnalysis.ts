@@ -732,48 +732,82 @@ export function useAnalysis({
     (cost: number, featureLabel: string) => {
       if (!isPremiumUser) {
         store.addToast(
-          `${featureLabel} için ${cost} Rapido gerekiyor. Trial limitine yaklaştın; Premium'a geçerek devam edebilirsin.`,
+          pickLanguageCopy(
+            uiLanguage,
+            `${featureLabel} için ${cost} Rapido gerekiyor. Trial limitine yaklaştın; Premium'a geçerek devam edebilirsin.`,
+            `${featureLabel} requires ${cost} Rapido. You're close to the trial limit; continue with Premium.`,
+          ),
           'info',
           6000
         );
         store.setStep('premium-upgrade');
         return;
       }
-      store.addToast(`Yeterli Rapido Kaleminiz yok! (${cost} gerekli)`, 'error');
+      store.addToast(
+        pickLanguageCopy(
+          uiLanguage,
+          `Yeterli Rapido Kaleminiz yok! (${cost} gerekli)`,
+          `Not enough Rapido pens! (${cost} required)`,
+        ),
+        'error'
+      );
     },
-    [isPremiumUser, store]
+    [isPremiumUser, store, uiLanguage]
   );
 
   const getReadyImagePayload = useCallback(
     (imageBase64: string | null, mimeType: string | null) => {
       if (!imageBase64 || !mimeType) {
-        store.addToast('Dosya hala işleniyor. Lütfen birkaç saniye bekleyip tekrar deneyin.', 'info');
+        store.addToast(
+          pickLanguageCopy(
+            uiLanguage,
+            'Dosya hala işleniyor. Lütfen birkaç saniye bekleyip tekrar deneyin.',
+            'File is still processing. Please wait a few seconds and try again.',
+          ),
+          'info'
+        );
         return null;
       }
       return { imageBase64, mimeType };
     },
-    [store]
+    [store, uiLanguage]
   );
 
-  const toUserErrorMessage = useCallback((error: unknown, fallback = 'Bir hata olustu.') => {
-    if (!(error instanceof Error)) return fallback;
+  const toUserErrorMessage = useCallback(
+    (error: unknown, fallback?: string) => {
+      const fb = fallback ?? pickLanguageCopy(uiLanguage, 'Bir hata oluştu.', 'Something went wrong.');
+      if (!(error instanceof Error)) return fb;
 
-    if (error.message.startsWith('RATE_LIMITED:')) {
-      const waitSecondsRaw = Number(error.message.split(':')[1] ?? '60');
-      const waitSeconds = Number.isFinite(waitSecondsRaw) ? Math.max(1, Math.ceil(waitSecondsRaw)) : 60;
-      return `Çok fazla istek gönderdin. Lütfen ${waitSeconds} sn bekleyiniz.`;
-    }
+      if (error.message.startsWith('RATE_LIMITED:')) {
+        const waitSecondsRaw = Number(error.message.split(':')[1] ?? '60');
+        const waitSeconds = Number.isFinite(waitSecondsRaw) ? Math.max(1, Math.ceil(waitSecondsRaw)) : 60;
+        return pickLanguageCopy(
+          uiLanguage,
+          `Çok fazla istek gönderdin. Lütfen ${waitSeconds} sn bekleyiniz.`,
+          `Too many requests. Please wait ${waitSeconds} seconds.`,
+        );
+      }
 
-    if (error.message === 'MENTOR_PREMIUM_LIMIT_REACHED') {
-      return 'Bu mentor sohbeti 12K limite ulaştı. 2x Rapido ile devam edebilir veya yeni sohbet açabilirsin.';
-    }
+      if (error.message === 'MENTOR_PREMIUM_LIMIT_REACHED') {
+        return pickLanguageCopy(
+          uiLanguage,
+          'Bu mentor sohbeti 12K limite ulaştı. 2x Rapido ile devam edebilir veya yeni sohbet açabilirsin.',
+          'This mentor chat hit the 12K limit. Continue with 2× Rapido or open a new chat.',
+        );
+      }
 
-    if (error.message === 'CHAT_TOKEN_LIMIT_REACHED') {
-      return 'Bu mentor sohbetinin token limiti doldu. Yeni sohbet açmalısın.';
-    }
+      if (error.message === 'CHAT_TOKEN_LIMIT_REACHED') {
+        return pickLanguageCopy(
+          uiLanguage,
+          'Bu mentor sohbetinin token limiti doldu. Yeni sohbet açmalısın.',
+          'This mentor chat reached its token limit. Open a new chat.',
+        );
+      }
 
-    return error.message || fallback;
-  }, []);
+      return error.message || fb;
+    },
+    [uiLanguage],
+  );
 
   // -------------------------------------------------------------------------
   // applyGameState — mirrors Edge Function's DB updates into local profile
@@ -1146,6 +1180,7 @@ export function useAnalysis({
     try {
       if (isRevisionMode && previousProject) {
         const aiResponse = await generateAIResponse({
+          locale: uiLanguage,
           operation: 'REVISION_SAME',
           imageBase64: readyImageBase64,
           imageMimeType: readyMimeType,
@@ -1219,6 +1254,7 @@ export function useAnalysis({
       } else {
         // SINGLE_JURY
         const aiResponse = await generateAIResponse({
+          locale: uiLanguage,
           operation: 'SINGLE_JURY',
           imageBase64: readyImageBase64,
           imageMimeType: readyMimeType,
@@ -1344,6 +1380,7 @@ export function useAnalysis({
 
     try {
       const aiResponse = await generateAIResponse({
+        locale: uiLanguage,
         operation: 'MULTI_JURY',
         imageBase64: readyImageBase64,
         imageMimeType: readyMimeType,
@@ -1453,6 +1490,7 @@ export function useAnalysis({
 
     try {
       const aiResponse = await generateAIResponse({
+        locale: uiLanguage,
         operation: 'PREMIUM_RESCUE',
         imageBase64: premiumPrepared.mainPayload.imageBase64,
         imageMimeType: premiumPrepared.mainPayload.mimeType,
@@ -1560,6 +1598,7 @@ export function useAnalysis({
 
     try {
       const aiResponse = await generateAIResponse({
+        locale: uiLanguage,
         operation: 'AUTO_CONCEPT',
         imageBase64: readyImageBase64,
         imageMimeType: readyMimeType,
@@ -1635,6 +1674,7 @@ export function useAnalysis({
 
     try {
       const aiResponse = await generateAIResponse({
+        locale: uiLanguage,
         operation: 'MATERIAL_BOARD',
         imageBase64: readyImageBase64,
         imageMimeType: readyMimeType,
@@ -1706,12 +1746,15 @@ export function useAnalysis({
     store.setIsDefenseLoading(true);
 
     try {
+      const defenseStudentLabel = pickLanguageCopy(uiLanguage, 'Öğrenci', 'Student');
+      const defenseJuryLabel = pickLanguageCopy(uiLanguage, 'Jüri', 'Jury');
       let chatHistoryText = defenseMessages
-        .map((m) => `${m.role === 'user' ? 'Öğrenci' : 'Jüri'}: ${m.text}`)
+        .map((m) => `${m.role === 'user' ? defenseStudentLabel : defenseJuryLabel}: ${m.text}`)
         .join('\n');
-      chatHistoryText += `\nÖğrenci: ${newUserMsg.text}`;
+      chatHistoryText += `\n${defenseStudentLabel}: ${newUserMsg.text}`;
 
       const aiResponse = await generateAIResponse({
+        locale: uiLanguage,
         operation: 'DEFENSE',
         params: withLanguage({
           critique,
@@ -1726,7 +1769,12 @@ export function useAnalysis({
         const data = safeParseJsonObject(aiResponse.result);
         store.setDefenseMessages((prev) => [
           ...prev,
-          { role: 'jury', text: typeof data.juryResponse === 'string' ? data.juryResponse : 'Jüri cevap veremedi.' },
+          {
+            role: 'jury',
+            text: typeof data.juryResponse === 'string'
+              ? data.juryResponse
+              : pickLanguageCopy(uiLanguage, 'Jüri cevap veremedi.', 'The jury could not respond.'),
+          },
         ]);
 
         if (defenseTurnCount === 2) {

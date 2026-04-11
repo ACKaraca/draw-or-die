@@ -361,6 +361,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
 
         try {
             const response = await generateAIResponse({
+                locale: preferredLanguage,
                 operation: 'AI_MENTOR',
                 imageBase64: pendingAttachment?.base64,
                 imageMimeType: pendingAttachment?.mimeType,

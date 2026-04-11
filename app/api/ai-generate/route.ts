@@ -35,6 +35,7 @@ import {
   normalizeLanguage,
   pickLocalized,
   resolveLanguageFromAcceptLanguage,
+  responseLanguageClause,
   type SupportedLanguage,
 } from '@/lib/i18n';
 
@@ -930,7 +931,10 @@ function getPersonaStyle(persona: JuryPersonaDefinition, language: SupportedLang
 
 function normalizePersona(value: unknown, language: SupportedLanguage): { critique: string; score: number } {
   const normalizePersonaText = (input: unknown): string => {
-    const cleaned = ensureAtLeastTwoParagraphs(normalizeCritiqueText(typeof input === 'string' ? input : ''));
+    const cleaned = ensureAtLeastTwoParagraphs(
+      normalizeCritiqueText(typeof input === 'string' ? input : ''),
+      language,
+    );
     return cleaned || pickLocalized(
       language,
       'Hata',
@@ -1257,6 +1261,8 @@ ${lengthInstruction}
 KATEGORI ODAK NOKTASI:
 ${getCategoryFocus(category, language)}
 
+${responseLanguageClause(language)}
+
 ANALIZ KRITERLERI:
 1) Konsept netligi ve proje fikrinin mekana cevrilmesi.
 2) Vaziyet, erisim, yonlenme, iklim/cevre tepkisi.
@@ -1300,6 +1306,8 @@ ${lengthInstruction}
 
 CATEGORY FOCUS:
 ${getCategoryFocus(category, language)}
+
+${responseLanguageClause(language)}
 
 EVALUATION CRITERIA:
 1) Concept clarity and translation of idea into space.
@@ -1761,6 +1769,8 @@ Eger dosya eklendiyse, dosyayi da dikkate alarak yorumla.
 
 Eger yuklenen pafta 2MB altindaysa, Studio Desk'te daha detayli juri analizi onerisini mutlaka belirt.
 
+${responseLanguageClause(language)}
+
 JSON:
 {
   "reply":"string",
@@ -1782,6 +1792,8 @@ Rules:
 If a file is attached, include it in your reasoning.
 
 If the uploaded board is below 2MB, explicitly recommend a deeper Studio Desk jury analysis.
+
+${responseLanguageClause(language)}
 
 JSON:
 {
@@ -1962,10 +1974,15 @@ export async function POST(request: NextRequest) {
     return response;
   };
 
+  const headerLangFallback = resolveLanguageFromAcceptLanguage(request.headers.get('accept-language'), 'tr');
+
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return respond({ error: 'Yetkisiz. Giriş yapın.' }, 401);
+      return respond(
+        { error: pickLocalized(headerLangFallback, 'Yetkisiz. Giriş yapın.', 'Unauthorized. Please sign in.') },
+        401,
+      );
     }
 
     await ensureCoreAppwriteResources();
@@ -1989,11 +2006,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { operation, imageBase64, imageMimeType, params = {} } = body;
-
-    if (!operation || typeof operation !== 'string') {
-      return respond({ error: 'operation gerekli.' }, 400);
-    }
-
     const payload = params as Record<string, unknown>;
     const headerLanguage = resolveLanguageFromAcceptLanguage(
       request.headers.get('accept-language'),
@@ -2011,18 +2023,38 @@ export async function POST(request: NextRequest) {
       }).catch(() => undefined);
     }
 
+    if (!operation || typeof operation !== 'string') {
+      return respond(
+        { error: pickLocalized(requestLanguage, 'operation gerekli.', 'operation is required.') },
+        400,
+      );
+    }
+
     const additionalFilesRaw = payload.additionalFiles;
     const additionalFiles: AdditionalRequestFile[] = [];
 
     if (additionalFilesRaw !== undefined) {
       if (!Array.isArray(additionalFilesRaw)) {
-        return respond({ error: 'Ek dosya formati geersiz.' }, 400);
+        return respond(
+          {
+            error: pickLocalized(
+              requestLanguage,
+              'Ek dosya formatı geçersiz.',
+              'Invalid additional file format.',
+            ),
+          },
+          400,
+        );
       }
 
       if (additionalFilesRaw.length > MAX_ADDITIONAL_FILES) {
         return respond(
           {
-            error: `En fazla ${MAX_ADDITIONAL_FILES + 1} dosya ykleyebilirsiniz.`,
+            error: pickLocalized(
+              requestLanguage,
+              `En fazla ${MAX_ADDITIONAL_FILES + 1} dosya yükleyebilirsiniz.`,
+              `You can upload at most ${MAX_ADDITIONAL_FILES + 1} files.`,
+            ),
             code: 'TOO_MANY_FILES',
             maxFiles: MAX_ADDITIONAL_FILES + 1,
           },
@@ -2032,7 +2064,16 @@ export async function POST(request: NextRequest) {
 
       for (const [index, entry] of additionalFilesRaw.entries()) {
         if (!entry || typeof entry !== 'object') {
-          return respond({ error: `Ek dosya #${index + 1} formati bozuk.` }, 400);
+          return respond(
+            {
+              error: pickLocalized(
+                requestLanguage,
+                `Ek dosya #${index + 1} formatı bozuk.`,
+                `Additional file #${index + 1} has an invalid format.`,
+              ),
+            },
+            400,
+          );
         }
 
         const parsed = entry as {
@@ -2053,7 +2094,16 @@ export async function POST(request: NextRequest) {
         const sourceName = typeof parsed.sourceName === 'string' ? parsed.sourceName.trim().substring(0, 120) : undefined;
 
         if (!base64 || !mimeType) {
-          return respond({ error: `Ek dosya #${index + 1} eksik veya bozuk.` }, 400);
+          return respond(
+            {
+              error: pickLocalized(
+                requestLanguage,
+                `Ek dosya #${index + 1} eksik veya bozuk.`,
+                `Additional file #${index + 1} is missing or invalid.`,
+              ),
+            },
+            400,
+          );
         }
 
         additionalFiles.push({
@@ -2088,7 +2138,7 @@ export async function POST(request: NextRequest) {
     if (currentRapidoCents < requiredBaseCostCents) {
       return respond(
         {
-          error: 'Yetersiz Rapido.',
+          error: pickLocalized(requestLanguage, 'Yetersiz Rapido.', 'Insufficient Rapido.'),
           code: 'INSUFFICIENT_RAPIDO',
           required: effectiveBaseCost,
           available: toRapidoDisplay(currentRapidoCents),
@@ -2099,13 +2149,23 @@ export async function POST(request: NextRequest) {
 
     const premiumOnly = ['MULTI_JURY', 'MATERIAL_BOARD', 'DEFENSE'];
     if (premiumOnly.includes(operation) && !typedProfile.is_premium) {
-      return respond({ error: 'Premium gerekli.', code: 'PREMIUM_REQUIRED' }, 403);
+      return respond(
+        {
+          error: pickLocalized(requestLanguage, 'Premium gerekli.', 'Premium required.'),
+          code: 'PREMIUM_REQUIRED',
+        },
+        403,
+      );
     }
 
     if (operation === 'AI_MENTOR' && !user.email) {
       return respond(
         {
-          error: 'AI Mentor misafir hesaplarda kapali. Lutfen kayit olarak devam edin.',
+          error: pickLocalized(
+            requestLanguage,
+            'AI Mentor misafir hesaplarda kapalı. Lütfen kayıt olarak devam edin.',
+            'AI Mentor is disabled for guest accounts. Please sign up to continue.',
+          ),
           code: 'GUEST_MENTOR_DISABLED',
         },
         403,
@@ -2135,7 +2195,11 @@ export async function POST(request: NextRequest) {
 
       return respond(
         {
-          error: `Çok fazla istek. Lütfen ${waitSeconds} sn bekleyiniz.`,
+          error: pickLocalized(
+            requestLanguage,
+            `Çok fazla istek. Lütfen ${waitSeconds} sn bekleyiniz.`,
+            `Too many requests. Please wait ${waitSeconds} seconds.`,
+          ),
           code: 'RATE_LIMITED',
           waitSeconds,
         },
@@ -2145,7 +2209,16 @@ export async function POST(request: NextRequest) {
 
     const apiKey = process.env.AI_API_KEY?.replace(/[\r\n\s"']/g, '').trim();
     if (!apiKey) {
-      return respond({ error: 'AI yapilandirmasi eksik (AI_API_KEY).' }, 503);
+      return respond(
+        {
+          error: pickLocalized(
+            requestLanguage,
+            'AI yapılandırması eksik (AI_API_KEY).',
+            'AI configuration is missing (AI_API_KEY).',
+          ),
+        },
+        503,
+      );
     }
 
     const cfg: AIConfig = {
@@ -2199,7 +2272,16 @@ export async function POST(request: NextRequest) {
     }
 
     if ((fileBase64 && !fileMimeType) || (!fileBase64 && fileMimeType)) {
-      return respond({ error: 'Dosya verisi eksik veya bozuk.' }, 400);
+      return respond(
+        {
+          error: pickLocalized(
+            requestLanguage,
+            'Dosya verisi eksik veya bozuk.',
+            'File data is missing or invalid.',
+          ),
+        },
+        400,
+      );
     }
 
     const allFiles: PromptFileInput[] = requestFilesWithHashes.map((entry) => ({
@@ -2211,7 +2293,11 @@ export async function POST(request: NextRequest) {
       if (!ALLOWED_FILE_MIME_TYPES.has(file.mimeType)) {
         return respond(
           {
-            error: 'Desteklenmeyen dosya tr. Sadece JPG, PNG veya PDF ykleyebilirsiniz.',
+            error: pickLocalized(
+              requestLanguage,
+              'Desteklenmeyen dosya türü. Sadece JPG, PNG veya PDF yükleyebilirsiniz.',
+              'Unsupported file type. Only JPG, PNG, or PDF are allowed.',
+            ),
             code: 'UNSUPPORTED_FILE_TYPE',
           },
           415,
@@ -2222,7 +2308,11 @@ export async function POST(request: NextRequest) {
     if (IMAGE_REQUIRED_OPERATIONS.has(operation) && allFiles.length === 0) {
       return respond(
         {
-          error: 'Bu analiz tipi iin grsel veya PDF zorunludur.',
+          error: pickLocalized(
+            requestLanguage,
+            'Bu analiz tipi için görsel veya PDF zorunludur.',
+            'This analysis type requires an image or PDF.',
+          ),
           code: 'FILE_REQUIRED',
         },
         400,
@@ -2232,7 +2322,11 @@ export async function POST(request: NextRequest) {
     if (operation === 'AI_MENTOR' && allFiles.length > 1) {
       return respond(
         {
-          error: 'Mentor modunda ayni anda tek dosya ykleyebilirsiniz.',
+          error: pickLocalized(
+            requestLanguage,
+            'Mentor modunda aynı anda tek dosya yükleyebilirsiniz.',
+            'In mentor mode you can upload only one file at a time.',
+          ),
           code: 'TOO_MANY_FILES',
         },
         400,
@@ -2241,7 +2335,16 @@ export async function POST(request: NextRequest) {
 
     const fileSizesBytes = allFiles.map((file) => estimateBase64SizeBytes(file.base64));
     if (fileSizesBytes.some((size) => size <= 0)) {
-      return respond({ error: 'Dosya verisi zmlenemedi.' }, 400);
+      return respond(
+        {
+          error: pickLocalized(
+            requestLanguage,
+            'Dosya verisi çözümlenemedi.',
+            'Could not decode file data.',
+          ),
+        },
+        400,
+      );
     }
 
     const totalFileBytes = fileSizesBytes.reduce((sum, size) => sum + size, 0);
@@ -2256,7 +2359,11 @@ export async function POST(request: NextRequest) {
       if (operation === 'AI_MENTOR' && maxSingleFileBytes > maxBytes) {
         return respond(
           {
-            error: `Dosya boyutu limiti asildi. Mentor eki iin en fazla ${toMb(maxBytes)} MB ykleyebilirsiniz.`,
+            error: pickLocalized(
+              requestLanguage,
+              `Dosya boyutu limiti aşıldı. Mentor eki için en fazla ${toMb(maxBytes)} MB yükleyebilirsiniz.`,
+              `File size limit exceeded. Mentor attachments may be at most ${toMb(maxBytes)} MB.`,
+            ),
             code: 'FILE_TOO_LARGE',
             maxMb: toMb(maxBytes),
             uploadedMb: toMb(maxSingleFileBytes),
@@ -2268,7 +2375,11 @@ export async function POST(request: NextRequest) {
       if (operation !== 'AI_MENTOR' && totalFileBytes > maxBytes) {
         return respond(
           {
-            error: `Toplam dosya boyutu limiti asildi. Studio Desk icin en fazla ${toMb(maxBytes)} MB yukleyebilirsiniz.`,
+            error: pickLocalized(
+              requestLanguage,
+              `Toplam dosya boyutu limiti aşıldı. Studio Desk için en fazla ${toMb(maxBytes)} MB yükleyebilirsiniz.`,
+              `Total file size limit exceeded. Studio Desk allows at most ${toMb(maxBytes)} MB.`,
+            ),
             code: 'FILE_TOO_LARGE',
             maxMb: toMb(maxBytes),
             uploadedMb: toMb(totalFileBytes),
@@ -2367,11 +2478,18 @@ export async function POST(request: NextRequest) {
         score?: number;
         galleryPlacement?: string;
       }>(result, {});
-      const critique = ensureAtLeastTwoParagraphs(normalizeCritiqueText(parsed.critique));
+      const critique = ensureAtLeastTwoParagraphs(
+        normalizeCritiqueText(parsed.critique),
+        requestLanguage,
+      );
       if (!critique) {
         return respond(
           {
-            error: 'AI analiz sonucu dogrulanamadi. Rapido dslmedi, tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'AI analiz sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'AI analysis could not be validated. Rapido was not charged; try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -2465,7 +2583,11 @@ export async function POST(request: NextRequest) {
       if (flaws.length === 0 && practicalSolutions.length === 0 && drawingInstructions.length === 0) {
         return respond(
           {
-            error: 'Premium analiz sonucu bos dnd. Rapido dslmedi, tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Premium analiz sonucu boş döndü. Rapido düşülmedi, tekrar deneyin.',
+              'Premium analysis returned empty. Rapido was not charged; try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -2476,7 +2598,10 @@ export async function POST(request: NextRequest) {
         flaws,
         practicalSolutions,
         drawingInstructions,
-        summary: ensureAtLeastTwoParagraphs(typeof parsed.summary === 'string' ? parsed.summary : ''),
+        summary: ensureAtLeastTwoParagraphs(
+          typeof parsed.summary === 'string' ? parsed.summary : '',
+          requestLanguage,
+        ),
         reference: typeof parsed.reference === 'string' ? parsed.reference : pickLocalized(requestLanguage, 'Belirtilmedi', 'Not specified'),
       });
       const parsedCache = buildCacheSummaryFromResult(operation, result);
@@ -2497,11 +2622,18 @@ export async function POST(request: NextRequest) {
         score?: number;
         galleryPlacement?: string;
       }>(result, {});
-      const critique = ensureAtLeastTwoParagraphs(normalizeCritiqueText(revision.critique));
+      const critique = ensureAtLeastTwoParagraphs(
+        normalizeCritiqueText(revision.critique),
+        requestLanguage,
+      );
       if (typeof revision.isSameProject !== 'boolean' || !critique) {
         return respond(
           {
-            error: 'Revizyon sonucu dogrulanamadi. Rapido dslmedi, tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Revizyon sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Revision result could not be validated. Rapido was not charged; try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -2513,7 +2645,7 @@ export async function POST(request: NextRequest) {
         if (currentRapidoCents < finalCostCents) {
           return respond(
             {
-              error: 'Yetersiz Rapido.',
+              error: pickLocalized(requestLanguage, 'Yetersiz Rapido.', 'Insufficient Rapido.'),
               code: 'INSUFFICIENT_RAPIDO',
               required: RAPIDO_COSTS.REVISION_DIFFERENT,
               available: toRapidoDisplay(currentRapidoCents),
@@ -2575,7 +2707,11 @@ export async function POST(request: NextRequest) {
       if (critiques.length === 0 || critiques.every((entry) => !entry || entry === invalidCritiqueFallback)) {
         return respond(
           {
-            error: 'oklu jri sonucu dogrulanamadi. Rapido dslmedi, tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Çoklu jüri sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Multi-jury result could not be validated. Rapido was not charged; try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -2610,7 +2746,11 @@ export async function POST(request: NextRequest) {
       if (!juryResponse) {
         return respond(
           {
-            error: 'Savunma yaniti dogrulanamadi. Rapido dslmedi, tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Savunma yanıtı doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Defense response could not be validated. Rapido was not charged; try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -2638,7 +2778,16 @@ export async function POST(request: NextRequest) {
       const extendPremiumChat = payload.extendPremiumChat === true;
 
       if (!chatId || !userMessage) {
-        return respond({ error: 'Mentor için sohbet kimliği ve mesaj zorunludur.' }, 400);
+        return respond(
+          {
+            error: pickLocalized(
+              requestLanguage,
+              'Mentor için sohbet kimliği ve mesaj zorunludur.',
+              'Chat ID and message are required for the mentor.',
+            ),
+          },
+          400,
+        );
       }
 
       const tables = getAdminTables();
@@ -2652,13 +2801,27 @@ export async function POST(request: NextRequest) {
       } catch (error: unknown) {
         const typed = error as { code?: number };
         if (typed?.code === 404) {
-          return respond({ error: 'Mentor sohbeti bulunamadı.' }, 404);
+          return respond(
+            {
+              error: pickLocalized(requestLanguage, 'Mentor sohbeti bulunamadı.', 'Mentor chat not found.'),
+            },
+            404,
+          );
         }
         throw error;
       }
 
       if (chat.user_id !== user.id) {
-        return respond({ error: 'Bu mentor sohbeti size ait değil.' }, 403);
+        return respond(
+          {
+            error: pickLocalized(
+              requestLanguage,
+              'Bu mentor sohbeti size ait değil.',
+              'This mentor chat does not belong to you.',
+            ),
+          },
+          403,
+        );
       }
 
       const isPremiumMentor = typedProfile.is_premium;
@@ -2679,7 +2842,11 @@ export async function POST(request: NextRequest) {
         if (!extendPremiumChat) {
           return respond(
             {
-              error: `Bu sohbet ${tokenLimit} token limitine ulasti. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam edebilir veya yeni sohbet acabilirsin.`,
+              error: pickLocalized(
+                requestLanguage,
+                `Bu sohbet ${tokenLimit} token limitine ulaştı. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam edebilir veya yeni sohbet açabilirsin.`,
+                `This chat hit the ${tokenLimit} token limit. Continue with ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido or start a new chat.`,
+              ),
               code: 'CHAT_TOKEN_LIMIT_REACHED',
               required: MENTOR_PREMIUM_EXTENSION_RAPIDO,
               available: toRapidoDisplay(currentRapidoCents),
@@ -2691,7 +2858,11 @@ export async function POST(request: NextRequest) {
         if (currentRapidoCents < premiumExtensionCostCents) {
           return respond(
             {
-              error: 'Premium limit uzatmasi icin yeterli Rapido yok.',
+              error: pickLocalized(
+                requestLanguage,
+                'Premium limit uzatması için yeterli Rapido yok.',
+                'Not enough Rapido to extend the premium limit.',
+              ),
               code: 'INSUFFICIENT_RAPIDO',
               required: MENTOR_PREMIUM_EXTENSION_RAPIDO,
               available: toRapidoDisplay(currentRapidoCents),
@@ -2715,8 +2886,10 @@ export async function POST(request: NextRequest) {
       });
 
       const orderedHistory = [...previousMessages.rows].reverse();
+      const historyStudentLabel = pickLocalized(requestLanguage, 'Ogrenci', 'Student');
+      const historyMentorLabel = pickLocalized(requestLanguage, 'Mentor', 'Mentor');
       const historyText = orderedHistory
-        .map((message) => `${message.role === 'user' ? 'grenci' : 'Mentor'}: ${message.content}`)
+        .map((message) => `${message.role === 'user' ? historyStudentLabel : historyMentorLabel}: ${message.content}`)
         .join('\n')
         .substring(0, 6000);
 
@@ -2737,7 +2910,11 @@ export async function POST(request: NextRequest) {
         const requiredCents = appliedPremiumExtensionCents + mentorTokensToRapidoCents(estimatedPromptTokens);
         return respond(
           {
-            error: 'Bu mentor isteği mevcut Rapido bakiyesi için fazla büyük. Mesajı veya eki küçültüp tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Bu mentor isteği mevcut Rapido bakiyesi için fazla büyük. Mesajı veya eki küçültüp tekrar deneyin.',
+              'This mentor request is too large for your Rapido balance. Shorten the message or attachment.',
+            ),
             code: 'INSUFFICIENT_RAPIDO',
             required: toRapidoDisplay(requiredCents),
             available: toRapidoDisplay(currentRapidoCents),
@@ -2750,7 +2927,11 @@ export async function POST(request: NextRequest) {
         const requiredCents = appliedPremiumExtensionCents + estimatedPromptCostCents + minimumAssistantCostCents;
         return respond(
           {
-            error: 'Bu mentor istegi icin bakiye yetersiz. Mesaji kisaltip tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Bu mentor isteği için bakiye yetersiz. Mesajı kısaltıp tekrar deneyin.',
+              'Insufficient balance for this mentor request. Shorten the message and try again.',
+            ),
             code: 'INSUFFICIENT_RAPIDO',
             required: toRapidoDisplay(requiredCents),
             available: toRapidoDisplay(currentRapidoCents),
@@ -2763,7 +2944,11 @@ export async function POST(request: NextRequest) {
         if (!extendPremiumChat || appliedPremiumExtensionCents > 0) {
           return respond(
             {
-              error: `Bu sohbet ${tokenLimit} token limitinde. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam ederek limiti artirabilir veya yeni sohbet acabilirsin.`,
+              error: pickLocalized(
+                requestLanguage,
+                `Bu sohbet ${tokenLimit} token limitinde. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam ederek limiti artırabilir veya yeni sohbet açabilirsin.`,
+                `This chat is at the ${tokenLimit} token limit. Increase it with ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido or open a new chat.`,
+              ),
               code: 'CHAT_TOKEN_LIMIT_REACHED',
               required: MENTOR_PREMIUM_EXTENSION_RAPIDO,
               available: toRapidoDisplay(currentRapidoCents),
@@ -2775,7 +2960,11 @@ export async function POST(request: NextRequest) {
         if (currentRapidoCents < premiumExtensionCostCents) {
           return respond(
             {
-              error: 'Premium limit uzatmasi icin yeterli Rapido yok.',
+              error: pickLocalized(
+                requestLanguage,
+                'Premium limit uzatması için yeterli Rapido yok.',
+                'Not enough Rapido to extend the premium limit.',
+              ),
               code: 'INSUFFICIENT_RAPIDO',
               required: MENTOR_PREMIUM_EXTENSION_RAPIDO,
               available: toRapidoDisplay(currentRapidoCents),
@@ -2795,7 +2984,11 @@ export async function POST(request: NextRequest) {
         const requiredCents = appliedPremiumExtensionCents + mentorTokensToRapidoCents(estimatedPromptTokens);
         return respond(
           {
-            error: 'Bu mentor istegi mevcut Rapido bakiyesi icin fazla buyuk. Mesaji kisaltip tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Bu mentor isteği mevcut Rapido bakiyesi için fazla büyük. Mesajı kısaltıp tekrar deneyin.',
+              'This mentor request is too large for your Rapido balance. Shorten the message and try again.',
+            ),
             code: 'INSUFFICIENT_RAPIDO',
             required: toRapidoDisplay(requiredCents),
             available: toRapidoDisplay(currentRapidoCents),
@@ -2831,7 +3024,11 @@ export async function POST(request: NextRequest) {
           });
           return respond(
             {
-              error: 'Mentor eki yüklenemedi. Lütfen dosyayı tekrar deneyin.',
+              error: pickLocalized(
+                requestLanguage,
+                'Mentor eki yüklenemedi. Lütfen dosyayı tekrar deneyin.',
+                'Could not upload mentor attachment. Please try the file again.',
+              ),
               code: 'MENTOR_ATTACHMENT_UPLOAD_FAILED',
             },
             502,
@@ -2866,8 +3063,16 @@ export async function POST(request: NextRequest) {
         const hasStudioDeskAction = quickActions.some((entry) => /studio\s*desk/i.test(`${entry.label} ${entry.prompt}`));
         if (!hasStudioDeskAction) {
           quickActions.unshift({
-            label: 'Studio Deskte detayli juri analizi baslat',
-            prompt: 'Bu paftayi Studio Deskte daha detayli analiz etmek istiyorum.',
+            label: pickLocalized(
+              requestLanguage,
+              'Studio Deskte detayli juri analizi baslat',
+              'Start detailed jury analysis in Studio Desk',
+            ),
+            prompt: pickLocalized(
+              requestLanguage,
+              'Bu paftayi Studio Deskte daha detayli analiz etmek istiyorum.',
+              'I want a more detailed analysis of this board in Studio Desk.',
+            ),
           });
         }
       }
@@ -2876,7 +3081,11 @@ export async function POST(request: NextRequest) {
       if (!mentorReply.trim()) {
         return respond(
           {
-            error: 'Mentor yaniti dogrulanamadi. Rapido dslmedi, tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Mentor yanıtı doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Mentor reply could not be validated. Rapido was not charged; try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -2918,8 +3127,13 @@ export async function POST(request: NextRequest) {
 
       const nextTokensUsed = Math.min(tokenLimit, currentTokens + consumedTokens);
       const nextStatus = nextTokensUsed >= tokenLimit ? 'locked' : 'active';
+      const defaultMentorChatTitle = pickLocalized(
+        requestLanguage,
+        'Yeni Mentorluk Sohbeti',
+        'New mentor chat',
+      );
       const nextTitle =
-        !chat.title || chat.title === 'Yeni Mentorluk Sohbeti'
+        !chat.title || chat.title === 'Yeni Mentorluk Sohbeti' || chat.title === defaultMentorChatTitle
           ? userMessage.substring(0, 60)
           : chat.title;
 
@@ -2985,11 +3199,18 @@ export async function POST(request: NextRequest) {
       result = (await callAI(cfg, prompt, aiPrimaryFileBase64, aiPrimaryFileMimeType, aiAdditionalPromptFiles, requestLanguage)).content || '{"critique":""}';
 
       const parsed = safeParseJson<{ critique?: unknown }>(result, {});
-      const critique = ensureAtLeastTwoParagraphs(normalizeCritiqueText(parsed.critique));
+      const critique = ensureAtLeastTwoParagraphs(
+        normalizeCritiqueText(parsed.critique),
+        requestLanguage,
+      );
       if (!critique) {
         return respond(
           {
-            error: 'Analiz sonucu dogrulanamadi. Rapido dslmedi, tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Analiz sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Analysis could not be validated. Rapido was not charged; try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -3020,8 +3241,14 @@ export async function POST(request: NextRequest) {
 
       const topic = typeof parsed.topic === 'string' ? parsed.topic.trim().substring(0, 120) : '';
       const site = typeof parsed.site === 'string' ? parsed.site.trim().substring(0, 180) : '';
-      const concept = ensureAtLeastTwoParagraphs(typeof parsed.concept === 'string' ? parsed.concept : '');
-      const defense = ensureAtLeastTwoParagraphs(typeof parsed.defense === 'string' ? parsed.defense : '');
+      const concept = ensureAtLeastTwoParagraphs(
+        typeof parsed.concept === 'string' ? parsed.concept : '',
+        requestLanguage,
+      );
+      const defense = ensureAtLeastTwoParagraphs(
+        typeof parsed.defense === 'string' ? parsed.defense : '',
+        requestLanguage,
+      );
       const category = clampCategory(parsed.category);
       const suggestedLength =
         typeof parsed.analysisLength === 'string' &&
@@ -3032,7 +3259,11 @@ export async function POST(request: NextRequest) {
       if (!topic && !site && !concept && !defense) {
         return respond(
           {
-            error: 'Otomatik form doldurma sonucu dogrulanamadi. Tekrar deneyin.',
+            error: pickLocalized(
+              requestLanguage,
+              'Otomatik form doldurma sonucu doğrulanamadı. Tekrar deneyin.',
+              'Auto-fill could not be validated. Try again.',
+            ),
             code: 'INVALID_AI_RESULT',
           },
           502,
@@ -3051,7 +3282,12 @@ export async function POST(request: NextRequest) {
       cacheSummaryForUpsert = parsedCache.summary;
       cacheTitleForUpsert = parsedCache.titleGuess;
     } else {
-      return respond({ error: 'Bilinmeyen islem.' }, 400);
+      return respond(
+        {
+          error: pickLocalized(requestLanguage, 'Bilinmeyen işlem.', 'Unknown operation.'),
+        },
+        400,
+      );
     }
 
     if (shouldUseFileCache && fileHashesForCache.length > 0 && cacheSummaryForUpsert) {
@@ -3113,7 +3349,11 @@ export async function POST(request: NextRequest) {
 
       return respond(
         {
-          error: 'AI saglayicisi gecici hata dondu. Lutfen biraz bekleyip tekrar deneyin.',
+          error: pickLocalized(
+            headerLangFallback,
+            'AI sağlayıcısı geçici hata döndü. Lütfen biraz bekleyip tekrar deneyin.',
+            'The AI provider returned a temporary error. Please wait and try again.',
+          ),
           code: 'AI_PROVIDER_FAILURE',
           providerStatus: typed.providerStatus ?? null,
           requestId,
@@ -3127,7 +3367,11 @@ export async function POST(request: NextRequest) {
       ip,
     });
     return respond(
-      { error: error instanceof Error ? error.message : 'Sunucu hatasi.' },
+      {
+        error: error instanceof Error
+          ? error.message
+          : pickLocalized(headerLangFallback, 'Sunucu hatası.', 'Server error.'),
+      },
       500,
     );
   }
