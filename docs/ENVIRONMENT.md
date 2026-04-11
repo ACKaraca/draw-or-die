@@ -11,6 +11,8 @@ NEXT_PUBLIC_APPWRITE_PROJECT_ID=draw-or-die
 APPWRITE_ENDPOINT=https://fra.cloud.appwrite.io/v1
 APPWRITE_PROJECT_ID=draw-or-die
 APPWRITE_API_KEY=your-appwrite-server-api-key
+# Optional (development): local-only server key override to avoid OS-level env collisions
+APPWRITE_API_KEY_LOCAL=your-local-appwrite-server-api-key
 
 # Optional: dedicated email provider for edu verification emails.
 # If empty, the default configured Appwrite email provider is used.

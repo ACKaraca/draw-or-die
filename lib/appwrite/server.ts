@@ -1,4 +1,6 @@
 import { randomBytes } from 'crypto';
+import { existsSync, readFileSync } from 'fs';
+import { join } from 'path';
 import { Account, Client, ID, Query, Storage, TablesDB } from 'node-appwrite';
 import type { Models } from 'node-appwrite';
 import type { NextRequest } from 'next/server';
@@ -8,7 +10,58 @@ import { TIER_DEFAULTS } from '@/lib/pricing';
 
 export const APPWRITE_SERVER_ENDPOINT = process.env.APPWRITE_ENDPOINT ?? 'https://fra.cloud.appwrite.io/v1';
 export const APPWRITE_SERVER_PROJECT_ID = process.env.APPWRITE_PROJECT_ID ?? 'draw-or-die';
-export const APPWRITE_SERVER_API_KEY = process.env.APPWRITE_API_KEY ?? '';
+
+function readLocalEnvValue(key: string): string {
+  if (process.env.NODE_ENV !== 'development') {
+    return '';
+  }
+
+  const candidates = [
+    join(process.cwd(), '.env.development.local'),
+    join(process.cwd(), '.env.local'),
+  ];
+
+  for (const filePath of candidates) {
+    try {
+      if (!existsSync(filePath)) continue;
+      const content = readFileSync(filePath, 'utf8');
+      const lines = content.split(/\r?\n/);
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const separatorIndex = trimmed.indexOf('=');
+        if (separatorIndex < 1) continue;
+        const currentKey = trimmed.slice(0, separatorIndex).trim();
+        if (currentKey !== key) continue;
+        const value = trimmed.slice(separatorIndex + 1).trim();
+        return value;
+      }
+    } catch {
+      // Ignore local env parsing failures and fall back to process env.
+    }
+  }
+
+  return '';
+}
+
+function resolveServerApiKey(): string {
+  const localOverride = (process.env.APPWRITE_API_KEY_LOCAL ?? '').trim();
+  if (localOverride) {
+    return localOverride;
+  }
+
+  const processKey = (process.env.APPWRITE_API_KEY ?? '').trim();
+  const localFileKey = readLocalEnvValue('APPWRITE_API_KEY').trim();
+
+  if (process.env.NODE_ENV === 'development' && localFileKey && processKey && localFileKey !== processKey) {
+    console.warn('[appwrite] APPWRITE_API_KEY mismatch detected in development. Using key from .env.development.local/.env.local.');
+    return localFileKey;
+  }
+
+  return localFileKey || processKey;
+}
+
+export const APPWRITE_SERVER_API_KEY = resolveServerApiKey();
 
 export const APPWRITE_DATABASE_ID = process.env.APPWRITE_DATABASE_ID ?? 'draw_or_die';
 export const APPWRITE_TABLE_PROFILES_ID = process.env.APPWRITE_TABLE_PROFILES_ID ?? 'profiles';
