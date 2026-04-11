@@ -109,23 +109,21 @@ async function purgeExpiredDeletedRowsForUser(userId: string): Promise<void> {
     ],
   });
 
-  for (const row of result.rows) {
+    for (const row of result.rows) {
     const fileIds = new Set<string>();
     const previewId = extractFileIdFromUrl(row.preview_url || '');
     const sourceId = extractFileIdFromUrl(row.source_url || '');
     if (previewId) fileIds.add(previewId);
     if (sourceId) fileIds.add(sourceId);
 
-    for (const fileId of fileIds) {
-      try {
-        await storage.deleteFile({
+    await Promise.allSettled(
+      [...fileIds].map((fileId) =>
+        storage.deleteFile({
           bucketId: APPWRITE_BUCKET_GALLERY_ID,
           fileId,
-        });
-      } catch {
-        // ignore file already removed
-      }
-    }
+        }),
+      ),
+    );
 
     try {
       await tables.deleteRow({

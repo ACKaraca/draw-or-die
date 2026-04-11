@@ -99,11 +99,15 @@ export function PremiumResultStep({
     return pages[0]?.page ?? 1;
   }, [manualActivePage, pages, selectedFlawPage]);
 
-  const activePageEntry = pages.find((entry) => entry.page === activePage) ?? pages[0] ?? null;
-  const activePageIndex = Math.max(
-    0,
-    pages.findIndex((entry) => entry.page === (activePageEntry?.page ?? 1)),
+  const activePageEntry = useMemo(
+    () => pages.find((entry) => entry.page === activePage) ?? pages[0] ?? null,
+    [activePage, pages],
   );
+  const activePageIndex = useMemo(() => {
+    if (!activePageEntry) return 0;
+    const index = pages.findIndex((entry) => entry.page === activePageEntry.page);
+    return index >= 0 ? index : 0;
+  }, [activePageEntry, pages]);
 
   const flawRows = useMemo(
     () =>
