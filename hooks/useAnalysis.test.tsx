@@ -71,6 +71,7 @@ describe('useAnalysis', () => {
         rapidoPens: 0,
         refreshProfile,
         setProfile: jest.fn(),
+        preferredLanguage: 'tr',
       })
     );
 
@@ -95,6 +96,7 @@ describe('useAnalysis', () => {
         rapidoPens: 5,
         refreshProfile,
         setProfile: jest.fn(),
+        preferredLanguage: 'tr',
       }),
     );
 
@@ -120,6 +122,7 @@ describe('useAnalysis', () => {
         rapidoPens: 10,
         refreshProfile,
         setProfile: jest.fn(),
+        preferredLanguage: 'tr',
       }),
     );
 
@@ -140,7 +143,7 @@ describe('useAnalysis', () => {
     expect(body.analysisKind).toBe('SINGLE_JURY');
     expect(refreshProfile).toHaveBeenCalled();
     expect(addToast).toHaveBeenCalledWith(
-      expect.stringContaining('Analiz korundu. 1.5 Rapido dusuldu.'),
+      expect.stringMatching(/Analiz korundu.*1\.5 Rapido düşüldü/),
       'success',
     );
   });

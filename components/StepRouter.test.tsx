@@ -7,14 +7,8 @@ jest.mock('@/stores/drawOrDieStore', () => ({
 }));
 
 jest.mock('@/components/HeroStep', () => ({
-  HeroStep: ({ setStep, setCurrentGallery }: any) => (
-    <button
-      data-testid="hero-step"
-      onClick={() => {
-        setCurrentGallery('WALL_OF_DEATH');
-        setStep('gallery');
-      }}
-    >
+  HeroStep: ({ setStep }: { setStep: (s: string) => void }) => (
+    <button data-testid="hero-step" type="button" onClick={() => setStep('upload')}>
       Hero
     </button>
   ),
@@ -57,7 +51,6 @@ const mockedStore = jest.mocked(useDrawOrDieStore);
 
 describe('StepRouter', () => {
   const setStep = jest.fn();
-  const setCurrentGallery = jest.fn();
   const setFormData = jest.fn();
   const setSelectedFlawIndex = jest.fn();
   const setIsDefending = jest.fn();
@@ -93,7 +86,7 @@ describe('StepRouter', () => {
       galleryPlacement: 'NONE',
       galleryConsent: null,
       currentGallery: null,
-      setCurrentGallery,
+      setCurrentGallery: jest.fn(),
       guestDrawingCount: 0,
       showGuestUpgradePrompt: false,
       setGuestDrawingCount: jest.fn(),
@@ -104,7 +97,7 @@ describe('StepRouter', () => {
     } as never);
   });
 
-  it('renders the hero route and wires gallery transition actions', () => {
+  it('renders the hero route and opens Studio Desk (upload) from the hero shell', () => {
     const { getByTestId } = render(
       <StepRouter
         getRootProps={jest.fn() as never}
@@ -129,8 +122,7 @@ describe('StepRouter', () => {
     );
 
     getByTestId('hero-step').click();
-    expect(setCurrentGallery).toHaveBeenCalledWith('WALL_OF_DEATH');
-    expect(setStep).toHaveBeenCalledWith('gallery');
+    expect(setStep).toHaveBeenCalledWith('upload');
   });
 
   it('renders gallery step when gallery route is active', async () => {
@@ -161,7 +153,7 @@ describe('StepRouter', () => {
       galleryPlacement: 'NONE',
       galleryConsent: null,
       currentGallery: null,
-      setCurrentGallery,
+      setCurrentGallery: jest.fn(),
       guestDrawingCount: 0,
       showGuestUpgradePrompt: false,
       setGuestDrawingCount: jest.fn(),

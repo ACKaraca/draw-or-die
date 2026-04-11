@@ -27,18 +27,32 @@ const PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const PREVIEW_JPEG_QUALITIES = [0.82, 0.74, 0.66, 0.58, 0.5, 0.42];
 const PREMIUM_MAX_RENDERED_PAGES = 12;
 const ANALYSIS_PRESERVE_COST = 1.5;
-const COMMUNITY_SHARE_CONFIRMATION_TEXT = [
-  'Community paylasimi onayi',
-  '',
-  'Asagidaki maddeleri okudum ve onayliyorum:',
-  '1) Yukledigim pafta/gorsel icin paylasim hakkina sahibim.',
-  '2) Kisisel veri (telefon, e-posta, ogrenci no, imza vb.) iceren alanlari kontrol ettim.',
-  '3) Topluluk kurallarini okudum, anladim ve paylasim sorumlulugunu kabul ediyorum.',
-  '',
-  '"Okudum, anladim ve community paylasimini onayliyorum."',
-  '',
-  'Devam etmek istiyor musunuz?',
-].join('\n');
+function communityShareConfirmationText(language: SupportedLanguage): string {
+  if (language === 'en') {
+    return [
+      'Community sharing confirmation',
+      '',
+      'I confirm that:',
+      '1) I have the right to share the board/image I uploaded.',
+      '2) I checked for personal data (phone, email, student ID, signature, etc.).',
+      '3) I read and accept the community rules and responsibility for sharing.',
+      '',
+      'Do you want to continue?',
+    ].join('\n');
+  }
+  return [
+    'Community paylasimi onayi',
+    '',
+    'Asagidaki maddeleri okudum ve onayliyorum:',
+    '1) Yukledigim pafta/gorsel icin paylasim hakkina sahibim.',
+    '2) Kisisel veri (telefon, e-posta, ogrenci no, imza vb.) iceren alanlari kontrol ettim.',
+    '3) Topluluk kurallarini okudum, anladim ve paylasim sorumlulugunu kabul ediyorum.',
+    '',
+    '"Okudum, anladim ve community paylasimini onayliyorum."',
+    '',
+    'Devam etmek istiyor musunuz?',
+  ].join('\n');
+}
 
 function pickLanguageCopy(language: SupportedLanguage, trText: string, enText: string): string {
   return language === 'en' ? enText : trText;
@@ -720,6 +734,11 @@ export function useAnalysis({
     return 'tr';
   }, [preferredLanguage, profile?.preferred_language]);
 
+  const t = useCallback(
+    (trText: string, enText: string) => pickLanguageCopy(uiLanguage, trText, enText),
+    [uiLanguage],
+  );
+
   const withLanguage = useCallback(
     (params: Record<string, unknown>) => ({
       ...params,
@@ -827,12 +846,17 @@ export function useAnalysis({
       );
       for (const badge of gameState.new_badges ?? []) {
         setTimeout(
-          () => store.addToast(`🏆 YENİ ROZET: ${badge.name}`, 'badge', 6000),
-          800
+          () =>
+            store.addToast(
+              `${t('🏆 YENİ ROZET:', '🏆 NEW BADGE:')} ${badge.name}`,
+              'badge',
+              6000,
+            ),
+          800,
         );
       }
     },
-    [setProfile, store]
+    [setProfile, store, t]
   );
 
   const buildGalleryPreviewPayload = useCallback(async () => {
@@ -886,20 +910,20 @@ export function useAnalysis({
       options?: { autoApproved?: boolean; title?: string; juryQuote?: string; analysisKind?: string }
     ) => {
       if (!user?.id) {
-        store.addToast('Galeriye eklemek için giriş yapmalısınız.', 'error');
+        store.addToast(t('Galeriye eklemek için giriş yapmalısınız.', 'Sign in to add to the gallery.'), 'error');
         return false;
       }
 
-      const title = options?.title || store.formData.topic || 'İsimsiz Proje';
+      const title = options?.title || store.formData.topic || t('İsimsiz Proje', 'Untitled project');
       const juryQuote = options?.juryQuote || (
         store.critique
           ? normalizeCritiqueText(store.critique).substring(0, 1200)
-          : 'Jüri yorumu bulunamadı.'
+          : t('Jüri yorumu bulunamadı.', 'No jury comment available.')
       );
 
       const previewPayload = await buildGalleryPreviewPayload();
       if (!previewPayload) {
-        store.addToast('Galeri önizlemesi hazırlanamadı.', 'error');
+        store.addToast(t('Galeri önizlemesi hazırlanamadı.', 'Could not build gallery preview.'), 'error');
         return false;
       }
 
@@ -926,7 +950,7 @@ export function useAnalysis({
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
           console.error('[gallery] API insert failed:', payload);
-          store.addToast('Galeri kaydedilirken hata oluştu.', 'error');
+          store.addToast(t('Galeri kaydedilirken hata oluştu.', 'Error while saving to gallery.'), 'error');
           return false;
         }
 
@@ -951,34 +975,39 @@ export function useAnalysis({
           ]);
         }
 
-        store.addToast(galleryType === 'COMMUNITY' ? 'Community paylasimi tamamlandi!' : 'Proje galeriye eklendi!', 'success');
+        store.addToast(
+          galleryType === 'COMMUNITY'
+            ? t('Community paylaşımı tamamlandı!', 'Community share completed!')
+            : t('Proje galeriye eklendi!', 'Project added to gallery!'),
+          'success',
+        );
         return true;
       } catch (err) {
         console.error('[gallery] Unexpected error:', err);
-        store.addToast('Galeri kaydedilirken hata oluştu.', 'error');
+        store.addToast(t('Galeri kaydedilirken hata oluştu.', 'Error while saving to gallery.'), 'error');
         return false;
       }
     },
-    [buildGalleryPreviewPayload, store, user]
+    [buildGalleryPreviewPayload, store, user, t]
   );
 
   const handleShareToCommunity = useCallback(async () => {
     if (!user?.id) {
-      store.addToast('Community paylasimi icin giris yapmalisiniz.', 'error');
+      store.addToast(t('Community paylaşımı için giriş yapmalısınız.', 'Sign in to share with the community.'), 'error');
       store.setIsAuthModalOpen(true);
       return false;
     }
 
     if (typeof window !== 'undefined') {
-      const approved = window.confirm(COMMUNITY_SHARE_CONFIRMATION_TEXT);
+      const approved = window.confirm(communityShareConfirmationText(uiLanguage));
       if (!approved) {
-        store.addToast('Community paylasimi onaylanmadi.', 'info');
+        store.addToast(t('Community paylaşımı onaylanmadı.', 'Community share was not confirmed.'), 'info');
         return false;
       }
     }
 
     const analysisKind = (store.latestAnalysisKind ?? 'SINGLE_JURY').toUpperCase();
-    const title = (store.formData.topic || 'Isimsiz Proje').substring(0, 120);
+    const title = (store.formData.topic || t('İsimsiz Proje', 'Untitled project')).substring(0, 120);
 
     let juryQuote = normalizeCritiqueText(store.critique ?? '').trim();
 
@@ -1006,7 +1035,7 @@ export function useAnalysis({
     }
 
     if (!juryQuote) {
-      juryQuote = 'Topluluga acik pafta paylasimi.';
+      juryQuote = t('Topluluğa açık pafta paylaşımı.', 'Open board share for the community.');
     }
 
     return submitGalleryItem('COMMUNITY', {
@@ -1015,11 +1044,11 @@ export function useAnalysis({
       juryQuote: juryQuote.substring(0, 1200),
       analysisKind,
     });
-  }, [store, submitGalleryItem, user]);
+  }, [store, submitGalleryItem, user, t, uiLanguage]);
 
   const handlePreserveAnalysis = useCallback(async () => {
     if (!user?.id) {
-      store.addToast('Analizi korumak için giriş yapmalısınız.', 'error');
+      store.addToast(t('Analizi korumak için giriş yapmalısınız.', 'Sign in to preserve your analysis.'), 'error');
       store.setIsAuthModalOpen(true);
       return;
     }
@@ -1027,13 +1056,16 @@ export function useAnalysis({
     const sourceBase64 = (store.imageBase64 ?? '').trim();
     const sourceMimeType = (store.mimeType ?? 'image/jpeg').trim() || 'image/jpeg';
     if (!sourceBase64) {
-      store.addToast('Korunacak pafta verisi bulunamadı. Lütfen analizi tekrar üretin.', 'error');
+      store.addToast(
+        t('Korunacak pafta verisi bulunamadı. Lütfen analizi tekrar üretin.', 'No board data to preserve. Please run the analysis again.'),
+        'error',
+      );
       return;
     }
 
     const analysisKind = (store.latestAnalysisKind ?? 'SINGLE_JURY').toUpperCase();
     const galleryType = store.galleryPlacement;
-    const titleBase = store.formData.topic || 'Isimsiz Proje';
+    const titleBase = store.formData.topic || t('İsimsiz Proje', 'Untitled project');
 
     let critiquePayload = '';
     let scorePayload: number | null = null;
@@ -1070,7 +1102,7 @@ export function useAnalysis({
     }
 
     if (!critiquePayload) {
-      store.addToast('Korunacak analiz içeriği bulunamadı.', 'error');
+      store.addToast(t('Korunacak analiz içeriği bulunamadı.', 'No analysis content to preserve.'), 'error');
       return;
     }
 
@@ -1105,25 +1137,34 @@ export function useAnalysis({
       if (!response.ok) {
         if (payload.code === 'INSUFFICIENT_RAPIDO') {
           store.addToast(
-            `Yetersiz Rapido. Gerekli: ${payload.required ?? ANALYSIS_PRESERVE_COST}, Mevcut: ${payload.available ?? 0}`,
+            t(
+              `Yetersiz Rapido. Gerekli: ${payload.required ?? ANALYSIS_PRESERVE_COST}, Mevcut: ${payload.available ?? 0}`,
+              `Insufficient Rapido. Required: ${payload.required ?? ANALYSIS_PRESERVE_COST}, available: ${payload.available ?? 0}`,
+            ),
             'error',
           );
           return;
         }
 
-        throw new Error(payload.error || 'Analiz korunamadı.');
+        throw new Error(payload.error || t('Analiz korunamadı.', 'Could not preserve analysis.'));
       }
 
       store.addToast(
-        `Analiz korundu. ${ANALYSIS_PRESERVE_COST} Rapido dusuldu. Kalan: ${payload.rapido_remaining ?? '-'} Rapido`,
+        t(
+          `Analiz korundu. ${ANALYSIS_PRESERVE_COST} Rapido düşüldü. Kalan: ${payload.rapido_remaining ?? '-'} Rapido`,
+          `Analysis preserved. ${ANALYSIS_PRESERVE_COST} Rapido deducted. Remaining: ${payload.rapido_remaining ?? '-'} Rapido`,
+        ),
         'success',
       );
       await refreshProfile();
     } catch (error) {
       console.error('[history] preserve failed:', error);
-      store.addToast(error instanceof Error ? error.message : 'Analiz korunamadı.', 'error');
+      store.addToast(
+        error instanceof Error ? error.message : t('Analiz korunamadı.', 'Could not preserve analysis.'),
+        'error',
+      );
     }
-  }, [refreshProfile, store, user]);
+  }, [refreshProfile, store, user, t]);
 
   // -------------------------------------------------------------------------
   // handleGalleryConsent
@@ -1154,19 +1195,19 @@ export function useAnalysis({
     }));
 
     if (!user) {
-      store.addToast('Jüriye çıkmak için lütfen giriş yapın.', 'error');
+      store.addToast(t('Jüriye çıkmak için lütfen giriş yapın.', 'Please sign in to face the jury.'), 'error');
       store.setIsAuthModalOpen(true);
       return;
     }
 
     if (isRevisionMode && previousProject) {
       if (rapidoPens < RAPIDO_COSTS.REVISION_SAME) {
-        handleInsufficientRapido(RAPIDO_COSTS.REVISION_SAME, 'Revizyon analizi');
+        handleInsufficientRapido(RAPIDO_COSTS.REVISION_SAME, t('Revizyon analizi', 'Revision analysis'));
         return;
       }
     } else {
       if (rapidoPens < RAPIDO_COSTS.SINGLE_JURY) {
-        handleInsufficientRapido(RAPIDO_COSTS.SINGLE_JURY, 'Jüri analizi');
+        handleInsufficientRapido(RAPIDO_COSTS.SINGLE_JURY, t('Jüri analizi', 'Jury analysis'));
         return;
       }
     }
@@ -1242,13 +1283,16 @@ export function useAnalysis({
           } else {
             store.setLastProgression(null);
             store.addToast(
-              `Jüri Notu: Yüklediğin pafta öncekiyle alakasız görünüyor. Bu yüzden yeni proje olarak değerlendirildi ve ${RAPIDO_COSTS.REVISION_DIFFERENT} Rapido kesildi.`,
+              t(
+                `Jüri Notu: Yüklediğin pafta öncekiyle alakasız görünüyor. Bu yüzden yeni proje olarak değerlendirildi ve ${RAPIDO_COSTS.REVISION_DIFFERENT} Rapido kesildi.`,
+                `Jury note: Your upload seems unrelated to the previous board. It was evaluated as a new project and ${RAPIDO_COSTS.REVISION_DIFFERENT} Rapido was charged.`,
+              ),
               'info',
               7000
             );
           }
         } else {
-          store.addToast('Jüri sessiz kaldı. Tekrar dene.', 'error');
+          store.addToast(t('Jüri sessiz kaldı. Tekrar dene.', 'The jury stayed silent. Try again.'), 'error');
           store.setStep('upload');
         }
       } else {
@@ -1308,7 +1352,7 @@ export function useAnalysis({
             void submitGalleryItem(placement, { autoApproved: true });
           }
         } else {
-          store.addToast('Jüri sessiz kaldı. Tekrar dene.', 'error');
+          store.addToast(t('Jüri sessiz kaldı. Tekrar dene.', 'The jury stayed silent. Try again.'), 'error');
           store.setStep('upload');
         }
       }
@@ -1338,6 +1382,8 @@ export function useAnalysis({
     buildGalleryPreviewPayload,
     submitGalleryItem,
     withLanguage,
+    t,
+    uiLanguage,
   ]);
 
   // -------------------------------------------------------------------------
@@ -1356,17 +1402,23 @@ export function useAnalysis({
     const personaIds = Array.from(new Set(Array.isArray(formData.multiPersonaIds) ? formData.multiPersonaIds : []));
 
     if (personaIds.length < 2 || personaIds.length > 4) {
-      store.addToast('Çoklu jüri için en az 2, en fazla 4 persona seçmelisin.', 'info');
+      store.addToast(
+        t('Çoklu jüri için en az 2, en fazla 4 persona seçmelisin.', 'Pick between 2 and 4 personas for multi jury.'),
+        'info',
+      );
       return;
     }
 
     if (!isPremiumUser) {
-      store.addToast('Çoklu Jüri analizi Premium üyelere özeldir!', 'error');
+      store.addToast(t('Çoklu Jüri analizi Premium üyelere özeldir!', 'Multi jury is for Premium members only!'), 'error');
       return;
     }
     if (rapidoPens < RAPIDO_COSTS.MULTI_JURY) {
       store.addToast(
-        `Yeterli Rapido Kaleminiz yok! (Çoklu Jüri analizi ${RAPIDO_COSTS.MULTI_JURY} Rapido gerektirir)`,
+        t(
+          `Yeterli Rapido Kaleminiz yok! (Çoklu Jüri analizi ${RAPIDO_COSTS.MULTI_JURY} Rapido gerektirir)`,
+          `Not enough Rapido pens! (Multi jury requires ${RAPIDO_COSTS.MULTI_JURY} Rapido)`,
+        ),
         'error'
       );
       return;
@@ -1406,7 +1458,7 @@ export function useAnalysis({
           : null;
         const structuredHistory = {
           mode: 'MULTI_JURY',
-          projectTitle: multiData.projectTitle || formData.topic || 'Isimsiz Proje',
+          projectTitle: multiData.projectTitle || formData.topic || t('İsimsiz Proje', 'Untitled project'),
           personas: multiData.personas,
         };
 
@@ -1428,12 +1480,18 @@ export function useAnalysis({
           isPremium: isPremiumUser,
         });
       } else {
-        store.addToast('Jürilerden geçerli bir yanıt alınamadı. Tekrar deneyin.', 'error');
+        store.addToast(
+          t('Jürilerden geçerli bir yanıt alınamadı. Tekrar deneyin.', 'No valid response from the jury. Please try again.'),
+          'error',
+        );
         store.setStep('upload');
       }
     } catch (e) {
       console.error(e);
-      const errorMessage = toUserErrorMessage(e, 'Jüriler toplanamadı.');
+      const errorMessage = toUserErrorMessage(
+        e,
+        pickLanguageCopy(uiLanguage, 'Jüriler toplanamadı.', 'Could not gather the jury.'),
+      );
       void reportClientError({
         scope: 'analysis.multi_jury',
         message: 'Multi jury request failed',
@@ -1443,19 +1501,25 @@ export function useAnalysis({
       });
 
       if (errorMessage === 'PREMIUM_REQUIRED') {
-        store.addToast('Çoklu Jüri analizi Premium üyelere özeldir!', 'error');
+        store.addToast(t('Çoklu Jüri analizi Premium üyelere özeldir!', 'Multi jury is for Premium members only!'), 'error');
       } else if (errorMessage.startsWith('INSUFFICIENT_RAPIDO')) {
         store.addToast(
-          `Yeterli Rapido Kaleminiz yok! (Çoklu Jüri analizi ${RAPIDO_COSTS.MULTI_JURY} Rapido gerektirir)`,
+          t(
+            `Yeterli Rapido Kaleminiz yok! (Çoklu Jüri analizi ${RAPIDO_COSTS.MULTI_JURY} Rapido gerektirir)`,
+            `Not enough Rapido pens! (Multi jury requires ${RAPIDO_COSTS.MULTI_JURY} Rapido)`,
+          ),
           'error'
         );
       } else {
-        store.addToast(errorMessage || 'Jüriler toplanamadı.', 'error');
+        store.addToast(
+          errorMessage || t('Jüriler toplanamadı.', 'Could not gather the jury.'),
+          'error',
+        );
       }
 
       store.setStep('upload');
     }
-  }, [store, isPremiumUser, rapidoPens, refreshProfile, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage]);
+  }, [store, isPremiumUser, rapidoPens, refreshProfile, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
   // -------------------------------------------------------------------------
   // handlePremium — PREMIUM_RESCUE
@@ -1467,7 +1531,7 @@ export function useAnalysis({
     const { imageBase64: readyImageBase64, mimeType: readyMimeType } = readyPayload;
 
     if (rapidoPens < RAPIDO_COSTS.PREMIUM_RESCUE) {
-      handleInsufficientRapido(RAPIDO_COSTS.PREMIUM_RESCUE, 'Premium analiz');
+      handleInsufficientRapido(RAPIDO_COSTS.PREMIUM_RESCUE, t('Premium analiz', 'Premium analysis'));
       return;
     }
 
@@ -1550,11 +1614,11 @@ export function useAnalysis({
             colors: ['#FF0033', '#ffffff', '#0A0F1A'],
           });
         } else {
-          store.addToast('Analiz başarısız oldu.', 'error');
+          store.addToast(t('Analiz başarısız oldu.', 'Analysis failed.'), 'error');
           store.setStep('result');
         }
       } else {
-        store.addToast('Analiz başarısız oldu.', 'error');
+        store.addToast(t('Analiz başarısız oldu.', 'Analysis failed.'), 'error');
         store.setStep('result');
       }
     } catch (error) {
@@ -1569,7 +1633,7 @@ export function useAnalysis({
       store.addToast(toUserErrorMessage(error), 'error');
       store.setStep('result');
     }
-  }, [store, rapidoPens, isPremiumUser, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage]);
+  }, [store, rapidoPens, isPremiumUser, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
   // -------------------------------------------------------------------------
   // handleAutoConcept — AUTO_CONCEPT
@@ -1586,7 +1650,7 @@ export function useAnalysis({
     }));
 
     if (rapidoPens < RAPIDO_COSTS.AUTO_CONCEPT) {
-      handleInsufficientRapido(RAPIDO_COSTS.AUTO_CONCEPT, 'Konsept üretimi');
+      handleInsufficientRapido(RAPIDO_COSTS.AUTO_CONCEPT, t('Konsept üretimi', 'Concept generation'));
       return;
     }
 
@@ -1626,7 +1690,7 @@ export function useAnalysis({
           isPremium: isPremiumUser,
         });
       } else {
-        store.addToast('İlham gelmedi. Tekrar dene.', 'error');
+        store.addToast(t('İlham gelmedi. Tekrar dene.', 'No inspiration came through. Try again.'), 'error');
         store.setStep('upload');
       }
     } catch (error) {
@@ -1641,7 +1705,7 @@ export function useAnalysis({
       store.addToast(toUserErrorMessage(error), 'error');
       store.setStep('upload');
     }
-  }, [store, rapidoPens, isPremiumUser, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage]);
+  }, [store, rapidoPens, isPremiumUser, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
   // -------------------------------------------------------------------------
   // handleMaterialBoard — MATERIAL_BOARD (Premium)
@@ -1658,11 +1722,11 @@ export function useAnalysis({
     }));
 
     if (!isPremiumUser) {
-      store.addToast('Malzeme Paftası Analizi Premium üyelere özeldir!', 'error');
+      store.addToast(t('Malzeme Paftası Analizi Premium üyelere özeldir!', 'Material board analysis is Premium only!'), 'error');
       return;
     }
     if (rapidoPens < RAPIDO_COSTS.MATERIAL_BOARD) {
-      handleInsufficientRapido(RAPIDO_COSTS.MATERIAL_BOARD, 'Malzeme analizi');
+      handleInsufficientRapido(RAPIDO_COSTS.MATERIAL_BOARD, t('Malzeme analizi', 'Material analysis'));
       return;
     }
 
@@ -1702,7 +1766,7 @@ export function useAnalysis({
           isPremium: isPremiumUser,
         });
       } else {
-        store.addToast('Analiz başarısız oldu.', 'error');
+        store.addToast(t('Analiz başarısız oldu.', 'Analysis failed.'), 'error');
         store.setStep('upload');
       }
     } catch (error) {
@@ -1717,7 +1781,7 @@ export function useAnalysis({
       store.addToast(toUserErrorMessage(error), 'error');
       store.setStep('upload');
     }
-  }, [store, isPremiumUser, rapidoPens, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage]);
+  }, [store, isPremiumUser, rapidoPens, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
   // -------------------------------------------------------------------------
   // handleDefenseSubmit — DEFENSE (Premium, up to 3 turns)
@@ -1727,16 +1791,16 @@ export function useAnalysis({
     if (!defenseInput.trim() || isDefenseLoading) return;
 
     if (!isPremiumUser) {
-      store.addToast('Jüri Savunması Premium üyelere özeldir!', 'error');
+      store.addToast(t('Jüri Savunması Premium üyelere özeldir!', 'Jury defense is Premium only!'), 'error');
       return;
     }
     if (defenseTurnCount === 0 && rapidoPens < RAPIDO_COSTS.DEFENSE) {
-      handleInsufficientRapido(RAPIDO_COSTS.DEFENSE, 'Jüri savunması');
+      handleInsufficientRapido(RAPIDO_COSTS.DEFENSE, t('Jüri savunması', 'Jury defense'));
       return;
     }
 
     if (defenseTurnCount >= 3) {
-      store.addToast('Jüri ile en fazla 3 tur tartışabilirsiniz!', 'info');
+      store.addToast(t('Jüri ile en fazla 3 tur tartışabilirsiniz!', 'You can debate with the jury for up to 3 rounds!'), 'info');
       return;
     }
 
@@ -1786,9 +1850,9 @@ export function useAnalysis({
             store.setLastProgression(scoreChange);
             if (scoreChange > 0) {
               confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#10B981', '#ffffff'] });
-              store.addToast(`Jüriyi ikna ettin! +${scoreChange} Puan!`, 'success');
+              store.addToast(t(`Jüriyi ikna ettin! +${scoreChange} Puan!`, `You convinced the jury! +${scoreChange} points!`), 'success');
             } else {
-              store.addToast(`Jüri ikna olmadı... ${scoreChange} Puan!`, 'info');
+              store.addToast(t(`Jüri ikna olmadı... ${scoreChange} Puan!`, `The jury was not convinced... ${scoreChange} points!`), 'info');
             }
           }
         }
@@ -1804,11 +1868,14 @@ export function useAnalysis({
           turnCount: defenseTurnCount,
         },
       });
-      store.addToast(toUserErrorMessage(e, 'Savunma iletilemedi.'), 'error');
+      store.addToast(
+        toUserErrorMessage(e, pickLanguageCopy(uiLanguage, 'Savunma iletilemedi.', 'Could not send defense.')),
+        'error',
+      );
     } finally {
       store.setIsDefenseLoading(false);
     }
-  }, [store, isPremiumUser, rapidoPens, refreshProfile, applyGameState, handleInsufficientRapido, toUserErrorMessage, withLanguage]);
+  }, [store, isPremiumUser, rapidoPens, refreshProfile, applyGameState, handleInsufficientRapido, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
   return {
     handleAnalyze,

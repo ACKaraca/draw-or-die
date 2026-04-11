@@ -130,13 +130,7 @@ export function StepRouter({
 
   return (
     <AnimatePresence mode="wait">
-      {step === 'hero' && (
-        <HeroStep
-          setStep={setStep}
-          setCurrentGallery={setCurrentGallery}
-          galleryItems={galleryItems}
-        />
-      )}
+      {step === 'hero' && <HeroStep setStep={setStep} />}
 
       {step === 'upload' && (
         <UploadStep
