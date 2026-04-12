@@ -465,6 +465,24 @@ async function setupGalleryTable(tables: TablesDB): Promise<void> {
     ['gallery_type'],
     [OrderBy.Asc],
   );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_GALLERY_ID,
+    'gallery_user_idx',
+    TablesDBIndexType.Key,
+    ['user_id'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_GALLERY_ID,
+    'gallery_user_status_idx',
+    TablesDBIndexType.Key,
+    ['user_id', 'status'],
+    [OrderBy.Asc, OrderBy.Asc],
+  );
 }
 
 async function setupStripeEventsTable(tables: TablesDB): Promise<void> {

@@ -246,24 +246,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const signInWithGoogle = async () => {
-        const runtimeOrigin = window.location.origin
-        const host = (() => {
-            try {
-                return new URL(runtimeOrigin).hostname.toLowerCase()
-            } catch {
-                return ''
-            }
-        })()
-        const isLocalHost = host === 'localhost' || host === '127.0.0.1'
-        const configured = process.env.NEXT_PUBLIC_APP_URL?.trim()
-        const origin = !isLocalHost && configured && /^https?:\/\//i.test(configured)
-            ? configured.replace(/\/$/, '')
-            : runtimeOrigin
-        await account.createOAuth2Session({
-            provider: OAuthProvider.Google,
-            success: `${origin}/`,
-            failure: `${origin}/?auth=oauth_failed`,
-        })
+        const runtimeOrigin = window.location.origin.replace(/\/$/, '')
+        // OAuth redirect performs a full page navigation. Set hint first so mount-time
+        // session restoration does not get skipped after returning from provider.
+        setSessionHint(true)
+        try {
+            await account.createOAuth2Session({
+                provider: OAuthProvider.Google,
+                success: `${runtimeOrigin}/`,
+                failure: `${runtimeOrigin}/?auth=oauth_failed`,
+            })
+        } catch (error) {
+            setSessionHint(false)
+            throw error
+        }
     }
 
     const signOut = async () => {

@@ -61,6 +61,14 @@ type MemorySnippetItem = {
   updatedAt: string;
 };
 
+type ProfileStatsResponse = {
+  stats?: ProfileStats;
+  billingSummary?: BillingSummary;
+  billingCurrency?: string;
+  memorySnippets?: MemorySnippetItem[];
+  error?: string;
+};
+
 
 function formatCurrency(cents: number, currency: string): string {
   const amount = (Number.isFinite(cents) ? cents : 0) / 100;
@@ -134,59 +142,42 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
       const jwt = await account.createJWT();
       const headers = { Authorization: `Bearer ${jwt.jwt}` };
 
-      const [historyRes, approvedRes, archivedRes, pendingRes, billingRes, memoryRes] = await Promise.all([
-        fetch('/api/analysis-history?limit=1&offset=0', { headers }),
-        fetch('/api/gallery?mine=1&status=approved&limit=1&offset=0', { headers }),
-        fetch('/api/gallery?mine=1&status=archived&limit=1&offset=0', { headers }),
-        fetch('/api/gallery?mine=1&status=pending&limit=1&offset=0', { headers }),
-        fetch('/api/billing/history?limit=1&offset=0', { headers }),
-        fetch('/api/memory-snippets', { headers }),
-      ]);
+      const response = await fetch('/api/profile/stats', { headers });
+      const payload = (await response.json().catch(() => ({}))) as ProfileStatsResponse;
 
-      if (!historyRes.ok) {
-        const payload = await historyRes.json().catch(() => ({}));
+      if (!response.ok) {
         throw new Error(
-          typeof payload?.error === 'string'
+          typeof payload.error === 'string' && payload.error.trim()
             ? payload.error
             : pickLocalized(language, 'Profil istatistikleri alınamadı.', 'Could not load profile statistics.'),
         );
       }
 
-      const historyPayload = (await historyRes.json()) as { total?: number };
-      const approvedPayload = approvedRes.ok ? (await approvedRes.json().catch(() => ({}))) as { total?: number } : {};
-      const archivedPayload = archivedRes.ok ? (await archivedRes.json().catch(() => ({}))) as { total?: number } : {};
-      const pendingPayload = pendingRes.ok ? (await pendingRes.json().catch(() => ({}))) as { total?: number } : {};
-      const billingPayload = billingRes.ok ? (await billingRes.json().catch(() => ({}))) as {
-        summary?: BillingSummary;
-        items?: Array<{ currency?: string }>;
-      } : {};
-      const memoryPayload = memoryRes.ok ? (await memoryRes.json().catch(() => ({}))) as {
-        items?: MemorySnippetItem[];
-      } : {};
-
+      const nextStats = payload.stats;
       setStats({
-        historyTotal: typeof historyPayload.total === 'number' ? historyPayload.total : 0,
-        approvedTotal: typeof approvedPayload.total === 'number' ? approvedPayload.total : 0,
-        archivedTotal: typeof archivedPayload.total === 'number' ? archivedPayload.total : 0,
-        pendingTotal: typeof pendingPayload.total === 'number' ? pendingPayload.total : 0,
+        historyTotal: Number.isFinite(nextStats?.historyTotal) ? Number(nextStats?.historyTotal) : 0,
+        approvedTotal: Number.isFinite(nextStats?.approvedTotal) ? Number(nextStats?.approvedTotal) : 0,
+        archivedTotal: Number.isFinite(nextStats?.archivedTotal) ? Number(nextStats?.archivedTotal) : 0,
+        pendingTotal: Number.isFinite(nextStats?.pendingTotal) ? Number(nextStats?.pendingTotal) : 0,
       });
 
       setBillingSummary({
-        totalAmountCents: Number.isFinite(billingPayload.summary?.totalAmountCents)
-          ? Number(billingPayload.summary?.totalAmountCents)
+        totalAmountCents: Number.isFinite(payload.billingSummary?.totalAmountCents)
+          ? Number(payload.billingSummary?.totalAmountCents)
           : 0,
-        totalRapidoPurchased: Number.isFinite(billingPayload.summary?.totalRapidoPurchased)
-          ? Number(billingPayload.summary?.totalRapidoPurchased)
+        totalRapidoPurchased: Number.isFinite(payload.billingSummary?.totalRapidoPurchased)
+          ? Number(payload.billingSummary?.totalRapidoPurchased)
           : 0,
-        rapidoPurchaseCount: Number.isFinite(billingPayload.summary?.rapidoPurchaseCount)
-          ? Number(billingPayload.summary?.rapidoPurchaseCount)
+        rapidoPurchaseCount: Number.isFinite(payload.billingSummary?.rapidoPurchaseCount)
+          ? Number(payload.billingSummary?.rapidoPurchaseCount)
           : 0,
-        membershipPurchaseCount: Number.isFinite(billingPayload.summary?.membershipPurchaseCount)
-          ? Number(billingPayload.summary?.membershipPurchaseCount)
+        membershipPurchaseCount: Number.isFinite(payload.billingSummary?.membershipPurchaseCount)
+          ? Number(payload.billingSummary?.membershipPurchaseCount)
           : 0,
       });
-      setMemorySnippets(Array.isArray(memoryPayload.items) ? memoryPayload.items : []);
-      setBillingCurrency((billingPayload.items?.[0]?.currency || 'try').toLowerCase());
+
+      setMemorySnippets(Array.isArray(payload.memorySnippets) ? payload.memorySnippets : []);
+      setBillingCurrency((payload.billingCurrency || 'try').toLowerCase());
     } catch (fetchError) {
       setError(
         fetchError instanceof Error

@@ -31,7 +31,7 @@ const AI_DEFAULTS = {
 // is our own hardcoded constant, never the user-provided URL (prevents SSRF).
 const AI_PROVIDER_BASE_URLS = new Map<string, string>([
   ['ai-gateway.vercel.sh', 'https://ai-gateway.vercel.sh/v1'],
-  ['generativelanguage.googleapis.com', 'https://generativelanguage.googleapis.com/v1beta'],
+  ['generativelanguage.googleapis.com', 'https://generativelanguage.googleapis.com/v1beta/openai'],
   ['api.openai.com', 'https://api.openai.com/v1'],
   ['openrouter.ai', 'https://openrouter.ai/api/v1'],
   ['api.anthropic.com', 'https://api.anthropic.com/v1'],
@@ -425,11 +425,14 @@ export async function POST(request: NextRequest) {
 
           moderationReason = moderation.reason;
           if (!moderation.approved) {
+            const rejectionReason = moderation.reason || 'Paylasim topluluk kurallarina uygun bulunmadi.';
             await cleanupUploadedGalleryFile();
             return NextResponse.json(
               {
-                error: moderation.reason || 'Paylasim topluluk kurallarina uygun bulunmadi.',
+                error: rejectionReason,
                 code: 'COMMUNITY_MODERATION_REJECTED',
+                moderationReason: rejectionReason,
+                moderationCategory: moderation.category,
               },
               { status: 422 },
             );

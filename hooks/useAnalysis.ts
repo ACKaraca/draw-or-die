@@ -58,6 +58,35 @@ function pickLanguageCopy(language: SupportedLanguage, trText: string, enText: s
   return language === 'en' ? enText : trText;
 }
 
+type ApiErrorPayload = {
+  error?: string;
+  code?: string;
+  requestId?: string;
+  rawBody?: string;
+};
+
+async function readApiErrorPayload(response: Response): Promise<ApiErrorPayload> {
+  const rawBody = await response.text().catch(() => '');
+  if (!rawBody.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    return {
+      error: typeof parsed.error === 'string' ? parsed.error : undefined,
+      code: typeof parsed.code === 'string' ? parsed.code : undefined,
+      requestId: typeof parsed.requestId === 'string' ? parsed.requestId : undefined,
+      rawBody,
+    };
+  } catch {
+    return {
+      error: rawBody.trim(),
+      rawBody,
+    };
+  }
+}
+
 interface UseAnalysisOptions {
   user: AppUser | null;
   profile: UserProfile | null;
@@ -948,9 +977,28 @@ export function useAnalysis({
         });
 
         if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          console.error('[gallery] API insert failed:', payload);
-          store.addToast(t('Galeri kaydedilirken hata oluştu.', 'Error while saving to gallery.'), 'error');
+          const payload = await readApiErrorPayload(response);
+          console.error('[gallery] API insert failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            code: payload.code,
+            requestId: payload.requestId,
+            error: payload.error,
+            rawBody: payload.rawBody,
+          });
+
+          if (payload.code === 'COMMUNITY_MODERATION_REJECTED') {
+            store.addToast(
+              payload.error || t('Paylaşım topluluk moderasyonundan geçemedi.', 'Share did not pass community moderation.'),
+              'error',
+            );
+            return false;
+          }
+
+          store.addToast(
+            payload.error || t('Galeri kaydedilirken hata oluştu.', 'Error while saving to gallery.'),
+            'error',
+          );
           return false;
         }
 

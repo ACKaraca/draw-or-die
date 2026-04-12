@@ -44,6 +44,14 @@ const DEFAULTS = {
   model: 'google/gemini-3.1-flash-lite-preview',
 };
 
+const PROVIDER_ERROR_BODY_LOG_LIMIT = 1200;
+const PROVIDER_DEBUG_KEY_FINGERPRINT_LENGTH = 12;
+const SHOULD_INCLUDE_PROVIDER_ERROR_BODY = process.env.NODE_ENV === 'development';
+const PROVIDER_ERROR_TYPE_NO_PROVIDERS_AVAILABLE = 'no_providers_available';
+const PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT = 'free credits temporarily have restricted access';
+const GEMINI_31_MODEL_PREFIX = 'google/gemini-3.1-';
+const DEFAULT_AI_MODEL_FALLBACKS = 'google/gemini-2.5-flash-lite';
+
 function readCleanEnv(name: string): string {
   const raw = process.env[name];
   if (typeof raw !== 'string') return '';
@@ -59,7 +67,7 @@ function readCleanEnv(name: string): string {
 // is our own hardcoded constant, never the user-provided URL (prevents SSRF).
 const AI_PROVIDER_BASE_URLS = new Map<string, string>([
   ['ai-gateway.vercel.sh', 'https://ai-gateway.vercel.sh/v1'],
-  ['generativelanguage.googleapis.com', 'https://generativelanguage.googleapis.com/v1beta'],
+  ['generativelanguage.googleapis.com', 'https://generativelanguage.googleapis.com/v1beta/openai'],
   ['api.openai.com', 'https://api.openai.com/v1'],
   ['openrouter.ai', 'https://openrouter.ai/api/v1'],
   ['api.anthropic.com', 'https://api.anthropic.com/v1'],
@@ -83,6 +91,166 @@ function resolveAiBaseUrl(rawUrl: string): { href: string; hostname: string } {
   }
   // href is our hardcoded constant — not derived from user input
   return { href, hostname };
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readStringField(node: Record<string, unknown> | null, key: string): string | null {
+  if (!node) return null;
+  const value = node[key];
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function fingerprintApiKey(apiKey: string): string {
+  if (!apiKey) return 'missing';
+  const normalized = apiKey.trim();
+  if (!normalized) return 'missing';
+
+  const visiblePartLength = Math.max(2, Math.floor(PROVIDER_DEBUG_KEY_FINGERPRINT_LENGTH / 3));
+  if (normalized.length <= visiblePartLength * 2) {
+    return `${normalized.slice(0, 2)}...${normalized.slice(-2)}`;
+  }
+
+  return `${normalized.slice(0, visiblePartLength)}...${normalized.slice(-visiblePartLength)}`;
+}
+
+function sanitizeProviderBodySnippet(rawBody: string): string | null {
+  if (!rawBody) return null;
+  const normalized = rawBody.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  return normalized.slice(0, PROVIDER_ERROR_BODY_LOG_LIMIT);
+}
+
+function parseProviderErrorPayload(rawBody: string): {
+  providerErrorCode: string | null;
+  providerErrorType: string | null;
+  providerErrorParam: string | null;
+  providerErrorMessage: string | null;
+  providerBodySnippet: string | null;
+} {
+  const normalizedBody = rawBody.trim();
+  const providerBodySnippet = SHOULD_INCLUDE_PROVIDER_ERROR_BODY
+    ? sanitizeProviderBodySnippet(rawBody)
+    : null;
+  const hasCreditRestrictionFragment = normalizedBody
+    .toLowerCase()
+    .includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT);
+
+  if (!normalizedBody) {
+    return {
+      providerErrorCode: null,
+      providerErrorType: null,
+      providerErrorParam: null,
+      providerErrorMessage: null,
+      providerBodySnippet,
+    };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawBody);
+  } catch {
+    return {
+      providerErrorCode: null,
+      providerErrorType: null,
+      providerErrorParam: null,
+      providerErrorMessage: hasCreditRestrictionFragment
+        ? PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT
+        : providerBodySnippet,
+      providerBodySnippet,
+    };
+  }
+
+  const payload = toRecord(parsed);
+  const nestedError = toRecord(payload?.error);
+  const source = nestedError || payload;
+
+  return {
+    providerErrorCode: readStringField(source, 'code'),
+    providerErrorType: readStringField(source, 'type'),
+    providerErrorParam: readStringField(source, 'param'),
+    providerErrorMessage:
+      readStringField(source, 'message') ||
+      readStringField(payload, 'error') ||
+      (hasCreditRestrictionFragment
+        ? PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT
+        : providerBodySnippet),
+    providerBodySnippet,
+  };
+}
+
+function hasProviderCreditRestriction(params: {
+  type: string | null;
+  message: string | null;
+  snippet: string | null;
+}): boolean {
+  const providerType = (params.type ?? '').toLowerCase();
+  const providerMessage = (params.message ?? '').toLowerCase();
+  const providerSnippet = (params.snippet ?? '').toLowerCase();
+
+  return (
+    providerType === PROVIDER_ERROR_TYPE_NO_PROVIDERS_AVAILABLE ||
+    providerMessage.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT) ||
+    providerSnippet.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT)
+  );
+}
+
+function isProviderCreditRestrictionError(
+  providerStatus?: number,
+  providerDebug?: Record<string, unknown>,
+): boolean {
+  if (providerStatus !== 403) return false;
+
+  return hasProviderCreditRestriction({
+    type: readStringField(providerDebug ?? null, 'providerErrorType'),
+    message: readStringField(providerDebug ?? null, 'providerErrorMessage'),
+    snippet: readStringField(providerDebug ?? null, 'providerBodySnippet'),
+  });
+}
+
+function parseAiModelFallbackCandidates(): string[] {
+  const raw = readCleanEnv('AI_MODEL_FALLBACKS') || DEFAULT_AI_MODEL_FALLBACKS;
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function resolveAiGatewayFallbackModel(primaryModel: string): string | null {
+  if (!primaryModel.startsWith(GEMINI_31_MODEL_PREFIX)) return null;
+  const candidates = parseAiModelFallbackCandidates();
+  for (const candidate of candidates) {
+    if (candidate !== primaryModel) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function shouldRetryWithModelFallback(params: {
+  aiHostname: string;
+  providerStatus: number;
+  parsedProviderError: {
+    providerErrorType: string | null;
+    providerErrorMessage: string | null;
+    providerBodySnippet: string | null;
+  };
+}): boolean {
+  if (params.aiHostname !== 'ai-gateway.vercel.sh') return false;
+  if (params.providerStatus !== 403) return false;
+
+  return hasProviderCreditRestriction({
+    type: params.parsedProviderError.providerErrorType,
+    message: params.parsedProviderError.providerErrorMessage,
+    snippet: params.parsedProviderError.providerBodySnippet,
+  });
 }
 
 const FILE_SIZE_LIMITS = {
@@ -227,59 +395,221 @@ async function callAI(
     )}`,
   });
 
-  const requestBody: Record<string, unknown> = {
-    model: cfg.model,
-    messages: [{ role: 'user', content }],
-  };
-
   const { href: validatedBaseUrl, hostname: aiHostname } = resolveAiBaseUrl(cfg.baseUrl);
+  const requestStartedAt = Date.now();
+  const endpoint = `${validatedBaseUrl}/chat/completions`;
   const isVercelGateway = aiHostname === 'ai-gateway.vercel.sh';
   const isGoogleDirect = aiHostname === 'generativelanguage.googleapis.com';
+  const responseFormatApplied = !isVercelGateway && !isGoogleDirect;
 
-  if (!isVercelGateway && !isGoogleDirect) {
-    requestBody.response_format = { type: 'json_object' };
-  }
+  const buildRequestBody = (model: string): Record<string, unknown> => {
+    const requestBody: Record<string, unknown> = {
+      model,
+      messages: [{ role: 'user', content }],
+    };
+    if (responseFormatApplied) {
+      requestBody.response_format = { type: 'json_object' };
+    }
+    return requestBody;
+  };
 
-  let res: Response;
-  try {
-    res = await fetch(`${validatedBaseUrl}/chat/completions`, {
+  const buildProviderDebugBase = (model: string) => ({
+    aiHostname,
+    endpoint,
+    model,
+    hasPrimaryFile: Boolean(fileBase64 && fileMimeType),
+    additionalFileCount: additionalFiles.length,
+    promptLength: prompt.length,
+    responseFormatApplied,
+    apiKeyFingerprint: fingerprintApiKey(cfg.apiKey),
+  });
+
+  const executeProviderRequest = async (model: string): Promise<Response> => {
+    const requestBodyJson = JSON.stringify(buildRequestBody(model));
+    return fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${cfg.apiKey}`,
       },
-      body: JSON.stringify(requestBody),
+      body: requestBodyJson,
     });
-  } catch (error) {
-    const providerError = new Error(
-      `AI provider network error: ${error instanceof Error ? error.message : 'unknown'}`,
-    ) as Error & { isProviderFailure: true; providerStatus: number };
-    providerError.isProviderFailure = true;
-    providerError.providerStatus = 0;
-    throw providerError;
-  }
+  };
 
-  if (!res.ok) {
+  const parseFailedProviderResponse = async (response: Response) => {
     const providerRequestId =
-      res.headers.get('x-request-id') ||
-      res.headers.get('request-id') ||
-      res.headers.get('x-correlation-id') ||
+      response.headers.get('x-request-id') ||
+      response.headers.get('request-id') ||
+      response.headers.get('x-correlation-id') ||
+      response.headers.get('x-vercel-ai-gateway-request-id') ||
+      response.headers.get('x-vercel-id') ||
       null;
 
-    // Avoid logging provider response body directly to reduce sensitive data exposure.
+    let providerRawBody = '';
+    try {
+      providerRawBody = await response.text();
+    } catch {
+      providerRawBody = '';
+    }
+
+    return {
+      providerRequestId,
+      parsedProviderError: parseProviderErrorPayload(providerRawBody),
+    };
+  };
+
+  const buildProviderFailureError = (params: {
+    response: Response;
+    modelUsed: string;
+    providerRequestId: string | null;
+    parsedProviderError: {
+      providerErrorCode: string | null;
+      providerErrorType: string | null;
+      providerErrorParam: string | null;
+      providerErrorMessage: string | null;
+      providerBodySnippet: string | null;
+    };
+    attemptedModels: string[];
+    fallbackAttempted: boolean;
+    fallbackModel: string | null;
+  }) => {
+    const statusLabel = params.parsedProviderError.providerErrorMessage
+      ? `AI API ${params.response.status}: ${params.parsedProviderError.providerErrorMessage}`
+      : `AI API ${params.response.status}`;
+
     const providerError = new Error(
-      providerRequestId
-        ? `AI API ${res.status} (requestId: ${providerRequestId})`
-        : `AI API ${res.status}`,
+      params.providerRequestId
+        ? `${statusLabel} (requestId: ${params.providerRequestId})`
+        : statusLabel,
     ) as Error & {
       isProviderFailure: true;
       providerStatus: number;
       providerRequestId: string | null;
+      providerDebug: Record<string, unknown>;
+    };
+
+    providerError.isProviderFailure = true;
+    providerError.providerStatus = params.response.status;
+    providerError.providerRequestId = params.providerRequestId;
+    providerError.providerDebug = {
+      ...buildProviderDebugBase(params.modelUsed),
+      durationMs: Date.now() - requestStartedAt,
+      failureStage: 'provider-response',
+      providerStatus: params.response.status,
+      providerRequestId: params.providerRequestId,
+      providerRetryAfter: params.response.headers.get('retry-after') || null,
+      providerServer: params.response.headers.get('server') || null,
+      providerVia: params.response.headers.get('via') || null,
+      providerCfRay: params.response.headers.get('cf-ray') || null,
+      providerXVercelId: params.response.headers.get('x-vercel-id') || null,
+      attemptedModels: params.attemptedModels,
+      fallbackAttempted: params.fallbackAttempted,
+      fallbackModel: params.fallbackModel,
+      primaryModel: cfg.model,
+      ...params.parsedProviderError,
+    };
+
+    return providerError;
+  };
+
+  const fallbackModel = resolveAiGatewayFallbackModel(cfg.model);
+
+  let res: Response;
+  try {
+    res = await executeProviderRequest(cfg.model);
+  } catch (error) {
+    const providerError = new Error(
+      `AI provider network error: ${error instanceof Error ? error.message : 'unknown'}`,
+    ) as Error & {
+      isProviderFailure: true;
+      providerStatus: number;
+      providerDebug: Record<string, unknown>;
     };
     providerError.isProviderFailure = true;
-    providerError.providerStatus = res.status;
-    providerError.providerRequestId = providerRequestId;
+    providerError.providerStatus = 0;
+    providerError.providerDebug = {
+      ...buildProviderDebugBase(cfg.model),
+      durationMs: Date.now() - requestStartedAt,
+      failureStage: 'network',
+      attemptedModels: [cfg.model],
+      fallbackAttempted: false,
+      fallbackModel,
+      primaryModel: cfg.model,
+    };
     throw providerError;
+  }
+
+  if (!res.ok) {
+    const primaryFailure = await parseFailedProviderResponse(res);
+
+    const shouldRetryFallback = Boolean(
+      fallbackModel &&
+      shouldRetryWithModelFallback({
+        aiHostname,
+        providerStatus: res.status,
+        parsedProviderError: primaryFailure.parsedProviderError,
+      }),
+    );
+
+    if (shouldRetryFallback && fallbackModel) {
+      try {
+        const fallbackResponse = await executeProviderRequest(fallbackModel);
+        if (fallbackResponse.ok) {
+          const data = await fallbackResponse.json();
+          return {
+            content: data.choices?.[0]?.message?.content ?? '{}',
+            usage: parseUsageFromAiResponse(data),
+          };
+        }
+
+        const fallbackFailure = await parseFailedProviderResponse(fallbackResponse);
+        throw buildProviderFailureError({
+          response: fallbackResponse,
+          modelUsed: fallbackModel,
+          providerRequestId: fallbackFailure.providerRequestId,
+          parsedProviderError: fallbackFailure.parsedProviderError,
+          attemptedModels: [cfg.model, fallbackModel],
+          fallbackAttempted: true,
+          fallbackModel,
+        });
+      } catch (fallbackError) {
+        const existingProviderError = fallbackError as { isProviderFailure?: boolean };
+        if (existingProviderError?.isProviderFailure) {
+          throw fallbackError;
+        }
+
+        const providerError = new Error(
+          `AI provider network error: ${fallbackError instanceof Error ? fallbackError.message : 'unknown'}`,
+        ) as Error & {
+          isProviderFailure: true;
+          providerStatus: number;
+          providerDebug: Record<string, unknown>;
+        };
+
+        providerError.isProviderFailure = true;
+        providerError.providerStatus = 0;
+        providerError.providerDebug = {
+          ...buildProviderDebugBase(fallbackModel),
+          durationMs: Date.now() - requestStartedAt,
+          failureStage: 'network',
+          attemptedModels: [cfg.model, fallbackModel],
+          fallbackAttempted: true,
+          fallbackModel,
+          primaryModel: cfg.model,
+        };
+        throw providerError;
+      }
+    }
+
+    throw buildProviderFailureError({
+      response: res,
+      modelUsed: cfg.model,
+      providerRequestId: primaryFailure.providerRequestId,
+      parsedProviderError: primaryFailure.parsedProviderError,
+      attemptedModels: [cfg.model],
+      fallbackAttempted: false,
+      fallbackModel,
+    });
   }
 
   const data = await res.json();
@@ -3373,6 +3703,7 @@ export async function POST(request: NextRequest) {
       isProviderFailure?: boolean;
       providerStatus?: number;
       providerRequestId?: string | null;
+      providerDebug?: Record<string, unknown>;
       message?: string;
     };
     if (typed?.isProviderFailure) {
@@ -3381,7 +3712,24 @@ export async function POST(request: NextRequest) {
         ip,
         providerStatus: typed.providerStatus ?? null,
         providerRequestId: typed.providerRequestId ?? null,
+        providerDebug: typed.providerDebug ?? null,
       });
+
+      if (isProviderCreditRestrictionError(typed.providerStatus, typed.providerDebug)) {
+        return respond(
+          {
+            error: pickLocalized(
+              headerLangFallback,
+              'AI sağlayıcısının ücretsiz kredi erişimi geçici olarak kısıtlandı. Lütfen daha sonra tekrar deneyin.',
+              'The AI provider has temporarily restricted free-credit access. Please try again later.',
+            ),
+            code: 'AI_PROVIDER_CREDITS_REQUIRED',
+            providerStatus: typed.providerStatus ?? null,
+            requestId,
+          },
+          503,
+        );
+      }
 
       return respond(
         {

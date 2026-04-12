@@ -134,20 +134,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
         setNotice(null)
 
         try {
-            const runtimeOrigin = typeof window !== 'undefined' ? window.location.origin : ''
-            const runtimeHost = (() => {
-                try {
-                    return new URL(runtimeOrigin).hostname.toLowerCase()
-                } catch {
-                    return ''
-                }
-            })()
-            const isLocalHost = runtimeHost === 'localhost' || runtimeHost === '127.0.0.1'
-            const configured = process.env.NEXT_PUBLIC_APP_URL?.trim()
-            const redirectBase = (!isLocalHost && configured && /^https?:\/\//i.test(configured)
-                ? configured
-                : runtimeOrigin
-            ).replace(/\/$/, '')
+            const redirectBase = (typeof window !== 'undefined' ? window.location.origin : '').replace(/\/$/, '')
             const verificationUrl = `${redirectBase}/auth/verify-email`
             const recoveryUrl = `${redirectBase}/auth/recovery`
             const emailResolution = canonicalizeAuthEmail(email)
