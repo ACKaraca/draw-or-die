@@ -4,8 +4,11 @@ import { useState } from 'react';
 import { BadgePercent, Loader2, Ticket } from 'lucide-react';
 import { account } from '@/lib/appwrite';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 export function PromoRedeemCard() {
+  const language = useLanguage();
   const { user, refreshProfile } = useAuth();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,14 +17,14 @@ export function PromoRedeemCard() {
 
   const handleRedeem = async () => {
     if (!user) {
-      setError('Önce giriş yapmalısın.');
+      setError(pickLocalized(language, 'Önce giriş yapmalısın.', 'Please sign in first.'));
       return;
     }
 
     const normalized = code.trim();
     if (!normalized) {
       setMessage(null);
-      setError('Promo kodu girin.');
+      setError(pickLocalized(language, 'Promo kodu girin.', 'Enter a promo code.'));
       return;
     }
 
@@ -43,14 +46,18 @@ export function PromoRedeemCard() {
       const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; message?: string };
 
       if (!response.ok || !payload.ok) {
-        throw new Error(payload.error || 'Promo kodu uygulanamadı.');
+        throw new Error(payload.error || pickLocalized(language, 'Promo kodu uygulanamadı.', 'Could not redeem promo code.'));
       }
 
       setCode('');
-      setMessage(payload.message || 'Promo kodu başarıyla uygulandı.');
+      setMessage(payload.message || pickLocalized(language, 'Promo kodu başarıyla uygulandı.', 'Promo code applied successfully.'));
       await refreshProfile();
     } catch (redeemError) {
-      setError(redeemError instanceof Error ? redeemError.message : 'Promo kodu uygulanamadı.');
+      setError(
+        redeemError instanceof Error
+          ? redeemError.message
+          : pickLocalized(language, 'Promo kodu uygulanamadı.', 'Could not redeem promo code.'),
+      );
     } finally {
       setLoading(false);
     }
@@ -60,18 +67,24 @@ export function PromoRedeemCard() {
     <div className="rounded-xl border border-white/10 bg-[#101A2F] p-4">
       <div className="flex items-center gap-2 border-b border-white/10 pb-2">
         <Ticket size={16} className="text-cyan-300" />
-        <p className="font-mono text-sm uppercase tracking-widest text-slate-300">Promo Kodu Redeem</p>
+        <p className="font-mono text-sm uppercase tracking-widest text-slate-300">
+          {pickLocalized(language, 'Promo Kodu Kullan', 'Redeem promo code')}
+        </p>
       </div>
 
       <p className="mt-3 text-xs text-slate-400">
-        Buraya manuel girilen kodlar sadece rapido veya premium hediyeleri için kullanılır. İndirim kodları alışveriş ekranında çalışır.
+        {pickLocalized(
+          language,
+          'Buraya manuel girilen kodlar sadece Rapido veya premium hediyeleri için kullanılır. İndirim kodları alışveriş ekranında çalışır.',
+          'Manually entered codes here are only for Rapido or premium gifts. Discount codes work on the shop screen.',
+        )}
       </p>
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <input
           value={code}
           onChange={(event) => setCode(event.target.value)}
-          placeholder="PROMO-2026"
+          placeholder={pickLocalized(language, 'PROMO-2026', 'PROMO-2026')}
           className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-white placeholder:text-slate-500 outline-none focus:border-cyan-400/50"
         />
         <button
@@ -81,7 +94,7 @@ export function PromoRedeemCard() {
           className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-sm font-mono uppercase tracking-wider text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <BadgePercent size={14} />}
-          Redeem Et
+          {pickLocalized(language, 'Uygula', 'Redeem')}
         </button>
       </div>
 

@@ -1,0 +1,23 @@
+{
+  "mainFile": "Ana Dosya",
+  "extraSheet": "Ek Dosya {n}",
+  "autoFillWait": "Önce bir dosya yükleyip işlenmesini beklemelisin.",
+  "autoFillFailed": "Otomatik doldurma yanıtı alınamadı. Tekrar dene.",
+  "autoFillSuccess": "Studio Desk alanları otomatik dolduruldu.",
+  "autoFillError": "Otomatik doldurma başarısız oldu.",
+  "closeTutorial": "Tutorial'ı kapat",
+  "skipTutorial": "Tutorial'ı atla",
+  "back": "Geri",
+  "start": "Başla",
+  "next": "İleri",
+  "replaceFile": "Dosya Değiştir",
+  "removeFiles": "Dosyaları Sil",
+  "zoomHint": "Dosyayı büyüt, kaydır ve detayları incele. Farklı paftalara alttaki dosya listesiyle geçiş yap.",
+  "uploadHint": "A0/A1 Pafta, Eskiz veya Render Yükle",
+  "dragDropHint": "Sürükle bırak veya seçmek için tıkla (JPG, PNG, PDF)",
+  "maxFilesHint": "Maksimum 8 dosya, toplam 35 MB",
+  "studioDeskFiles": "Studio Desk Dosyaları",
+  "tutorialTitle": "Studio Desk Tutorial",
+  "tutorialButton": "Tutorial",
+  "studioDesk": "Studio Desk"
+}

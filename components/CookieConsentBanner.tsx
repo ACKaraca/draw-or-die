@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 import {
   applyAnalyticsConsent,
   captureUTMFromCurrentUrl,
@@ -13,6 +15,7 @@ import {
 } from '@/lib/growth-tracking';
 
 export function CookieConsentBanner() {
+  const language = useLanguage();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -49,10 +52,14 @@ export function CookieConsentBanner() {
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-relaxed text-slate-300 sm:max-w-3xl pr-2">
-          Site kullanimini olcmek ve urun kalitesini artirmak icin Google Analytics cerezleri kullaniyoruz.
-          Detaylar icin{' '}
+          {pickLocalized(
+            language,
+            'Site kullanımını ölçmek ve ürün kalitesini artırmak için Google Analytics çerezleri kullanıyoruz.',
+            'We use Google Analytics cookies to measure site usage and improve product quality.',
+          )}{' '}
+          {pickLocalized(language, 'Detaylar için', 'For details')}{' '}
           <Link href="/legal/cookies" className="text-cyan-300 underline underline-offset-2">
-            Cerez Politikasi
+            {pickLocalized(language, 'Çerez Politikası', 'Cookie policy')}
           </Link>
           .
         </p>
@@ -63,20 +70,20 @@ export function CookieConsentBanner() {
             onClick={() => dismiss('rejected')}
             className="rounded-md border border-white/20 bg-white/5 px-4 py-2 text-xs font-mono uppercase tracking-wide text-slate-300 hover:bg-white/10 transition-colors"
           >
-            Reddet
+            {pickLocalized(language, 'Reddet', 'Reject')}
           </button>
           <button
             type="button"
             onClick={() => dismiss('accepted')}
             className="rounded-md border border-emerald-400/40 bg-emerald-500/20 px-4 py-2 text-xs font-mono uppercase tracking-wide text-emerald-100 hover:bg-emerald-500/30 transition-colors"
           >
-            Kabul Et
+            {pickLocalized(language, 'Kabul Et', 'Accept')}
           </button>
           <button
             type="button"
             onClick={() => dismiss('accepted')}
-            aria-label="Kapat ve kabul et"
-            title="Kapat ve kabul et"
+            aria-label={pickLocalized(language, 'Kapat ve kabul et', 'Close and accept')}
+            title={pickLocalized(language, 'Kapat ve kabul et', 'Close and accept')}
             className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
           >
             <X size={14} />

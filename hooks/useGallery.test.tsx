@@ -56,7 +56,7 @@ describe('useGallery', () => {
       await result.current.fetchGallery({ refresh: true });
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/gallery?limit=20&offset=0', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/gallery?limit=15&offset=0', {
       method: 'GET',
     });
     expect(setGalleryItems).toHaveBeenCalledWith([
@@ -72,7 +72,7 @@ describe('useGallery', () => {
     expect(result.current.hasMore).toBe(false);
   });
 
-  it('paginates from offset 20 when loading more', async () => {
+  it('paginates from offset 15 when loading more', async () => {
     fetchMock
       .mockResolvedValueOnce({
         ok: true,
@@ -115,10 +115,10 @@ describe('useGallery', () => {
       await result.current.loadMore();
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/gallery?limit=20&offset=0', {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/gallery?limit=15&offset=0', {
       method: 'GET',
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/gallery?limit=20&offset=20', {
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/gallery?limit=15&offset=15', {
       method: 'GET',
     });
 

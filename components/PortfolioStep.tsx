@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { Download, Crown, AlertTriangle, FileText, ArrowRight } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { GalleryItem } from '@/types';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 interface PortfolioStepProps {
     isPremiumUser: boolean;
@@ -11,6 +13,7 @@ interface PortfolioStepProps {
 
 export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProps) {
     const exportRef = useRef<HTMLDivElement>(null);
+    const language = useLanguage();
 
     // For demo purposes, we construct a portfolio out of HALL_OF_FAME items
     const portfolioItems = galleryItems.filter(item => item.type === 'HALL_OF_FAME').slice(0, 4);
@@ -26,7 +29,7 @@ export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProp
                 link.click();
             } catch (err) {
                 console.error("Export failed", err);
-                alert("Portfolyo dışa aktarılamadı.");
+                alert(pickLocalized(language, 'Portfolyo dışa aktarılamadı.', 'Could not export portfolio.'));
             }
         }
     };
@@ -35,9 +38,9 @@ export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProp
         return (
             <div className="w-full max-w-4xl flex flex-col items-center justify-center p-12 bg-black/50 border border-white/10 rounded-xl">
                 <AlertTriangle size={48} className="text-yellow-500 mb-4" />
-                <h2 className="text-2xl font-display font-bold text-white mb-2 uppercase tracking-wide">AI Portfolyo (Premium Özel)</h2>
-                <p className="text-slate-400 text-center mb-6">Tasarımlarınızı tek tıkla profesyonel bir portfolyoya dönüştürmek için Premium üye olmalısınız.</p>
-                <div className="px-6 py-3 bg-white/5 border border-white/10 rounded text-slate-300 font-mono text-sm">Header&apos;dan Premium modunu aktifleştirerek deneyebilirsiniz.</div>
+                <h2 className="text-2xl font-display font-bold text-white mb-2 uppercase tracking-wide">{pickLocalized(language, 'AI Portfolyo (Premium Özel)', 'AI portfolio (Premium only)')}</h2>
+                <p className="text-slate-400 text-center mb-6">{pickLocalized(language, 'Tasarımlarınızı tek tıkla profesyonel bir portfolyoya dönüştürmek için Premium üye olmalısınız.', 'You must be a Premium member to turn your designs into a professional portfolio with one click.')}</p>
+                <div className="px-6 py-3 bg-white/5 border border-white/10 rounded text-slate-300 font-mono text-sm">{pickLocalized(language, 'Header’dan Premium modunu aktifleştirerek deneyebilirsiniz.', 'You can try it by enabling Premium mode from the header.')}</div>
             </div>
         );
     }
@@ -52,15 +55,15 @@ export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProp
             <div className="flex justify-between items-center bg-[#111827] p-6 rounded-xl border border-white/10 shadow-2xl">
                 <div>
                     <h2 className="font-display text-2xl font-bold uppercase tracking-wide flex items-center gap-2 text-white">
-                        <FileText className="text-emerald-500" /> AI Portfolyo Oluşturucu
+                        <FileText className="text-emerald-500" /> {pickLocalized(language, 'AI Portfolyo Oluşturucu', 'AI portfolio builder')}
                     </h2>
-                    <p className="text-sm text-slate-400 font-mono mt-1">Sistemdeki yüksek puanlı projelerinden statik portfolyo oluşturuldu.</p>
+                    <p className="text-sm text-slate-400 font-mono mt-1">{pickLocalized(language, 'Sistemdeki yüksek puanlı projelerinden statik portfolyo oluşturuldu.', 'A static portfolio was generated from your high-scoring projects.')}</p>
                 </div>
                 <button
                     onClick={handleExport}
                     className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded uppercase font-bold text-sm tracking-wider transition-colors"
                 >
-                    <Download size={18} /> PNG İndir
+                    <Download size={18} /> {pickLocalized(language, 'PNG İndir', 'Download PNG')}
                 </button>
             </div>
 
@@ -77,7 +80,7 @@ export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProp
                             <p className="text-slate-500 font-mono uppercase tracking-widest text-sm">2024 — Architecture Portfolio</p>
                         </div>
                         <div className="text-right">
-                            <p className="font-bold text-xl uppercase">Sen (Misafir)</p>
+                            <p className="font-bold text-xl uppercase">{pickLocalized(language, 'Sen (Misafir)', 'You (Guest)')}</p>
                             <p className="text-slate-500 font-mono text-sm">student@architecture.edu</p>
                         </div>
                     </div>
@@ -96,7 +99,7 @@ export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProp
                                             {item.jury}
                                         </p>
                                         <div className="flex items-center gap-1 mt-3 font-mono text-xs text-slate-400">
-                                            <span>Read More</span> <ArrowRight size={12} />
+                                            <span>{pickLocalized(language, 'Daha Fazla Oku', 'Read more')}</span> <ArrowRight size={12} />
                                         </div>
                                     </div>
                                 </div>
@@ -106,8 +109,8 @@ export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProp
 
                     {/* Footer */}
                     <div className="mt-auto pt-16 border-t border-slate-300 flex justify-between text-xs font-mono text-slate-400">
-                        <span>Generated by Draw or Die AI</span>
-                        <span>Page 1 / 1</span>
+                        <span>{pickLocalized(language, 'Draw or Die AI tarafından oluşturuldu', 'Generated by Draw or Die AI')}</span>
+                        <span>{pickLocalized(language, 'Sayfa 1 / 1', 'Page 1 / 1')}</span>
                     </div>
                 </div>
             </div>

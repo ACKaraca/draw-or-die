@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Crown, Loader2, PenTool, ReceiptText, WalletCards } from 'lucide-react';
 import { account } from '@/lib/appwrite';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
 type BillingHistoryItem = {
   id: string;
@@ -60,41 +62,46 @@ interface AccountDetailsStepProps {
 
 const PAGE_SIZE = 20;
 
-function formatCurrency(cents: number, currency: string): string {
+function formatCurrency(cents: number, currency: string, language: SupportedLanguage): string {
   const normalized = (currency || 'try').toLowerCase();
   const amount = (Number.isFinite(cents) ? cents : 0) / 100;
-  return new Intl.NumberFormat('tr-TR', {
+  const locale = language === 'en' ? 'en-US' : 'tr-TR';
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency: normalized.toUpperCase(),
     minimumFractionDigits: 2,
   }).format(amount);
 }
 
-function formatDate(value: string | null): string {
+function formatDate(value: string | null, language: SupportedLanguage): string {
   if (!value) return '-';
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) return '-';
-  return new Date(parsed).toLocaleDateString('tr-TR');
+  return new Date(parsed).toLocaleDateString(language === 'en' ? 'en-US' : 'tr-TR');
 }
 
-function formatInterval(value: string | null): string {
+function formatInterval(value: string | null, language: SupportedLanguage): string {
   if (!value) return '-';
-  if (value === 'month') return 'Aylik';
-  if (value === 'year') return 'Yillik';
+  if (value === 'month') return pickLocalized(language, 'Aylık', 'Monthly');
+  if (value === 'year') return pickLocalized(language, 'Yıllık', 'Yearly');
   return value;
 }
 
-function toEventLabel(eventType: string): string {
+function toEventLabel(eventType: string, language: SupportedLanguage): string {
   switch (eventType) {
     case 'premium_monthly':
-      return 'Premium Aylik Uyelik';
+      return pickLocalized(language, 'Premium Aylık Üyelik', 'Premium monthly');
     case 'premium_yearly':
-      return 'Premium Yillik Uyelik';
+      return pickLocalized(language, 'Premium Yıllık Üyelik', 'Premium yearly');
     case 'rapido_pack':
-      return 'Rapido Satin Alimi';
+      return pickLocalized(language, 'Rapido Satın Alımı', 'Rapido purchase');
     default:
-      return eventType || 'Satin Alim';
+      return eventType || pickLocalized(language, 'Satın Alım', 'Purchase');
   }
+}
+
+function pickMembershipLabel(language: SupportedLanguage, value: boolean): string {
+  return value ? pickLocalized(language, 'Evet', 'Yes') : pickLocalized(language, 'Hayır', 'No');
 }
 
 function readPromoCode(metadataJson: string | null): string {
@@ -109,6 +116,7 @@ function readPromoCode(metadataJson: string | null): string {
 }
 
 export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop, onAuthRequired }: AccountDetailsStepProps) {
+  const language = useLanguage();
   const { user } = useAuth();
 
   const [items, setItems] = useState<BillingHistoryItem[]>([]);
@@ -138,7 +146,9 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
 
   const openBillingPortal = useCallback(async () => {
     if (!membership?.stripeCustomerId) {
-      setError('Bu hesap icin Stripe uyelik kaydi bulunamadi.');
+      setError(
+        pickLocalized(language, 'Bu hesap için Stripe üyelik kaydı bulunamadı.', 'No Stripe subscription record for this account.'),
+      );
       return;
     }
 
@@ -151,16 +161,23 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
       const payload = await response.json().catch(() => ({})) as { error?: string; url?: string };
 
       if (!response.ok || !payload.url) {
-        throw new Error(payload.error || 'Abonelik yönetim sayfası açılamadı.');
+        throw new Error(
+          payload.error ||
+            pickLocalized(language, 'Abonelik yönetim sayfası açılamadı.', 'Could not open subscription management.'),
+        );
       }
 
       window.location.href = payload.url;
     } catch (portalError) {
-      setError(portalError instanceof Error ? portalError.message : 'Abonelik yönetim sayfası açılamadı.');
+      setError(
+        portalError instanceof Error
+          ? portalError.message
+          : pickLocalized(language, 'Abonelik yönetim sayfası açılamadı.', 'Could not open subscription management.'),
+      );
     } finally {
       setIsPortalLoading(false);
     }
-  }, [authedFetch, membership?.stripeCustomerId]);
+  }, [authedFetch, language, membership?.stripeCustomerId]);
 
   const fetchBilling = useCallback(
     async (nextOffset = 0, reset = false) => {
@@ -176,7 +193,11 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
         const response = await authedFetch(`/api/billing/history?${params.toString()}`);
         if (!response.ok) {
           const payload = await response.json().catch(() => ({}));
-          throw new Error(typeof payload?.error === 'string' ? payload.error : 'Hesap detayları alınamadı.');
+          throw new Error(
+            typeof payload?.error === 'string'
+              ? payload.error
+              : pickLocalized(language, 'Hesap detayları alınamadı.', 'Could not load account details.'),
+          );
         }
 
         const payload = (await response.json()) as BillingHistoryResponse;
@@ -194,12 +215,16 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
 
         setOffset(nextOffset + PAGE_SIZE);
       } catch (fetchError) {
-        setError(fetchError instanceof Error ? fetchError.message : 'Hesap detayları alınamadı.');
+        setError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : pickLocalized(language, 'Hesap detayları alınamadı.', 'Could not load account details.'),
+        );
       } finally {
         setIsLoading(false);
       }
     },
-    [authedFetch],
+    [authedFetch, language],
   );
 
   useEffect(() => {
@@ -224,14 +249,18 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
         className="w-full max-w-3xl mt-24"
       >
         <div className="rounded-2xl border border-white/10 bg-[#0E1628] p-8 text-center">
-          <h2 className="font-display text-3xl text-white uppercase tracking-wider">Hesap Detaylari</h2>
-          <p className="mt-3 text-slate-300">Satın alım geçmişini görmek için giriş yapmanız gerekiyor.</p>
+          <h2 className="font-display text-3xl text-white uppercase tracking-wider">
+            {pickLocalized(language, 'Hesap Detayları', 'Account details')}
+          </h2>
+          <p className="mt-3 text-slate-300">
+            {pickLocalized(language, 'Satın alım geçmişini görmek için giriş yapmanız gerekiyor.', 'Sign in to view your purchase history.')}
+          </p>
           <button
             type="button"
             onClick={onAuthRequired}
             className="mt-6 px-6 py-3 rounded-lg bg-white text-black font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors"
           >
-            Giriş Yap
+            {pickLocalized(language, 'Giriş Yap', 'Sign in')}
           </button>
         </div>
       </motion.div>
@@ -248,10 +277,11 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
     >
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <button
+          type="button"
           onClick={onBack}
           className="flex items-center gap-2 text-slate-400 hover:text-white font-mono text-xs uppercase tracking-wider"
         >
-          <ArrowLeft size={14} /> Profile Dön
+          <ArrowLeft size={14} /> {pickLocalized(language, 'Profile Dön', 'Back to profile')}
         </button>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -260,14 +290,14 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
             onClick={onOpenRapidoShop}
             className="px-3 py-2 rounded-lg border border-neon-red/40 bg-neon-red/10 text-neon-red text-xs font-mono uppercase tracking-wider hover:bg-neon-red/20"
           >
-            Rapido Satın Al
+            {pickLocalized(language, 'Rapido Satın Al', 'Buy Rapido')}
           </button>
           <button
             type="button"
             onClick={onOpenPremiumShop}
             className="px-3 py-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 text-yellow-300 text-xs font-mono uppercase tracking-wider hover:bg-yellow-500/20"
           >
-            Premium Planlar
+            {pickLocalized(language, 'Premium Planlar', 'Premium plans')}
           </button>
           {membership?.stripeCustomerId && (
             <button
@@ -276,7 +306,9 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
               disabled={isPortalLoading}
               className="px-3 py-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 text-cyan-100 text-xs font-mono uppercase tracking-wider hover:bg-cyan-500/20 disabled:opacity-50"
             >
-              {isPortalLoading ? 'Yönetim Açılıyor...' : 'Abonelik Yönet'}
+              {isPortalLoading
+                ? pickLocalized(language, 'Yönetim Açılıyor...', 'Opening portal...')
+                : pickLocalized(language, 'Abonelik Yönet', 'Manage subscription')}
             </button>
           )}
         </div>
@@ -284,9 +316,16 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
 
       <div className="mb-8">
         <h2 className="font-display text-3xl text-white uppercase tracking-wider flex items-center gap-2">
-          <WalletCards className="text-cyan-300" /> Hesap ve Satın Alım Detayları
+          <WalletCards className="text-cyan-300" />{' '}
+          {pickLocalized(language, 'Hesap ve Satın Alım Detayları', 'Account & purchase details')}
         </h2>
-        <p className="text-slate-400 text-sm mt-1">Üyelik durumun, Rapido hareketlerin ve ödeme geçmişin burada tutulur.</p>
+        <p className="text-slate-400 text-sm mt-1">
+          {pickLocalized(
+            language,
+            'Üyelik durumun, Rapido hareketlerin ve ödeme geçmişin burada tutulur.',
+            'Your membership status, Rapido activity, and payment history are listed here.',
+          )}
+        </p>
       </div>
 
       {error && (
@@ -297,30 +336,38 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Üyelik</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Üyelik', 'Membership')}
+          </p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <Crown size={18} className={membership?.isPremium ? 'text-yellow-400' : 'text-slate-500'} />
-            {membership?.isPremium ? 'Premium' : 'Kayıtlı'}
+            {membership?.isPremium ? 'Premium' : pickLocalized(language, 'Kayıtlı', 'Registered')}
           </p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Mevcut Rapido</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Mevcut Rapido', 'Current Rapido')}
+          </p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <PenTool size={18} className="text-neon-red" /> {membership?.rapidoBalance ?? 0}
           </p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Toplam Satın Alım</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Toplam Satın Alım', 'Total purchases')}
+          </p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <ReceiptText size={18} className="text-cyan-300" />
-            {summary ? formatCurrency(summary.totalAmountCents, primaryCurrency) : '-'}
+            {summary ? formatCurrency(summary.totalAmountCents, primaryCurrency, language) : '-'}
           </p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Toplam Rapido Alımı</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Toplam Rapido Alımı', 'Total Rapido purchased')}
+          </p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <PenTool size={18} className="text-neon-red" /> {summary?.totalRapidoPurchased ?? 0}
           </p>
@@ -329,82 +376,92 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Kalan Gün</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Kalan Gün', 'Days left')}
+          </p>
           <p className="text-white font-display text-xl">{membership?.daysRemaining ?? '-'}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Üyelik Başlangıcı</p>
-          <p className="text-white font-display text-xl">{formatDate(membership?.premiumStartedAt ?? null)}</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Üyelik Başlangıcı', 'Membership started')}
+          </p>
+            <p className="text-white font-display text-xl">{formatDate(membership?.premiumStartedAt ?? null, language)}</p>
         </div>
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Plan Ücreti</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Plan Ücreti', 'Plan price')}
+          </p>
           <p className="text-white font-display text-xl">
             {membership?.premiumPriceCents
-              ? formatCurrency(membership.premiumPriceCents, membership.premiumCurrency || 'try')
+              ? formatCurrency(membership.premiumPriceCents, membership.premiumCurrency || 'try', language)
               : '-'}
           </p>
         </div>
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Promo Kodu</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Promo Kodu', 'Promo code')}
+          </p>
           <p className="text-white font-display text-xl">{membership?.premiumPromoCode || '-'}</p>
         </div>
       </div>
 
       <div className="mb-6 rounded-xl border border-white/10 bg-[#101A2F] p-4">
-        <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2">Premium Durumu</h3>
+        <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2">{pickLocalized(language, 'Premium Durumu', 'Premium status')}</h3>
         <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <p className="text-slate-400 text-[11px] font-mono uppercase">Status</p>
+            <p className="text-slate-400 text-[11px] font-mono uppercase">{pickLocalized(language, 'Durum', 'Status')}</p>
             <p className="text-white">{membership?.subscriptionStatus || '-'}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <p className="text-slate-400 text-[11px] font-mono uppercase">Yenileme Dönemi</p>
-            <p className="text-white">{formatDate(membership?.currentPeriodStart ?? null)} - {formatDate(membership?.currentPeriodEnd ?? null)}</p>
+            <p className="text-slate-400 text-[11px] font-mono uppercase">{pickLocalized(language, 'Yenileme Dönemi', 'Renewal period')}</p>
+            <p className="text-white">
+              {formatDate(membership?.currentPeriodStart ?? null, language)} - {formatDate(membership?.currentPeriodEnd ?? null, language)}
+            </p>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <p className="text-slate-400 text-[11px] font-mono uppercase">Plan Tipi</p>
-            <p className="text-white">{formatInterval(membership?.premiumInterval ?? null)}</p>
+            <p className="text-slate-400 text-[11px] font-mono uppercase">{pickLocalized(language, 'Plan Tipi', 'Plan type')}</p>
+            <p className="text-white">{formatInterval(membership?.premiumInterval ?? null, language)}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <p className="text-slate-400 text-[11px] font-mono uppercase">Dönem Sonu İptal</p>
-            <p className="text-white">{membership?.cancelAtPeriodEnd ? 'Evet' : 'Hayır'}</p>
+            <p className="text-slate-400 text-[11px] font-mono uppercase">{pickLocalized(language, 'Dönem Sonu İptal', 'Cancel at period end')}</p>
+            <p className="text-white">{pickMembershipLabel(language, Boolean(membership?.cancelAtPeriodEnd))}</p>
           </div>
         </div>
       </div>
 
       <div className="mb-6 rounded-xl border border-white/10 bg-[#101A2F] p-4">
-        <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2">Premium Avantajları</h3>
+        <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2">{pickLocalized(language, 'Premium Avantajları', 'Premium benefits')}</h3>
         <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-slate-200">
-          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">2-4 personeli çoklu jüri analizi</li>
-          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">AI Mentor ve gelişmiş sohbet limiti</li>
-          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">Premium Rescue ve revizyon akışlarına erişim</li>
-          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">Abonelik yönetimi, ödeme yöntemi değiştirme ve portal erişimi</li>
+          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">{pickLocalized(language, '2-4 personeli çoklu jüri analizi', 'Multi-jury analysis for 2-4 personas')}</li>
+          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">{pickLocalized(language, 'AI Mentor ve gelişmiş sohbet limiti', 'AI Mentor and extended chat limit')}</li>
+          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">{pickLocalized(language, 'Premium Rescue ve revizyon akışlarına erişim', 'Access to Premium Rescue and revision flows')}</li>
+          <li className="rounded-md border border-white/10 bg-white/5 px-3 py-2">{pickLocalized(language, 'Abonelik yönetimi, ödeme yöntemi değiştirme ve portal erişimi', 'Subscription management, payment method changes, and portal access')}</li>
         </ul>
       </div>
 
       <div className="rounded-xl border border-white/10 bg-[#101A2F] p-4 sm:p-5">
         <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2">
-          Satın Alım Hareketleri
+          {pickLocalized(language, 'Satın Alım Hareketleri', 'Purchase history')}
         </h3>
 
         {isLoading && items.length === 0 ? (
           <div className="py-8 flex items-center justify-center text-slate-400">
-            <Loader2 size={18} className="animate-spin mr-2" /> Yükleniyor...
+            <Loader2 size={18} className="animate-spin mr-2" /> {pickLocalized(language, 'Yükleniyor...', 'Loading...')}
           </div>
         ) : items.length === 0 ? (
           <div className="py-8 text-center text-slate-500 text-sm font-mono">
-            Henüz satın alım kaydı bulunmuyor.
+            {pickLocalized(language, 'Henüz satın alım kaydı bulunmuyor.', 'No purchase records yet.')}
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto">
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="text-left border-b border-white/10 text-slate-400 font-mono text-[11px] uppercase tracking-wider">
-                  <th className="py-2 pr-4">Tarih</th>
-                  <th className="py-2 pr-4">İşlem</th>
-                  <th className="py-2 pr-4">Tutar</th>
-                  <th className="py-2 pr-4">Rapido Değişim</th>
-                  <th className="py-2 pr-4">Bakiye Sonrası</th>
+                  <th className="py-2 pr-4">{pickLocalized(language, 'Tarih', 'Date')}</th>
+                  <th className="py-2 pr-4">{pickLocalized(language, 'İşlem', 'Transaction')}</th>
+                  <th className="py-2 pr-4">{pickLocalized(language, 'Tutar', 'Amount')}</th>
+                  <th className="py-2 pr-4">{pickLocalized(language, 'Rapido Değişim', 'Rapido change')}</th>
+                  <th className="py-2 pr-4">{pickLocalized(language, 'Bakiye Sonrası', 'Balance after')}</th>
                   <th className="py-2">Session</th>
                 </tr>
               </thead>
@@ -416,14 +473,14 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
                     <tr key={item.id} className="text-slate-200">
                       <td className="py-3 pr-4 font-mono text-xs text-slate-400">{new Date(item.createdAt).toLocaleString('tr-TR')}</td>
                       <td className="py-3 pr-4">
-                        <p>{toEventLabel(item.eventType)}</p>
+                        <p>{toEventLabel(item.eventType, language)}</p>
                         {promoCode && (
                           <p className="text-[10px] font-mono uppercase tracking-wider text-emerald-300">
-                            Promo: {promoCode}
+                            {pickLocalized(language, 'Promosyon:', 'Promo:')} {promoCode}
                           </p>
                         )}
                       </td>
-                      <td className="py-3 pr-4 font-mono">{formatCurrency(item.amountCents, item.currency)}</td>
+                      <td className="py-3 pr-4 font-mono">{formatCurrency(item.amountCents, item.currency, language)}</td>
                       <td className={`py-3 pr-4 font-mono ${item.rapidoDelta >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
                         {item.rapidoDelta >= 0 ? '+' : ''}
                         {item.rapidoDelta}
@@ -447,7 +504,7 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
             disabled={isLoading}
             className="px-6 py-2 rounded-lg border border-white/20 text-white font-mono text-xs uppercase tracking-wider hover:bg-white/10 disabled:opacity-50"
           >
-            {isLoading ? 'Yükleniyor...' : 'Daha Fazla Kayıt'}
+            {isLoading ? pickLocalized(language, 'Yükleniyor...', 'Loading...') : pickLocalized(language, 'Daha Fazla Kayıt', 'Load more records')}
           </button>
         </div>
       )}

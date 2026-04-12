@@ -9,23 +9,26 @@ import {
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
 import { normalizeLanguage } from '@/lib/i18n';
+import { getRequestLanguage } from '@/lib/server-i18n';
+import { ApiMessages } from '@/lib/locales/apiMessages';
 
 function isAppwriteServerUnavailable(): boolean {
   return !APPWRITE_SERVER_API_KEY.trim();
 }
 
 export async function GET(request: NextRequest) {
+  const lang = getRequestLanguage(request);
   try {
     if (isAppwriteServerUnavailable()) {
       return NextResponse.json(
-        { error: 'Profil servisi şu anda kullanılamıyor.' },
+        { error: ApiMessages.profileUnavailable(lang) },
         { status: 503 },
       );
     }
 
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+      return NextResponse.json({ error: ApiMessages.signInRequired(lang) }, { status: 401 });
     }
 
     await ensureCoreAppwriteResources();
@@ -42,29 +45,30 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logServerError('api.profile.GET', error);
-    return NextResponse.json({ error: 'Profil alınamadı.' }, { status: 500 });
+    return NextResponse.json({ error: ApiMessages.profileFetchFailed(lang) }, { status: 500 });
   }
 }
 
 export async function PATCH(request: NextRequest) {
+  const lang = getRequestLanguage(request);
   try {
     if (isAppwriteServerUnavailable()) {
       return NextResponse.json(
-        { error: 'Profil servisi şu anda kullanılamıyor.' },
+        { error: ApiMessages.profileUnavailable(lang) },
         { status: 503 },
       );
     }
 
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+      return NextResponse.json({ error: ApiMessages.signInRequired(lang) }, { status: 401 });
     }
 
     await ensureCoreAppwriteResources();
 
     const body = await request.json().catch(() => ({}));
     if (!body || typeof body !== 'object') {
-      return NextResponse.json({ error: 'Geçersiz istek gövdesi.' }, { status: 400 });
+      return NextResponse.json({ error: ApiMessages.invalidBody(lang) }, { status: 400 });
     }
 
     const payload = body as Record<string, unknown>;
@@ -72,7 +76,7 @@ export async function PATCH(request: NextRequest) {
       || Object.prototype.hasOwnProperty.call(payload, 'language');
 
     if (!hasLanguageInput) {
-      return NextResponse.json({ error: 'Güncellenecek alan bulunamadı.' }, { status: 400 });
+      return NextResponse.json({ error: ApiMessages.noFieldsToUpdate(lang) }, { status: 400 });
     }
 
     const preferredLanguage = normalizeLanguage(payload.preferred_language ?? payload.language, 'tr');
@@ -85,6 +89,6 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ profile });
   } catch (error) {
     logServerError('api.profile.PATCH', error);
-    return NextResponse.json({ error: 'Profil güncellenemedi.' }, { status: 500 });
+    return NextResponse.json({ error: ApiMessages.profileUpdateFailed(lang) }, { status: 500 });
   }
 }

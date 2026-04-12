@@ -1,0 +1,23 @@
+{
+  "mainFile": "Main file",
+  "extraSheet": "Extra sheet {n}",
+  "autoFillWait": "Upload a file and wait for it to process first.",
+  "autoFillFailed": "Auto-fill response failed. Try again.",
+  "autoFillSuccess": "Studio Desk fields were auto-filled.",
+  "autoFillError": "Auto-fill failed.",
+  "closeTutorial": "Close tutorial",
+  "skipTutorial": "Skip tutorial",
+  "back": "Back",
+  "start": "Start",
+  "next": "Next",
+  "replaceFile": "Replace file",
+  "removeFiles": "Remove files",
+  "zoomHint": "Zoom, pan, and inspect details. Switch sheets using the file list below.",
+  "uploadHint": "Upload A0/A1 sheet, sketch, or render",
+  "dragDropHint": "Drag and drop or click to select (JPG, PNG, PDF)",
+  "maxFilesHint": "Up to 8 files, 35 MB total",
+  "studioDeskFiles": "Studio Desk files",
+  "tutorialTitle": "Studio Desk Tutorial",
+  "tutorialButton": "Tutorial",
+  "studioDesk": "Studio Desk"
+}

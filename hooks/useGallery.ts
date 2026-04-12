@@ -17,7 +17,7 @@ import { useState, useCallback, useRef } from 'react';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { GalleryItem, GalleryType } from '@/types';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 15;
 
 interface FetchOptions {
   type?: GalleryType;

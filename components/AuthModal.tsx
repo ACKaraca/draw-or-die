@@ -7,6 +7,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { X, Mail, Lock, LogIn, Loader2, Sparkles, User, ArrowLeft, RefreshCw } from 'lucide-react'
 import { trackConversionEvent } from '@/lib/growth-tracking'
 import { account } from '@/lib/appwrite'
+import { canonicalizeAuthEmail, isValidEmailFormat } from '@/lib/auth-email'
 import { useLanguage } from '@/components/RuntimeTextLocalizer'
 import { REFERRAL_STORAGE_KEY } from '@/components/ReferralCapture'
 
@@ -30,6 +31,8 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             verificationMailFailedDomain: 'Verification email could not be sent. Add this domain to Appwrite Platform and check NEXT_PUBLIC_APP_URL.',
             verificationMailFailedGeneric: 'Verification email could not be sent. Check Appwrite email configuration.',
             emailRequired: 'Email is required.',
+            emailInvalid: 'Please enter a valid email address.',
+            gmailCanonicalConflict: 'This Gmail address (without dots) is already registered. Please log in or recover that account.',
             recoveryMailSent: 'Recovery email sent. Please check your inbox.',
             authErrorGeneric: 'An error occurred during authentication.',
             guestError: 'An error occurred entering as guest.',
@@ -57,6 +60,9 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             dontHaveAccount: "Don't have an account?",
             alreadyHaveAccount: 'Already have an account?',
             needToGoBack: 'Need to go back?',
+            googleAriaLabel: 'Sign in with Google',
+            guestAriaLabel: 'Continue as guest with 1 drawing limit for trial',
+            guestTitle: 'Try one drawing without creating an account',
         }
         : {
             fullNameRequired: 'Ad soyad zorunludur.',
@@ -64,6 +70,8 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             verificationMailFailedDomain: 'Dogrulama maili gonderilemedi. Appwrite Platform listesine bu domaini ekleyin ve NEXT_PUBLIC_APP_URL degerini kontrol edin.',
             verificationMailFailedGeneric: 'Dogrulama maili gonderilemedi. Appwrite email ayarlarini kontrol edin.',
             emailRequired: 'Email zorunludur.',
+            emailInvalid: 'Gecerli bir email adresi gir.',
+            gmailCanonicalConflict: 'Bu Gmail adresinin noktasiz surumu zaten kayitli. Lutfen giris yap veya sifre sifirla.',
             recoveryMailSent: 'Şifre sıfırlama maili gönderildi. Gelen kutunu kontrol et.',
             authErrorGeneric: 'Kimlik doğrulama sırasında bir hata oluştu.',
             guestError: 'Misafir girişinde bir hata oluştu.',
@@ -91,6 +99,9 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             dontHaveAccount: 'Hesabın yok mu?',
             alreadyHaveAccount: 'Zaten hesabın var mı?',
             needToGoBack: 'Geri dönmek ister misin?',
+            googleAriaLabel: 'Google ile giriş yap',
+            guestAriaLabel: 'Deneme için 1 çizim sınırıyla misafir olarak devam et',
+            guestTitle: 'Hesap oluşturmadan bir çizimi dene',
         }
 
     if (!isOpen) return null
@@ -139,20 +150,70 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             ).replace(/\/$/, '')
             const verificationUrl = `${redirectBase}/auth/verify-email`
             const recoveryUrl = `${redirectBase}/auth/recovery`
+            const emailResolution = canonicalizeAuthEmail(email)
+            const canonicalEmail = emailResolution.canonicalEmail
+            const fallbackEmail = emailResolution.normalizedEmail
+
+            if (!fallbackEmail) {
+                throw new Error(copy.emailRequired)
+            }
+
+            if (!isValidEmailFormat(fallbackEmail)) {
+                throw new Error(copy.emailInvalid)
+            }
 
             if (mode === 'login') {
-                await account.createEmailPasswordSession({ email, password })
+                try {
+                    await account.createEmailPasswordSession({ email: canonicalEmail, password })
+                } catch (sessionError) {
+                    if (emailResolution.gmailCanonicalized && fallbackEmail !== canonicalEmail) {
+                        await account.createEmailPasswordSession({ email: fallbackEmail, password })
+                    } else {
+                        throw sessionError
+                    }
+                }
             } else if (mode === 'signup') {
                 if (!fullName.trim()) {
                     throw new Error(copy.fullNameRequired)
                 }
+
+                const precheckResponse = await fetch('/api/auth/signup-precheck', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: fallbackEmail }),
+                })
+
+                const precheckPayload = await precheckResponse.json().catch(() => ({})) as {
+                    error?: string
+                    code?: string
+                    canonicalEmail?: string
+                }
+
+                if (!precheckResponse.ok) {
+                    if (precheckPayload.code === 'GMAIL_CANONICAL_CONFLICT') {
+                        throw new Error(copy.gmailCanonicalConflict)
+                    }
+
+                    throw new Error(
+                        typeof precheckPayload.error === 'string' && precheckPayload.error
+                            ? precheckPayload.error
+                            : copy.authErrorGeneric
+                    )
+                }
+
+                const signupEmail = typeof precheckPayload.canonicalEmail === 'string' && precheckPayload.canonicalEmail
+                    ? precheckPayload.canonicalEmail
+                    : canonicalEmail
+
                 await account.create({
                     userId: ID.unique(),
-                    email,
+                    email: signupEmail,
                     password,
                     name: fullName.trim().substring(0, 128),
                 })
-                await account.createEmailPasswordSession({ email, password })
+                await account.createEmailPasswordSession({ email: signupEmail, password })
                 try {
                     await account.createVerification(verificationUrl)
                 } catch (verifyError) {
@@ -191,10 +252,15 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                     // Referral hatası kayıt sürecini engellemez
                 }
             } else {
-                if (!email.trim()) {
-                    throw new Error(copy.emailRequired)
+                try {
+                    await account.createRecovery(canonicalEmail, recoveryUrl)
+                } catch (recoveryError) {
+                    if (emailResolution.gmailCanonicalized && fallbackEmail !== canonicalEmail) {
+                        await account.createRecovery(fallbackEmail, recoveryUrl)
+                    } else {
+                        throw recoveryError
+                    }
                 }
-                await account.createRecovery(email.trim(), recoveryUrl)
                 setNotice(copy.recoveryMailSent)
             }
 
@@ -391,7 +457,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                             ? 'bg-slate-700/50 border-slate-500/40 text-slate-300 cursor-not-allowed'
                             : 'bg-white text-black hover:bg-slate-100 border-white/20'
                             }`}
-                        aria-label="Google ile giriş yap"
+                        aria-label={copy.googleAriaLabel}
                     >
                         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
                             <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.8-6-6.2s2.7-6.2 6-6.2c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.9 2.9 14.6 2 12 2 6.9 2 2.8 6.4 2.8 11.8S6.9 21.6 12 21.6c6.9 0 9.1-5 9.1-7.6 0-.5-.1-.9-.1-1.3H12z"/>
@@ -409,8 +475,8 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                         onClick={handleGuest}
                         disabled={loading}
                         className="w-full mt-6 bg-white/5 hover:bg-white/10 text-white font-mono text-sm py-3 rounded-lg border border-white/10 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-                        aria-label="Continue as guest with 1 drawing limit for trial"
-                        title="Try one drawing without creating an account"
+                        aria-label={copy.guestAriaLabel}
+                        title={copy.guestTitle}
                     >
                         <Sparkles size={16} className="text-yellow-400" />
                         {copy.tryAsGuest}

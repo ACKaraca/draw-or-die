@@ -1,0 +1,9 @@
+{
+  "header": "Projeyi Savun (Chat Modu)",
+  "description": "Jüriye karşı projeni savun. İkna edersen ekstra puan kap! (Max 3 Mesaj)",
+  "button": "Savun",
+  "title": "Savunma",
+  "emptyPrompt": "İlk savunmanı yazarak jüriye meydan oku.",
+  "turnsOver": "Savunma hakkınız bitti.",
+  "inputPlaceholder": "Mesajınızı yazın..."
+}

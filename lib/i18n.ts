@@ -1,6 +1,6 @@
-export type SupportedLanguage = 'tr' | 'en';
+export type SupportedLanguage = 'tr' | 'en' | 'de' | 'it';
 
-const SUPPORTED_LANGUAGES = new Set<SupportedLanguage>(['tr', 'en']);
+const SUPPORTED_LANGUAGES = new Set<SupportedLanguage>(['tr', 'en', 'de', 'it']);
 
 function toPrimaryLanguage(value: string): string {
   return value
@@ -37,6 +37,19 @@ export function resolveLanguageFromAcceptLanguage(
 
 export function pickLocalized(language: SupportedLanguage, trText: string, enText: string): string {
   return language === 'en' ? enText : trText;
+}
+
+export function pickLocalizedFour(
+  language: SupportedLanguage,
+  trText: string,
+  enText: string,
+  deText: string,
+  itText: string,
+): string {
+  if (language === 'en') return enText;
+  if (language === 'de') return deText || trText;
+  if (language === 'it') return itText || trText;
+  return trText;
 }
 
 /** Instruction fragment for LLM prompts: critique and mentor text must match UI locale. */

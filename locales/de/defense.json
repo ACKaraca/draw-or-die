@@ -1,0 +1,9 @@
+{
+  "header": "Verteidige dein Projekt (Chat-Modus)",
+  "description": "Verteidige dein Projekt gegen die Jury. Wenn du sie überzeugst, bekommst du Bonuspunkte! (Max. 3 Nachrichten)",
+  "button": "Verteidigen",
+  "title": "Verteidigung",
+  "emptyPrompt": "Fordere die Jury mit deiner ersten Verteidigung heraus.",
+  "turnsOver": "Deine Verteidigungszüge sind aufgebraucht.",
+  "inputPlaceholder": "Schreibe deine Nachricht..."
+}

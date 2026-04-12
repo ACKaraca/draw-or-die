@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   UserCircle2,
@@ -21,6 +21,15 @@ import { account } from '@/lib/appwrite';
 import { EduVerificationCard } from '@/components/EduVerificationCard';
 import { PromoRedeemCard } from '@/components/PromoRedeemCard';
 import { ReferralCard } from '@/components/ReferralCard';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
+
+const LANGUAGE_OPTIONS: Array<{ value: SupportedLanguage; label: string }> = [
+  { value: 'tr', label: 'Türkçe' },
+  { value: 'en', label: 'English' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'it', label: 'Italiano' },
+];
 
 interface ProfileStepProps {
   onUpgradeClick: () => void;
@@ -52,19 +61,6 @@ type MemorySnippetItem = {
   updatedAt: string;
 };
 
-function getMemoryCategoryLabel(category: string): string {
-  if (category === 'USER_PROFILE' || category === 'CATEGORY_1') return 'Kalıcı Kullanıcı Bilgileri';
-  if (category === 'RECENT_CONTEXT' || category === 'CATEGORY_2') return 'Geçici Kullanım Bağlamı';
-  if (category === 'ARCHITECT_STYLE_HIDDEN' || category === 'CATEGORY_3') return 'Gizli Mimari Stil';
-  return category;
-}
-
-const DELETE_REASON_OPTIONS = [
-  { value: 'yanlis', label: 'Yanlis' },
-  { value: 'hatali', label: 'Hatali' },
-  { value: 'guncel_degil', label: 'Guncel degil' },
-  { value: 'artik_kullanilmiyor', label: 'Artik kullanilmiyor' },
-] as const;
 
 function formatCurrency(cents: number, currency: string): string {
   const amount = (Number.isFinite(cents) ? cents : 0) / 100;
@@ -76,7 +72,35 @@ function formatCurrency(cents: number, currency: string): string {
 }
 
 export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDetails, onOpenHistory, onAuthRequired }: ProfileStepProps) {
+  const language = useLanguage();
   const { user, profile, refreshProfile, setPreferredLanguage } = useAuth();
+
+  const deleteReasonOptions = useMemo(
+    () =>
+      [
+        { value: 'yanlis' as const, label: pickLocalized(language, 'Yanlış', 'Incorrect') },
+        { value: 'hatali' as const, label: pickLocalized(language, 'Hatalı', 'Faulty') },
+        { value: 'guncel_degil' as const, label: pickLocalized(language, 'Güncel değil', 'Out of date') },
+        { value: 'artik_kullanilmiyor' as const, label: pickLocalized(language, 'Artık kullanılmıyor', 'No longer used') },
+      ] as const,
+    [language],
+  );
+
+  const getMemoryCategoryLabel = useCallback(
+    (category: string) => {
+      if (category === 'USER_PROFILE' || category === 'CATEGORY_1') {
+        return pickLocalized(language, 'Kalıcı Kullanıcı Bilgileri', 'Permanent user data');
+      }
+      if (category === 'RECENT_CONTEXT' || category === 'CATEGORY_2') {
+        return pickLocalized(language, 'Geçici Kullanım Bağlamı', 'Recent context');
+      }
+      if (category === 'ARCHITECT_STYLE_HIDDEN' || category === 'CATEGORY_3') {
+        return pickLocalized(language, 'Gizli Mimari Stil', 'Hidden architectural style');
+      }
+      return category;
+    },
+    [language],
+  );
   const [stats, setStats] = useState<ProfileStats>({
     historyTotal: 0,
     approvedTotal: 0,
@@ -121,7 +145,11 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
       if (!historyRes.ok) {
         const payload = await historyRes.json().catch(() => ({}));
-        throw new Error(typeof payload?.error === 'string' ? payload.error : 'Profil istatistikleri alınamadı.');
+        throw new Error(
+          typeof payload?.error === 'string'
+            ? payload.error
+            : pickLocalized(language, 'Profil istatistikleri alınamadı.', 'Could not load profile statistics.'),
+        );
       }
 
       const historyPayload = (await historyRes.json()) as { total?: number };
@@ -160,11 +188,15 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
       setMemorySnippets(Array.isArray(memoryPayload.items) ? memoryPayload.items : []);
       setBillingCurrency((billingPayload.items?.[0]?.currency || 'try').toLowerCase());
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : 'Profil istatistikleri alınamadı.');
+      setError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : pickLocalized(language, 'Profil istatistikleri alınamadı.', 'Could not load profile statistics.'),
+      );
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, language]);
 
   useEffect(() => {
     void fetchStats();
@@ -188,26 +220,32 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
       const payload = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) {
-        throw new Error(payload.error || 'Hafıza notu silinemedi.');
+        throw new Error(
+          payload.error || pickLocalized(language, 'Hafıza notu silinemedi.', 'Could not delete memory note.'),
+        );
       }
 
       setMemorySnippets((prev) => prev.filter((entry) => entry.id !== snippetId));
       setDeleteReasonPickerSnippetId(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Hafıza notu silinemedi.');
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : pickLocalized(language, 'Hafıza notu silinemedi.', 'Could not delete memory note.'),
+      );
     } finally {
       setDeletingSnippetId(null);
     }
-  }, []);
+  }, [language]);
 
-  const handleLanguageChange = useCallback((nextLanguage: 'tr' | 'en') => {
+  const handleLanguageChange = useCallback((nextLanguage: SupportedLanguage) => {
     void setPreferredLanguage(nextLanguage);
   }, [setPreferredLanguage]);
 
   const handlePasswordUpdate = useCallback(async () => {
     if (!newPassword.trim()) {
       setPasswordMessage(null);
-      setError('Yeni şifre zorunludur.');
+      setError(pickLocalized(language, 'Yeni şifre zorunludur.', 'New password is required.'));
       return;
     }
 
@@ -222,13 +260,23 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
       });
       setCurrentPassword('');
       setNewPassword('');
-      setPasswordMessage('Şifre güncellendi. Yeni şifrenle tekrar giriş yapabilirsin.');
+      setPasswordMessage(
+        pickLocalized(
+          language,
+          'Şifre güncellendi. Yeni şifrenle tekrar giriş yapabilirsin.',
+          'Password updated. You can sign in again with your new password.',
+        ),
+      );
     } catch (passwordError) {
-      setError(passwordError instanceof Error ? passwordError.message : 'Şifre güncellenemedi.');
+      setError(
+        passwordError instanceof Error
+          ? passwordError.message
+          : pickLocalized(language, 'Şifre güncellenemedi.', 'Could not update password.'),
+      );
     } finally {
       setPasswordLoading(false);
     }
-  }, [currentPassword, newPassword]);
+  }, [currentPassword, newPassword, language]);
 
 
   if (!user) {
@@ -242,16 +290,22 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
       >
         <div className="rounded-2xl border border-white/10 bg-[#0E1628] p-8 text-center">
           <UserCircle2 className="mx-auto text-slate-400 mb-4" size={40} />
-          <h2 className="font-display text-3xl text-white uppercase tracking-wider">Profil</h2>
+          <h2 className="font-display text-3xl text-white uppercase tracking-wider">
+            {pickLocalized(language, 'Profil', 'Profile')}
+          </h2>
           <p className="mt-3 text-slate-300 max-w-xl mx-auto">
-            Profil ve istatistik ekranını görmek için giriş yapmalısın. Giriş yaptıktan sonra Rapido, analiz geçmişi ve galeri yönetimini buradan kontrol edebilirsin.
+            {pickLocalized(
+              language,
+              'Profil ve istatistik ekranını görmek için giriş yapmalısın. Giriş yaptıktan sonra Rapido, analiz geçmişi ve galeri yönetimini buradan kontrol edebilirsin.',
+              'Sign in to view your profile and stats. After signing in, you can manage Rapido, analysis history, and gallery from here.',
+            )}
           </p>
           <button
             type="button"
             onClick={onAuthRequired}
             className="mt-6 px-6 py-3 rounded-lg bg-white text-black font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors"
           >
-            Giriş Yap
+            {pickLocalized(language, 'Giriş Yap', 'Sign in')}
           </button>
         </div>
       </motion.div>
@@ -263,7 +317,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
   const progression = profile?.progression_score ?? 0;
   const wallCount = profile?.wall_of_death_count ?? 0;
   const badges = profile?.earned_badges ?? [];
-  const currentLanguage = profile?.preferred_language === 'en' ? 'en' : 'tr';
+  const currentLanguage = LANGUAGE_OPTIONS.find((option) => option.value === (profile?.preferred_language === 'en' || profile?.preferred_language === 'de' || profile?.preferred_language === 'it' ? profile.preferred_language : 'tr'))?.value ?? 'tr';
 
   return (
     <motion.div
@@ -276,9 +330,16 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
       <div className="flex items-center justify-between gap-4 mb-8">
         <div>
           <h2 className="font-display text-3xl text-white uppercase tracking-wider flex items-center gap-2">
-            <UserCircle2 className="text-cyan-300" /> Profil ve Ayarlar
+            <UserCircle2 className="text-cyan-300" />{' '}
+            {pickLocalized(language, 'Profil ve Ayarlar', 'Profile & settings')}
           </h2>
-          <p className="text-slate-400 mt-1 text-sm">Hesap seviyeni, kullanım durumunu ve galeri durumunu tek ekrandan yönet.</p>
+          <p className="text-slate-400 mt-1 text-sm">
+            {pickLocalized(
+              language,
+              'Hesap seviyeni, kullanım durumunu ve galeri durumunu tek ekrandan yönet.',
+              'Manage your account tier, usage, and gallery status from one screen.',
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
             <button
@@ -286,7 +347,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
               onClick={onOpenRapidoShop}
               className="px-4 py-2 rounded-lg border border-neon-red/40 bg-neon-red/10 text-neon-red text-sm font-mono uppercase tracking-wider hover:bg-neon-red/20"
             >
-              Rapido Mağaza
+              {pickLocalized(language, 'Rapido Mağaza', 'Rapido shop')}
             </button>
           {!isPremium && (
             <button
@@ -294,7 +355,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
               onClick={onUpgradeClick}
               className="px-4 py-2 rounded-lg border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 text-sm font-mono uppercase tracking-wider hover:bg-yellow-500/20"
             >
-              Premium&apos;a Geç
+              {pickLocalized(language, "Premium'a Geç", 'Go Premium')}
             </button>
           )}
         </div>
@@ -317,57 +378,72 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
       <div className="mb-6 rounded-xl border border-white/10 bg-[#101A2F] p-4">
         <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2 flex items-center gap-2">
-          <Globe2 size={14} className="text-cyan-300" /> Kişisel Ayarlar
+          <Globe2 size={14} className="text-cyan-300" />{' '}
+          {pickLocalized(language, 'Kişisel Ayarlar', 'Personal settings')}
         </h3>
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Dil Tercihi</p>
-            <p className="mt-1 text-sm text-slate-300">Arayüz ve AI yanıtları için varsayılan dili seç.</p>
-            <div className="mt-3 inline-flex items-center rounded-full border border-white/15 bg-black/40 p-0.5">
-              <button
-                type="button"
-                onClick={() => handleLanguageChange('tr')}
-                className={`px-3 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-widest ${currentLanguage === 'tr' ? 'bg-white text-black' : 'text-slate-300 hover:text-white'}`}
+            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              {pickLocalized(language, 'Dil Tercihi', 'Language preference')}
+            </p>
+            <p className="mt-1 text-sm text-slate-300">
+              {pickLocalized(
+                language,
+                'Arayüz ve AI yanıtları için varsayılan dili seç.',
+                'Choose the default language for the UI and AI responses.',
+              )}
+            </p>
+            <label className="mt-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-200">
+              <Globe2 size={14} className="text-cyan-300 shrink-0" />
+              <span className="sr-only">{pickLocalized(language, 'Dil seçimi', 'Language selection')}</span>
+              <select
+                value={currentLanguage}
+                onChange={(event) => handleLanguageChange(event.target.value as SupportedLanguage)}
+                className="w-full bg-transparent text-sm text-white outline-none"
+                aria-label={pickLocalized(language, 'Dil seçimi', 'Language selection')}
               >
-                TR
-              </button>
-              <button
-                type="button"
-                onClick={() => handleLanguageChange('en')}
-                className={`px-3 py-1.5 rounded-full text-[10px] font-mono uppercase tracking-widest ${currentLanguage === 'en' ? 'bg-white text-black' : 'text-slate-300 hover:text-white'}`}
-              >
-                EN
-              </button>
-            </div>
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value} className="bg-[#0A0F1A] text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
 
           <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Şifre Değiştir</p>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+              {pickLocalized(language, 'Şifre Değiştir', 'Change password')}
+            </p>
             <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Mevcut Şifre</label>
+                <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                  {pickLocalized(language, 'Mevcut Şifre', 'Current password')}
+                </label>
                 <input
                   type="password"
                   value={currentPassword}
                   onChange={(event) => setCurrentPassword(event.target.value)}
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400"
-                  placeholder="Mevcut şifre"
+                  placeholder={pickLocalized(language, 'Mevcut şifre', 'Current password')}
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">Yeni Şifre</label>
+                <label className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
+                  {pickLocalized(language, 'Yeni Şifre', 'New password')}
+                </label>
                 <input
                   type="password"
                   value={newPassword}
                   onChange={(event) => setNewPassword(event.target.value)}
                   className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-400"
-                  placeholder="Yeni şifre"
+                  placeholder={pickLocalized(language, 'Yeni şifre', 'New password')}
                 />
               </div>
             </div>
             <div className="mt-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                <Lock size={12} /> Hesap güvenliği
+                <Lock size={12} /> {pickLocalized(language, 'Hesap güvenliği', 'Account security')}
               </div>
               <button
                 type="button"
@@ -376,7 +452,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-cyan-100 text-xs font-mono uppercase tracking-wider hover:bg-cyan-500/20 disabled:opacity-50"
               >
                 {passwordLoading ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />}
-                Şifreyi Güncelle
+                {pickLocalized(language, 'Şifreyi Güncelle', 'Update password')}
               </button>
             </div>
             {passwordMessage && (
@@ -388,29 +464,31 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Üyelik</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">
+            {pickLocalized(language, 'Üyelik', 'Membership')}
+          </p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <Crown size={18} className={isPremium ? 'text-yellow-400' : 'text-slate-500'} />
-            {isPremium ? 'Premium' : 'Kayıtlı'}
+            {isPremium ? 'Premium' : pickLocalized(language, 'Kayıtlı', 'Registered')}
           </p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Rapido</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">{pickLocalized(language, 'Rapido', 'Rapido')}</p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <PenTool size={18} className="text-neon-red" /> {rapido.toFixed(1)}x
           </p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Progression</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">{pickLocalized(language, 'Gelişim', 'Progression')}</p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <TrendingUp size={18} className="text-emerald-400" /> {progression}
           </p>
         </div>
 
         <div className="rounded-xl border border-white/10 bg-[#0F1A2E] p-4">
-          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">Wall Count</p>
+          <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-2">{pickLocalized(language, 'Wall of Death Sayısı', 'Wall of Death count')}</p>
           <p className="text-white font-display text-xl flex items-center gap-2">
             <Shield size={18} className="text-red-400" /> {wallCount}
           </p>
@@ -420,29 +498,31 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="rounded-xl border border-white/10 bg-[#101A2F] p-5">
           <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2 flex items-center gap-2">
-            <History size={16} className="text-cyan-300" /> Analiz ve Galeri Özeti
+            <History size={16} className="text-cyan-300" />{' '}
+            {pickLocalized(language, 'Analiz ve Galeri Özeti', 'Analysis & gallery summary')}
           </h3>
 
           {isLoading ? (
             <div className="py-8 flex items-center justify-center text-slate-400">
-              <Loader2 size={18} className="animate-spin mr-2" /> Yükleniyor...
+              <Loader2 size={18} className="animate-spin mr-2" />{' '}
+              {pickLocalized(language, 'Yükleniyor...', 'Loading...')}
             </div>
           ) : (
             <div className="mt-4 space-y-3 text-sm text-slate-200">
               <div className="flex items-center justify-between">
-                <span>Toplam analiz geçmişi</span>
+                <span>{pickLocalized(language, 'Toplam analiz geçmişi', 'Total analyses in history')}</span>
                 <span className="font-bold">{stats.historyTotal}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Aktif galeri paylaşımları</span>
+                <span>{pickLocalized(language, 'Aktif galeri paylaşımları', 'Active gallery posts')}</span>
                 <span className="font-bold text-emerald-300">{stats.approvedTotal}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Galeriden kaldırılanlar</span>
+                <span>{pickLocalized(language, 'Galeriden kaldırılanlar', 'Removed from gallery')}</span>
                 <span className="font-bold text-amber-200">{stats.archivedTotal}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Onay bekleyenler</span>
+                <span>{pickLocalized(language, 'Onay bekleyenler', 'Pending approval')}</span>
                 <span className="font-bold text-slate-300">{stats.pendingTotal}</span>
               </div>
             </div>
@@ -451,12 +531,15 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
         <div className="rounded-xl border border-white/10 bg-[#101A2F] p-5">
           <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2 flex items-center gap-2">
-            <GalleryHorizontal size={16} className="text-neon-red" /> Rozetler ve Kişisel Ayarlar
+            <GalleryHorizontal size={16} className="text-neon-red" />{' '}
+            {pickLocalized(language, 'Rozetler ve Kişisel Ayarlar', 'Badges & personal settings')}
           </h3>
 
           <div className="mt-4">
             {badges.length === 0 ? (
-              <p className="text-sm text-slate-400">Henüz rozet kazanılmadı.</p>
+              <p className="text-sm text-slate-400">
+                {pickLocalized(language, 'Henüz rozet kazanılmadı.', 'No badges earned yet.')}
+              </p>
             ) : (
               <div className="flex flex-wrap gap-2 mb-4">
                 {badges.map((badge) => (
@@ -472,10 +555,18 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
             <div className="space-y-2 text-sm">
               <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-slate-300">
-                Varsayılan analiz uzunluğu ayarı yakında profil üzerinden yönetilebilir olacak.
+                {pickLocalized(
+                  language,
+                  'Varsayılan analiz uzunluğu ayarı yakında profil üzerinden yönetilebilir olacak.',
+                  'Default analysis length will soon be manageable from your profile.',
+                )}
               </div>
               <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-slate-300">
-                Premium kelime hedefi seçimi altyapısı hazırlandı.
+                {pickLocalized(
+                  language,
+                  'Premium kelime hedefi seçimi altyapısı hazırlandı.',
+                  'Premium word-target selection infrastructure is ready.',
+                )}
               </div>
             </div>
           </div>
@@ -484,40 +575,50 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
       <div className="mt-6 rounded-xl border border-white/10 bg-[#101A2F] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-3">
-            <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300">Üyelik ve Satın Alım Özeti</h3>
+            <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300">
+              {pickLocalized(language, 'Üyelik ve Satın Alım Özeti', 'Membership & purchase summary')}
+            </h3>
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onOpenHistory}
               className="px-3 py-2 rounded-lg border border-indigo-400/40 bg-indigo-500/10 text-indigo-100 text-xs font-mono uppercase tracking-wider hover:bg-indigo-500/20"
             >
-              Analiz Geçmişi
+              {pickLocalized(language, 'Analiz Geçmişi', 'Analysis history')}
             </button>
             <button
               type="button"
               onClick={onOpenAccountDetails}
               className="px-3 py-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 text-cyan-100 text-xs font-mono uppercase tracking-wider hover:bg-cyan-500/20"
             >
-              Premium Yönetimi
+              {pickLocalized(language, 'Premium Yönetimi', 'Premium management')}
             </button>
           </div>
         </div>
 
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 text-sm">
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-slate-400 text-xs font-mono uppercase">Toplam Ödeme</p>
+            <p className="text-slate-400 text-xs font-mono uppercase">
+              {pickLocalized(language, 'Toplam Ödeme', 'Total paid')}
+            </p>
             <p className="text-white font-display text-lg mt-1">{formatCurrency(billingSummary.totalAmountCents, billingCurrency)}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-slate-400 text-xs font-mono uppercase">Toplam Rapido Alımı</p>
+            <p className="text-slate-400 text-xs font-mono uppercase">
+              {pickLocalized(language, 'Toplam Rapido Alımı', 'Total Rapido purchased')}
+            </p>
             <p className="text-white font-display text-lg mt-1">{billingSummary.totalRapidoPurchased}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-slate-400 text-xs font-mono uppercase">Rapido İşlem Sayısı</p>
+            <p className="text-slate-400 text-xs font-mono uppercase">
+              {pickLocalized(language, 'Rapido İşlem Sayısı', 'Rapido purchase count')}
+            </p>
             <p className="text-white font-display text-lg mt-1">{billingSummary.rapidoPurchaseCount}</p>
           </div>
           <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-            <p className="text-slate-400 text-xs font-mono uppercase">Üyelik Satın Alımı</p>
+            <p className="text-slate-400 text-xs font-mono uppercase">
+              {pickLocalized(language, 'Üyelik Satın Alımı', 'Membership purchases')}
+            </p>
             <p className="text-white font-display text-lg mt-1">{billingSummary.membershipPurchaseCount}</p>
           </div>
         </div>
@@ -533,11 +634,15 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
 
       <div className="mt-6 rounded-xl border border-white/10 bg-[#101A2F] p-5">
         <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
-          <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300">AI Hafiza Notlari</h3>
+          <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300">
+            {pickLocalized(language, 'AI Hafıza Notları', 'AI memory notes')}
+          </h3>
         </div>
 
         {memorySnippets.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-400">Henüz görünür AI hafıza notu yok.</p>
+          <p className="mt-4 text-sm text-slate-400">
+            {pickLocalized(language, 'Henüz görünür AI hafıza notu yok.', 'No visible AI memory notes yet.')}
+          </p>
         ) : (
           <div className="mt-4 space-y-3">
             {memorySnippets.map((snippet) => (
@@ -545,7 +650,9 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-[10px] font-mono uppercase tracking-widest text-cyan-200">{getMemoryCategoryLabel(snippet.category)}</p>
-                    <p className="mt-1 text-xs text-slate-500 font-mono">{new Date(snippet.updatedAt).toLocaleString('tr-TR')}</p>
+                    <p className="mt-1 text-xs text-slate-500 font-mono">
+                      {new Date(snippet.updatedAt).toLocaleString(language === 'en' ? 'en-US' : 'tr-TR')}
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -553,14 +660,18 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
                     disabled={deletingSnippetId === snippet.id}
                     className="px-2.5 py-1.5 rounded border border-red-400/40 bg-red-500/10 text-red-200 text-[10px] font-mono uppercase tracking-wider hover:bg-red-500/20 disabled:opacity-50"
                   >
-                    {deletingSnippetId === snippet.id ? 'Siliniyor...' : 'Sil'}
+                    {deletingSnippetId === snippet.id
+                      ? pickLocalized(language, 'Siliniyor...', 'Deleting...')
+                      : pickLocalized(language, 'Sil', 'Delete')}
                   </button>
                 </div>
                 {deleteReasonPickerSnippetId === snippet.id && (
                   <div className="mt-3 rounded-md border border-red-400/20 bg-red-500/5 p-2">
-                    <p className="text-[10px] font-mono uppercase tracking-wider text-red-200 mb-2">Silme nedeni sec</p>
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-red-200 mb-2">
+                      {pickLocalized(language, 'Silme nedeni seç', 'Choose a reason')}
+                    </p>
                     <div className="flex flex-wrap gap-2">
-                      {DELETE_REASON_OPTIONS.map((option) => (
+                      {deleteReasonOptions.map((option) => (
                         <button
                           key={option.value}
                           type="button"
@@ -575,7 +686,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
                         onClick={() => setDeleteReasonPickerSnippetId(null)}
                         className="px-2 py-1 rounded border border-white/20 bg-white/5 text-slate-200 text-[10px] font-mono uppercase tracking-wider hover:bg-white/10"
                       >
-                        Vazgec
+                        {pickLocalized(language, 'Vazgeç', 'Cancel')}
                       </button>
                     </div>
                   </div>

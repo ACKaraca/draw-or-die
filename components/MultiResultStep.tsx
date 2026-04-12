@@ -4,6 +4,8 @@ import { ArrowLeft, RefreshCw, Layers, Hammer, Frown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { MultiPersonaData } from '@/types';
 import { SimplePdfPreview } from './SimplePdfPreview';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 interface MultiResultStepProps {
     multiData: MultiPersonaData;
@@ -15,17 +17,18 @@ interface MultiResultStepProps {
 }
 
 export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProject, handlePreserveAnalysis, handleShareToCommunity }: MultiResultStepProps) {
+    const language = useLanguage();
     const personas = useMemo(() => {
         if (Array.isArray(multiData.personas) && multiData.personas.length > 0) {
             return multiData.personas;
         }
 
         return [
-            { id: 'structural', name: 'Strukturcu', critique: multiData.structural?.critique ?? 'Yanit yok.', score: multiData.structural?.score ?? 0 },
-            { id: 'conceptual', name: 'Konseptuel', critique: multiData.conceptual?.critique ?? 'Yanit yok.', score: multiData.conceptual?.score ?? 0 },
-            { id: 'grumpy', name: 'Huysuz Juri', critique: multiData.grumpy?.critique ?? 'Yanit yok.', score: multiData.grumpy?.score ?? 0 },
+            { id: 'structural', name: pickLocalized(language, 'Strüktürcü', 'Structural'), critique: multiData.structural?.critique ?? pickLocalized(language, 'Yanıt yok.', 'No answer.'), score: multiData.structural?.score ?? 0 },
+            { id: 'conceptual', name: pickLocalized(language, 'Konseptüel', 'Conceptual'), critique: multiData.conceptual?.critique ?? pickLocalized(language, 'Yanıt yok.', 'No answer.'), score: multiData.conceptual?.score ?? 0 },
+            { id: 'grumpy', name: pickLocalized(language, 'Huysuz Jüri', 'Grumpy jury'), critique: multiData.grumpy?.critique ?? pickLocalized(language, 'Yanıt yok.', 'No answer.'), score: multiData.grumpy?.score ?? 0 },
         ];
-    }, [multiData]);
+    }, [multiData, language]);
 
     const [activePersonaId, setActivePersonaId] = useState<string>(personas[0]?.id ?? 'structural');
     const effectiveActivePersonaId = personas.some((entry) => entry.id === activePersonaId)
@@ -58,7 +61,7 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
             <div className="flex flex-col gap-4">
                 <div className="flex justify-between items-center mb-2">
                     <h2 className="font-display text-2xl font-bold uppercase tracking-wide flex items-center gap-2 flex-wrap">
-                        <Layers className="text-purple-500" /> Çoklu Jüri Analizi
+                        <Layers className="text-purple-500" /> {pickLocalized(language, 'Çoklu Jüri Analizi', 'Multi jury analysis')}
                         {multiData.projectTitle && <span className="text-sm text-slate-300 normal-case tracking-normal">- {multiData.projectTitle}</span>}
                     </h2>
                 </div>
@@ -67,7 +70,11 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                         mimeType === 'application/pdf' ? (
                             <SimplePdfPreview src={previewUrl} className="h-full w-full" showControls={false} />
                         ) : (
-                            <img src={previewUrl} alt="Analyzed Project" className="w-full h-full object-contain bg-black/50" />
+                            <img
+                                src={previewUrl}
+                                alt={pickLocalized(language, 'Analiz edilmiş proje', 'Analyzed Project')}
+                                className="w-full h-full object-contain bg-black/50"
+                            />
                         )
                     )}
                 </div>
@@ -104,7 +111,7 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                             className="space-y-6"
                         >
                             <div className="flex items-center justify-between bg-black/40 p-4 rounded-lg border border-white/5">
-                                <span className="font-mono text-slate-400">Jüri Notu</span>
+                                <span className="font-mono text-slate-400">{pickLocalized(language, 'Jüri Notu', 'Jury score')}</span>
                                 <span className={`font-display text-3xl font-bold ${getVisual(activePersona.id).color}`}>
                                     {activePersona.score || 0}
                                     <span className="text-lg text-slate-600">/100</span>
@@ -113,7 +120,7 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
 
                             <div className="prose prose-invert prose-slate max-w-none text-sm md:text-base prose-headings:font-display prose-headings:uppercase prose-headings:tracking-wider prose-h3:text-lg prose-h3:text-white/90 prose-p:leading-relaxed prose-a:text-neon-red prose-strong:text-white">
                                 <ReactMarkdown>
-                                    {activePersona.critique || "Eleştiri yüklenemedi."}
+                                    {activePersona.critique || pickLocalized(language, 'Eleştiri yüklenemedi.', 'Could not load critique.')}
                                 </ReactMarkdown>
                             </div>
                         </motion.div>
@@ -126,20 +133,20 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                         disabled={!handlePreserveAnalysis}
                         className="mb-2 w-full py-3 font-bold uppercase tracking-wider border border-emerald-400/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-100 transition-colors flex items-center justify-center gap-2"
                     >
-                        Analizi Koru (1.5 Rapido)
+                        {pickLocalized(language, 'Analizi Koru', 'Preserve analysis')} (1.5 Rapido)
                     </button>
                     <button
                         onClick={handleShareToCommunity}
                         disabled={!handleShareToCommunity}
                         className="mb-2 w-full py-3 font-bold uppercase tracking-wider border border-cyan-400/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                     >
-                        Community&apos;de Paylas
+                        {pickLocalized(language, 'Toplulukta Paylaş', 'Share on community')}
                     </button>
                     <button
                         onClick={handleNewProject}
                         className="w-full py-4 font-bold uppercase tracking-wider bg-white text-black hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
                     >
-                        <RefreshCw size={18} /> Yeni Proje
+                        <RefreshCw size={18} /> {pickLocalized(language, 'Yeni Proje', 'New project')}
                     </button>
                 </div>
             </div>

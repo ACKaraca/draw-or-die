@@ -1,6 +1,8 @@
 import { motion } from 'framer-motion';
 import { Trophy, Medal, Star, Building2, ShieldAlert, Badge as BadgeIcon } from 'lucide-react';
 import { LeaderboardUser, Badge } from '@/types';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 interface LeaderboardStepProps {
     earnedBadges: Badge[];
@@ -9,15 +11,16 @@ interface LeaderboardStepProps {
 }
 
 export function LeaderboardStep({ earnedBadges, userName, score }: LeaderboardStepProps) {
+    const language = useLanguage();
     // Mock Data
     const leaderboardData: LeaderboardUser[] = [
         {
             id: 'u1', name: 'Zeynep Y.', university: 'İTÜ', score: 2840,
-            badges: [{ id: 'b1', name: 'Sirkülasyon Ustası', icon: '🔄', description: '', earned: true }]
+            badges: [{ id: 'b1', name: pickLocalized(language, 'Sirkülasyon Ustası', 'Circulation master'), icon: '🔄', description: '', earned: true }]
         },
         {
             id: 'u2', name: 'Emre C.', university: 'ODTÜ', score: 2650,
-            badges: [{ id: 'b2', name: 'Brutal Jüri\'den Sağ Çıkan', icon: '🩸', description: '', earned: true }, { id: 'b3', name: 'Wall of Death Müdavimi', icon: '💀', description: '', earned: true }]
+            badges: [{ id: 'b2', name: pickLocalized(language, 'Brutal Jüri\'den Sağ Çıkan', 'Survivor of the brutal jury'), icon: '🩸', description: '', earned: true }, { id: 'b3', name: pickLocalized(language, 'Wall of Death Müdavimi', 'Wall of Death regular'), icon: '💀', description: '', earned: true }]
         },
         {
             id: 'u3', name: 'Berkay S.', university: 'YTÜ', score: 2100,
@@ -25,7 +28,7 @@ export function LeaderboardStep({ earnedBadges, userName, score }: LeaderboardSt
         },
         {
             id: 'u4', name: 'Ayşe K.', university: 'Bilkent', score: 1950,
-            badges: [{ id: 'b4', name: 'Betonarme Aşığı', icon: '🏢', description: '', earned: true }]
+            badges: [{ id: 'b4', name: pickLocalized(language, 'Betonarme Aşığı', 'Reinforced concrete lover'), icon: '🏢', description: '', earned: true }]
         },
         {
             id: 'u5', name: 'Canberk T.', university: 'İTÜ', score: 1820,
@@ -50,11 +53,9 @@ export function LeaderboardStep({ earnedBadges, userName, score }: LeaderboardSt
         >
             <div className="text-center mb-8">
                 <h2 className="font-display text-4xl font-bold uppercase tracking-wider mb-4 flex items-center justify-center gap-3">
-                    <Trophy className="text-yellow-500" size={36} /> Global Leaderboard
+                    <Trophy className="text-yellow-500" size={36} /> {pickLocalized(language, 'Küresel Sıralama', 'Global leaderboard')}
                 </h2>
-                <p className="text-slate-400 max-w-2xl mx-auto font-mono text-sm leading-relaxed">
-                    Stüdyolar arası rekabet kızışıyor. Jüride sağ kalarak hem kendi rütbeni hem de okulunun sıralamasını yükselt.
-                </p>
+                <p className="text-slate-400 max-w-2xl mx-auto font-mono text-sm leading-relaxed">{pickLocalized(language, 'Stüdyolar arası rekabet kızışıyor. Jüride sağ kalarak hem kendi rütbeni hem de okulunun sıralamasını yükselt.', 'The competition between studios is heating up. Survive the jury and raise both your rank and your school’s ranking.')}</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -62,9 +63,9 @@ export function LeaderboardStep({ earnedBadges, userName, score }: LeaderboardSt
                 <div className="lg:col-span-8 bg-[#111827] border border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
                     <div className="p-6 border-b border-white/10 bg-black/50 flex items-center justify-between">
                         <h3 className="font-display text-xl font-bold uppercase tracking-wider flex items-center gap-2">
-                            <Star className="text-yellow-500" size={20} /> Top Architects
+                            <Star className="text-yellow-500" size={20} /> {pickLocalized(language, 'En İyi Mimarlar', 'Top architects')}
                         </h3>
-                        <span className="text-xs font-mono text-slate-500">Sezon 1</span>
+                        <span className="text-xs font-mono text-slate-500">{pickLocalized(language, 'Sezon 1', 'Season 1')}</span>
                     </div>
 
                     {/* Current User Row */}
@@ -82,12 +83,12 @@ export function LeaderboardStep({ earnedBadges, userName, score }: LeaderboardSt
                                     </div>
                                 </h4>
                                 <span className="text-xs font-mono text-slate-400 flex items-center gap-1">
-                                    <Building2 size={12} /> Bilinmiyor
+                                    <Building2 size={12} /> {pickLocalized(language, 'Bilinmiyor', 'Unknown')}
                                 </span>
                             </div>
                             <div className="text-right">
                                 <span className="font-bold text-xl text-emerald-400 font-mono">{score}</span>
-                                <span className="text-xs text-slate-500 block">Puan</span>
+                                <span className="text-xs text-slate-500 block">{pickLocalized(language, 'Puan', 'Score')}</span>
                             </div>
                         </div>
                     </div>
@@ -132,7 +133,7 @@ export function LeaderboardStep({ earnedBadges, userName, score }: LeaderboardSt
                     <div className="bg-[#111827] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
                         <div className="p-6 border-b border-white/10 bg-black/50">
                             <h3 className="font-display text-xl font-bold uppercase tracking-wider flex items-center gap-2">
-                                <ShieldAlert className="text-neon-red" size={20} /> Studio Wars
+                                <ShieldAlert className="text-neon-red" size={20} /> {pickLocalized(language, 'Stüdyo Savaşları', 'Studio wars')}
                             </h3>
                         </div>
                         <div className="p-4 space-y-4">
@@ -147,7 +148,7 @@ export function LeaderboardStep({ earnedBadges, userName, score }: LeaderboardSt
                                     <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden relative z-10">
                                         <div className="bg-neon-red h-full" style={{ width: `${(uni.score / universityStats[0].score) * 100}%` }}></div>
                                     </div>
-                                    <p className="text-[10px] text-slate-500 mt-2 font-mono text-right relative z-10">{uni.students} Aktif Öğrenci</p>
+                                    <p className="text-[10px] text-slate-500 mt-2 font-mono text-right relative z-10">{uni.students} {pickLocalized(language, 'Aktif Öğrenci', 'Active students')}</p>
                                 </div>
                             ))}
                         </div>
