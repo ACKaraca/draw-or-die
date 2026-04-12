@@ -110,10 +110,15 @@ function readStringField(node: Record<string, unknown> | null, key: string): str
 
 function fingerprintApiKey(apiKey: string): string {
   if (!apiKey) return 'missing';
-  return createHash('sha256')
-    .update(apiKey)
-    .digest('hex')
-    .slice(0, PROVIDER_DEBUG_KEY_FINGERPRINT_LENGTH);
+  const normalized = apiKey.trim();
+  if (!normalized) return 'missing';
+
+  const visiblePartLength = Math.max(2, Math.floor(PROVIDER_DEBUG_KEY_FINGERPRINT_LENGTH / 3));
+  if (normalized.length <= visiblePartLength * 2) {
+    return `${normalized.slice(0, 2)}...${normalized.slice(-2)}`;
+  }
+
+  return `${normalized.slice(0, visiblePartLength)}...${normalized.slice(-visiblePartLength)}`;
 }
 
 function sanitizeProviderBodySnippet(rawBody: string): string | null {
