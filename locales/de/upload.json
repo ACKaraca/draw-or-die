@@ -1,0 +1,23 @@
+{
+  "mainFile": "Hauptdatei",
+  "extraSheet": "Zusatzblatt {n}",
+  "autoFillWait": "Lade zuerst eine Datei hoch und warte, bis sie verarbeitet wurde.",
+  "autoFillFailed": "Automatische Ausfüllantwort ist fehlgeschlagen. Versuche es erneut.",
+  "autoFillSuccess": "Studio-Desk-Felder wurden automatisch ausgefüllt.",
+  "autoFillError": "Automatisches Ausfüllen fehlgeschlagen.",
+  "closeTutorial": "Tutorial schließen",
+  "skipTutorial": "Tutorial überspringen",
+  "back": "Zurück",
+  "start": "Starten",
+  "next": "Weiter",
+  "replaceFile": "Datei ersetzen",
+  "removeFiles": "Dateien entfernen",
+  "zoomHint": "Vergrößere, verschiebe und prüfe Details. Wechsle mit der Dateiliste unten zwischen den Blättern.",
+  "uploadHint": "Lade ein A0/A1-Blatt, eine Skizze oder ein Rendering hoch",
+  "dragDropHint": "Per Drag & Drop ablegen oder zum Auswählen klicken (JPG, PNG, PDF)",
+  "maxFilesHint": "Bis zu 8 Dateien, insgesamt 35 MB",
+  "studioDeskFiles": "Studio-Desk-Dateien",
+  "tutorialTitle": "Studio-Desk-Tutorial",
+  "tutorialButton": "Tutorial",
+  "studioDesk": "Studio Desk"
+}

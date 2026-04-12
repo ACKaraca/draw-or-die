@@ -148,7 +148,7 @@ export function PremiumResultStep({
       link.click();
     } catch (err) {
       console.error('Export failed', err);
-      alert('Dışa aktarma başarısız oldu.');
+      alert(pickLocalized(language, 'Dışa aktarma başarısız oldu.', 'Export failed.'));
     }
   };
 
@@ -169,33 +169,33 @@ export function PremiumResultStep({
               onClick={handlePreserveAnalysis}
               disabled={!handlePreserveAnalysis}
               className="p-2 border border-emerald-400/40 rounded-lg hover:bg-emerald-500/10 transition-colors text-emerald-100 flex items-center gap-2"
-              title="Analizi Koru"
+              title={pickLocalized(language, 'Analizi Koru', 'Preserve analysis')}
             >
-              <span className="font-bold text-xs uppercase tracking-wider">Analizi Koru</span>
+              <span className="font-bold text-xs uppercase tracking-wider">{pickLocalized(language, 'Analizi Koru', 'Preserve')}</span>
               <span className="text-[10px] font-mono opacity-80">1.5 Rapido</span>
             </button>
             <button
               onClick={handleShareToCommunity}
               disabled={!handleShareToCommunity}
               className="p-2 border border-cyan-400/40 rounded-lg hover:bg-cyan-500/10 transition-colors text-cyan-100 flex items-center gap-2 disabled:opacity-50"
-              title="Community'de paylas"
+              title={pickLocalized(language, 'Community\'de paylaş', 'Share to community')}
             >
               <span className="font-bold text-xs uppercase tracking-wider">Community</span>
             </button>
             <button
               onClick={() => void handleExport()}
               className="p-2 border border-white/20 rounded-lg hover:bg-white/10 transition-colors text-slate-300 flex items-center gap-2"
-              title="Roast'u İndir"
+              title={pickLocalized(language, 'Roast\'ı İndir', 'Download roast')}
             >
-              <span className="font-bold text-xs uppercase tracking-wider">İndir</span>
+              <span className="font-bold text-xs uppercase tracking-wider">{pickLocalized(language, 'İndir', 'Download')}</span>
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
             <button
               onClick={() => void handleExport(2)}
               className="p-2 border border-cyan-400/30 rounded-lg hover:bg-cyan-500/10 transition-colors text-cyan-200 flex items-center gap-2"
-              title="Yüksek boyutlu kaydet"
+              title={pickLocalized(language, 'Yüksek boyutlu kaydet', 'Save high resolution')}
             >
-              <span className="font-bold text-xs uppercase tracking-wider">Yüksek Kaydet</span>
+              <span className="font-bold text-xs uppercase tracking-wider">{pickLocalized(language, 'Yüksek Kaydet', 'High Save')}</span>
               <span className="text-[10px] font-mono opacity-70">1.5 Rapido</span>
             </button>
           </div>

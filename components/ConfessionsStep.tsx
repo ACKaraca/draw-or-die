@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, ThumbsUp, Flame, Send } from 'lucide-react';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 export interface Confession {
     id: string;
@@ -10,10 +12,11 @@ export interface Confession {
 }
 
 export function ConfessionsStep() {
+    const language = useLanguage();
     const [confessions, setConfessions] = useState<Confession[]>([
-        { id: '1', text: 'Jüri paftama bakıp iç çekti ve hiçbir şey demeden sıradakine geçti...', likes: 124, time: '2 saat önce' },
-        { id: '2', text: 'Sabaha kadar render aldım, sabahtan akşama kadar jüri bekledim. Sonuç: &quot;Buraya bir ağaç koysaydın.&quot;', likes: 89, time: '5 saat önce' },
-        { id: '3', text: 'Maketi yapıştırırken parmağımı da makete yapıştırdım, öyle teslim ettim.', likes: 210, time: '1 gün önce' }
+        { id: '1', text: pickLocalized(language, 'Jüri paftama bakıp iç çekti ve hiçbir şey demeden sıradakine geçti...', 'The jury looked at my board, sighed, and moved to the next one without saying anything...'), likes: 124, time: pickLocalized(language, '2 saat önce', '2 hours ago') },
+        { id: '2', text: pickLocalized(language, 'Sabaha kadar render aldım, sabahtan akşama kadar jüri bekledim. Sonuç: &quot;Buraya bir ağaç koysaydın.&quot;', 'I rendered all night and waited for the jury all day. Result: &quot;You should have put a tree here.&quot;'), likes: 89, time: pickLocalized(language, '5 saat önce', '5 hours ago') },
+        { id: '3', text: pickLocalized(language, 'Maketi yapıştırırken parmağımı da makete yapıştırdım, öyle teslim ettim.', 'I glued my finger to the model while assembling it and submitted it like that.'), likes: 210, time: pickLocalized(language, '1 gün önce', '1 day ago') }
     ]);
     const [newConfession, setNewConfession] = useState('');
 
@@ -46,18 +49,16 @@ export function ConfessionsStep() {
         >
             <div className="text-center mb-4">
                 <h2 className="font-display text-4xl font-bold uppercase tracking-wider mb-4 flex items-center justify-center gap-3">
-                    <MessageSquare className="text-purple-500" size={36} /> Studio Confessions
+                    <MessageSquare className="text-purple-500" size={36} /> {pickLocalized(language, 'Stüdyo İtirafları', 'Studio confessions')}
                 </h2>
-                <p className="text-slate-400 max-w-2xl mx-auto font-mono text-sm leading-relaxed">
-                    Stüdyoda yaşananlar stüdyoda kalmaz. Jüriden, projeden, uykusuzluktan şikayet etmek serbest. Tamamen anonim.
-                </p>
+                <p className="text-slate-400 max-w-2xl mx-auto font-mono text-sm leading-relaxed">{pickLocalized(language, 'Stüdyoda yaşananlar stüdyoda kalmaz. Jüriden, projeden, uykusuzluktan şikayet etmek serbest. Tamamen anonim.', 'What happens in the studio does not stay in the studio. You are free to complain about the jury, the project, and the sleepless nights. Completely anonymous.')}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="bg-[#111827] border border-white/10 rounded-2xl p-4 md:p-6 shadow-2xl relative">
                 <textarea
                     value={newConfession}
                     onChange={(e) => setNewConfession(e.target.value)}
-                    placeholder="İçini dök... (Anonim gönderilecektir)"
+                    placeholder={pickLocalized(language, 'İçini dök... (Anonim gönderilecektir)', 'Vent it out... (Will be posted anonymously)')}
                     className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-4 text-white focus:outline-none focus:border-purple-500 transition-colors resize-none mb-4 min-h-[120px]"
                 />
                 <div className="flex justify-end">
@@ -66,7 +67,7 @@ export function ConfessionsStep() {
                         disabled={!newConfession.trim()}
                         className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-lg uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                        <Send size={16} /> İtiraf Et
+                        <Send size={16} /> {pickLocalized(language, 'İtiraf Et', 'Submit confession')}
                     </button>
                 </div>
             </form>

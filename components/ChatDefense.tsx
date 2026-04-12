@@ -2,6 +2,8 @@ import { Crown, X, ArrowRight } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { DefenseMessage } from '@/types';
 import { RAPIDO_COSTS } from '@/lib/pricing';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 interface ChatDefenseProps {
     isPremiumUser: boolean;
@@ -26,6 +28,7 @@ export function ChatDefense({
     setDefenseInput,
     handleDefenseSubmit
 }: ChatDefenseProps) {
+    const language = useLanguage();
     if (!isPremiumUser) return null;
 
     return (
@@ -34,17 +37,21 @@ export function ChatDefense({
                 <div className="p-6 flex items-center justify-between border-t-2 border-transparent hover:border-neon-red transition-all cursor-pointer" onClick={() => setIsDefending(true)}>
                     <div>
                         <h3 className="font-bold text-white mb-1 flex items-center gap-2">
-                            <Crown className="text-yellow-500" size={16} /> Projeyi Savun (Chat Modu)
+                            <Crown className="text-yellow-500" size={16} /> {pickLocalized(language, 'Projeyi Savun (Chat Modu)', 'Defend Your Project (Chat Mode)')}
                         </h3>
-                        <p className="text-sm text-slate-400 text-left">Jüriye karşı projeni savun. İkna edersen ekstra puan kap! (Max 3 Mesaj)</p>
+                        <p className="text-sm text-slate-400 text-left">
+                            {pickLocalized(language, 'Jüriye karşı projeni savun. İkna edersen ekstra puan kap! (Max 3 Mesaj)', 'Defend your project against the jury. If you convince them, you earn bonus points! (Max 3 messages)')}
+                        </p>
                     </div>
-                    <button className="px-4 py-2 border border-neon-red text-neon-red hover:bg-neon-red hover:text-white font-bold transition-colors rounded text-sm text-nowrap pointer-events-none">Savun ({RAPIDO_COSTS.DEFENSE} Rapido)</button>
+                    <button className="px-4 py-2 border border-neon-red text-neon-red hover:bg-neon-red hover:text-white font-bold transition-colors rounded text-sm text-nowrap pointer-events-none">
+                        {pickLocalized(language, 'Savun', 'Defend')} ({RAPIDO_COSTS.DEFENSE} Rapido)
+                    </button>
                 </div>
             ) : (
                 <div className="flex flex-col h-96">
                     <div className="bg-white/5 p-3 flex justify-between items-center border-b border-white/10">
                         <span className="font-bold text-sm flex items-center gap-2">
-                            <Crown className="text-yellow-500" size={14} /> Savunma ({defenseTurnCount}/3)
+                            <Crown className="text-yellow-500" size={14} /> {pickLocalized(language, 'Savunma', 'Defense')} ({defenseTurnCount}/3)
                         </span>
                         <button onClick={() => setIsDefending(false)} className="text-slate-400 hover:text-white bg-black/50 p-1 rounded">
                             <X size={16} />
@@ -66,7 +73,9 @@ export function ChatDefense({
                             </div>
                         )}
                         {defenseMessages.length === 0 && !isDefenseLoading && (
-                            <div className="text-center text-slate-500 text-sm mt-4 italic">İlk savunmanı yazarak jüriye meydan oku.</div>
+                            <div className="text-center text-slate-500 text-sm mt-4 italic">
+                                {pickLocalized(language, 'İlk savunmanı yazarak jüriye meydan oku.', 'Issue your first defense and challenge the jury.')}
+                            </div>
                         )}
                     </div>
                     <div className="p-3 border-t border-white/10 bg-black/50 flex gap-2">
@@ -76,7 +85,9 @@ export function ChatDefense({
                             value={defenseInput}
                             onChange={e => setDefenseInput(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleDefenseSubmit()}
-                            placeholder={defenseTurnCount >= 3 ? "Savunma hakkınız bitti." : "Mesajınızı yazın..."}
+                            placeholder={defenseTurnCount >= 3
+                                ? pickLocalized(language, 'Savunma hakkınız bitti.', 'Your defense turns are over.')
+                                : pickLocalized(language, 'Mesajınızı yazın...', 'Write your message...')}
                             className="flex-1 bg-white/5 border border-white/10 rounded px-3 text-sm text-white focus:outline-none focus:border-neon-red disabled:opacity-50"
                         />
                         <button

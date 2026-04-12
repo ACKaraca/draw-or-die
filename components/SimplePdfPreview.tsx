@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileText, Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 type PdfState = {
   pageCount: number;
@@ -38,6 +40,7 @@ export function SimplePdfPreview({
   showControls = true,
   startPage = 1,
 }: SimplePdfPreviewProps) {
+  const language = useLanguage();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const pdfDocRef = useRef<any>(null);
@@ -135,8 +138,8 @@ export function SimplePdfPreview({
 
   const pageLabel = useMemo(() => {
     if (!state.pageCount) return 'PDF';
-    return `Sayfa ${state.currentPage}/${state.pageCount}`;
-  }, [state.currentPage, state.pageCount]);
+    return pickLocalized(language, `Sayfa ${state.currentPage}/${state.pageCount}`, `Page ${state.currentPage}/${state.pageCount}`);
+  }, [state.currentPage, state.pageCount, language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +190,7 @@ export function SimplePdfPreview({
         setState((prev) => ({
           ...prev,
           loading: false,
-          error: 'PDF önizlemesi yüklenemedi.',
+          error: pickLocalized(language, 'PDF önizlemesi yüklenemedi.', 'PDF preview could not be loaded.'),
           pageCount: 0,
         }));
       }
@@ -242,7 +245,7 @@ export function SimplePdfPreview({
         if (cancelled) return;
         const maybeError = error as { name?: string };
         if (maybeError?.name === 'RenderingCancelledException') return;
-        setState((prev) => ({ ...prev, error: 'PDF sayfası render edilemedi.' }));
+        setState((prev) => ({ ...prev, error: pickLocalized(language, 'PDF sayfası render edilemedi.', 'PDF page could not be rendered.') }));
       }
     };
 
@@ -273,7 +276,7 @@ export function SimplePdfPreview({
             <span className="text-[11px] font-mono text-slate-300 min-w-[86px] text-right">{pageLabel}</span>
             <button
               type="button"
-              title="Yakınlaştır"
+              title={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
               onClick={() => setZoom((z) => clampZoom(z + 0.25))}
               className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
@@ -281,7 +284,7 @@ export function SimplePdfPreview({
             </button>
             <button
               type="button"
-              title="Uzaklaştır"
+              title={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
               onClick={() => setZoom((z) => clampZoom(z - 0.25))}
               className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
@@ -289,7 +292,7 @@ export function SimplePdfPreview({
             </button>
             <button
               type="button"
-              title="Sıfırla"
+              title={pickLocalized(language, 'Sıfırla', 'Reset')}
               onClick={resetView}
               className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
@@ -314,7 +317,7 @@ export function SimplePdfPreview({
       >
         {state.loading ? (
           <div className="absolute inset-0 flex items-center justify-center gap-2 text-slate-300 font-mono text-xs">
-            <Loader2 size={14} className="animate-spin" /> Yükleniyor...
+            <Loader2 size={14} className="animate-spin" /> {pickLocalized(language, 'Yükleniyor...', 'Loading...')}
           </div>
         ) : null}
 
@@ -329,7 +332,7 @@ export function SimplePdfPreview({
           <div className="absolute top-1 right-1 z-10 flex gap-0.5 bg-black/50 rounded p-0.5">
             <button
               type="button"
-              title="Yakınlaştır"
+              title={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
               onClick={() => setZoom((z) => clampZoom(z + 0.25))}
               className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
             >
@@ -337,7 +340,7 @@ export function SimplePdfPreview({
             </button>
             <button
               type="button"
-              title="Uzaklaştır"
+              title={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
               onClick={() => setZoom((z) => clampZoom(z - 0.25))}
               className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
             >
@@ -346,7 +349,7 @@ export function SimplePdfPreview({
             {zoom !== 1 ? (
               <button
                 type="button"
-                title="Sıfırla"
+                title={pickLocalized(language, 'Sıfırla', 'Reset')}
                 onClick={resetView}
                 className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
               >

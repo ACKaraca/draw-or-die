@@ -8,6 +8,8 @@ import {
   getAdminTables,
   getAuthenticatedUserFromRequest,
 } from '@/lib/appwrite/server';
+import { getRequestLanguage } from '@/lib/server-i18n';
+import { ApiMessages } from '@/lib/locales/apiMessages';
 
 const ALLOWED_CATEGORIES = new Set(['general', 'bug', 'feature', 'ux', 'billing']);
 
@@ -56,6 +58,7 @@ function toCompactJson(value: unknown): string {
 }
 
 export async function POST(request: NextRequest) {
+  const lang = getRequestLanguage(request);
   const ip = getClientIp(request);
   const rl = await checkRateLimit(`feedback:${ip}`, {
     maxRequests: Math.max(8, RATE_LIMITS.GENERAL.maxRequests / 6),
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (!rl.allowed) {
-    return NextResponse.json({ ok: false, error: 'Cok fazla geri bildirim gonderildi. Lutfen bekleyin.' }, { status: 429 });
+    return NextResponse.json({ ok: false, error: ApiMessages.feedbackTooMany(lang) }, { status: 429 });
   }
 
   try {
@@ -78,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     const message = typeof payload.message === 'string' ? payload.message.trim() : '';
     if (!message || message.length < 8) {
-      return NextResponse.json({ ok: false, error: 'Geri bildirim en az 8 karakter olmali.' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: ApiMessages.feedbackMinLength(lang) }, { status: 400 });
     }
 
     const user = await getAuthenticatedUserFromRequest(request);
@@ -114,6 +117,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('Feedback submit error:', error);
-    return NextResponse.json({ ok: false, error: 'Geri bildirim kaydedilemedi.' }, { status: 500 });
+    return NextResponse.json({ ok: false, error: ApiMessages.feedbackSaveFailed(lang) }, { status: 500 });
   }
 }

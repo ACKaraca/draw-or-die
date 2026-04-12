@@ -1,0 +1,9 @@
+{
+  "header": "Difendi il tuo progetto (modalità chat)",
+  "description": "Difendi il tuo progetto davanti alla giuria. Se la convinci, guadagni punti bonus! (Max 3 messaggi)",
+  "button": "Difendi",
+  "title": "Difesa",
+  "emptyPrompt": "Sfida la giuria scrivendo la tua prima difesa.",
+  "turnsOver": "I tuoi turni di difesa sono terminati.",
+  "inputPlaceholder": "Scrivi il tuo messaggio..."
+}

@@ -44,7 +44,7 @@ export default function Home() {
   const [preferredLanguage, setPreferredLanguageState] = useState<SupportedLanguage>('tr');
 
   // ---- Auth & rapido economy -----------------------------------------------
-  const { user, profile, setProfile, refreshProfile, setPreferredLanguage } = useAuth();
+  const { user, profile, setProfile, refreshProfile } = useAuth();
 
   const isPremiumUser = profile?.is_premium ?? false;
   const isAnonymous = user ? user.identities?.[0]?.provider === 'anonymous' : false; // P0.3: Guest mode
@@ -109,29 +109,29 @@ export default function Home() {
     setPreferredLanguageState(normalizeLanguage(profile.preferred_language, 'tr'));
   }, [profile?.preferred_language]);
 
-  const handleLanguageChange = (language: SupportedLanguage) => {
-    const nextLanguage = normalizeLanguage(language, 'tr');
-    setPreferredLanguageState(nextLanguage);
-
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('dod_preferred_language', nextLanguage);
-      window.dispatchEvent(new CustomEvent('dod-language-change', { detail: { language: nextLanguage } }));
-    }
-
-    void setPreferredLanguage(nextLanguage);
-  };
-
   const runtimeCopy = preferredLanguage === 'en'
     ? {
       checkoutSuccess: 'Payment successful! Your Premium account is now active.',
       checkoutCancelled: 'Payment cancelled. You can try again anytime.',
       oauthFailed: 'Google sign-in could not be completed. Please try again.',
     }
-    : {
-      checkoutSuccess: 'Ödeme başarılı! Premium hesabınız aktif edildi.',
-      checkoutCancelled: 'Ödeme iptal edildi. İstediğiniz zaman tekrar deneyebilirsiniz.',
-      oauthFailed: 'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
-    };
+    : preferredLanguage === 'de'
+      ? {
+        checkoutSuccess: 'Zahlung erfolgreich! Ihr Premium-Konto ist jetzt aktiv.',
+        checkoutCancelled: 'Zahlung abgebrochen. Sie können es jederzeit erneut versuchen.',
+        oauthFailed: 'Die Anmeldung mit Google konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
+      }
+      : preferredLanguage === 'it'
+        ? {
+          checkoutSuccess: 'Pagamento riuscito! Il tuo account Premium è ora attivo.',
+          checkoutCancelled: 'Pagamento annullato. Puoi riprovare in qualsiasi momento.',
+          oauthFailed: 'L’accesso con Google non è stato completato. Riprova.',
+        }
+        : {
+          checkoutSuccess: 'Ödeme başarılı! Premium hesabınız aktif edildi.',
+          checkoutCancelled: 'Ödeme iptal edildi. İstediğiniz zaman tekrar deneyebilirsiniz.',
+          oauthFailed: 'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
+        };
 
   useEffect(() => {
     if (!routeHydrated) return;
@@ -214,6 +214,7 @@ export default function Home() {
   // ---- File drop handler ---------------------------------------------------
   const { getRootProps, getInputProps, isDragActive } = useDropHandler({
     isPremiumUser,
+    preferredLanguage,
   });
 
   // ---- AI analysis handlers ------------------------------------------------
@@ -281,8 +282,6 @@ export default function Home() {
         setCurrentGallery={setCurrentGallery}
         setStep={setStep}
         onAuthClick={() => setIsAuthModalOpen(true)}
-        preferredLanguage={preferredLanguage}
-        onLanguageChange={handleLanguageChange}
       />
 
       <StepRouter

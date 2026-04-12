@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Crown, PenTool, TrendingUp, Sparkles, LogOut, LogIn, UserCircle2, Menu, X, Wallet, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import type { StepType } from '@/types';
-import type { SupportedLanguage } from '@/lib/i18n';
 import { TIER_DEFAULTS } from '@/lib/pricing';
 
 interface HeaderProps {
@@ -10,8 +10,6 @@ interface HeaderProps {
     setCurrentGallery: (gallery: 'HALL_OF_FAME' | 'WALL_OF_DEATH' | 'COMMUNITY') => void;
     setStep: (step: StepType) => void;
     onAuthClick: () => void;
-    preferredLanguage?: SupportedLanguage;
-    onLanguageChange?: (language: SupportedLanguage) => void;
 }
 
 export function Header({
@@ -19,14 +17,12 @@ export function Header({
     setCurrentGallery,
     setStep,
     onAuthClick,
-    preferredLanguage = 'tr',
-    onLanguageChange,
 }: HeaderProps) {
     const { user, profile, signOut } = useAuth();
+    const language = useLanguage();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement | null>(null);
-    const language: SupportedLanguage = preferredLanguage === 'en' ? 'en' : 'tr';
 
     const copy = useMemo(() => {
         if (language === 'en') {
@@ -118,10 +114,6 @@ export function Header({
         return () => window.removeEventListener('pointerdown', handlePointerDown);
     }, [isProfileMenuOpen]);
 
-    const changeLanguage = (nextLanguage: SupportedLanguage) => {
-        onLanguageChange?.(nextLanguage);
-    };
-
     return (
         <header className="fixed top-0 left-0 w-full z-50 bg-[#0A0F1A]/92 backdrop-blur-xl border-b border-white/10 shadow-lg">
             <div className="h-20 px-3 md:px-6 flex justify-between items-center gap-2">
@@ -143,23 +135,6 @@ export function Header({
                 </div>
 
                 <div className="flex gap-2 items-center">
-                    <div className="hidden sm:flex items-center rounded-full border border-white/15 bg-black/40 p-0.5">
-                        <button
-                            type="button"
-                            onClick={() => changeLanguage('tr')}
-                            className={`px-2 py-1 rounded-full text-[10px] font-mono ${language === 'tr' ? 'bg-white text-black' : 'text-slate-300 hover:text-white'}`}
-                        >
-                            TR
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => changeLanguage('en')}
-                            className={`px-2 py-1 rounded-full text-[10px] font-mono ${language === 'en' ? 'bg-white text-black' : 'text-slate-300 hover:text-white'}`}
-                        >
-                            EN
-                        </button>
-                    </div>
-
                     {user ? (
                         <>
                             <div className="relative hidden md:block" ref={profileMenuRef}>

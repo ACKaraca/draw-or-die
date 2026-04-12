@@ -1,0 +1,9 @@
+{
+  "header": "Defend Your Project (Chat Mode)",
+  "description": "Defend your project against the jury. If you convince them, you earn bonus points! (Max 3 messages)",
+  "button": "Defend",
+  "title": "Defense",
+  "emptyPrompt": "Issue your first defense and challenge the jury.",
+  "turnsOver": "Your defense turns are over.",
+  "inputPlaceholder": "Write your message..."
+}

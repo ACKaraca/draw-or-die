@@ -3,19 +3,27 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { MessageSquare, Send } from 'lucide-react';
+import { ChevronDown, Globe2, MessageSquare, Send } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
-import { pickLocalized } from '@/lib/i18n';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 import { useAuth } from '@/hooks/useAuth';
 import { account } from '@/lib/appwrite';
 
 type FeedbackCategory = 'general' | 'bug' | 'feature' | 'ux' | 'billing';
 
+const LANGUAGE_OPTIONS: Array<{ value: SupportedLanguage; label: string }> = [
+  { value: 'tr', label: 'Türkçe' },
+  { value: 'en', label: 'English' },
+  { value: 'de', label: 'Deutsch' },
+  { value: 'it', label: 'Italiano' },
+];
+
 export function SiteFooter() {
   const year = new Date().getFullYear();
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, setPreferredLanguage } = useAuth();
   const language = useLanguage();
+  const currentLanguage = LANGUAGE_OPTIONS.find((option) => option.value === language) ?? LANGUAGE_OPTIONS[0];
 
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -24,12 +32,22 @@ export function SiteFooter() {
   const [rating, setRating] = useState<number>(5);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [languageSaving, setLanguageSaving] = useState(false);
 
   useEffect(() => {
     if (user?.email) {
       setEmail(user.email);
     }
   }, [user?.email]);
+
+  const handleLanguageChange = async (nextLanguage: SupportedLanguage) => {
+    setLanguageSaving(true);
+    try {
+      await setPreferredLanguage(nextLanguage);
+    } finally {
+      setLanguageSaving(false);
+    }
+  };
 
   const handleSubmitFeedback = async () => {
     const trimmed = message.trim();
@@ -106,6 +124,24 @@ export function SiteFooter() {
           </p>
 
           <nav className="flex flex-wrap items-center gap-3 text-xs font-mono uppercase tracking-wider text-slate-400">
+            <label className="inline-flex items-center gap-2 rounded border border-white/10 bg-black/30 px-2 py-1 text-slate-300">
+              <Globe2 size={12} className="text-cyan-300" />
+              <span className="sr-only">Language</span>
+              <select
+                value={currentLanguage.value}
+                onChange={(event) => void handleLanguageChange(event.target.value as SupportedLanguage)}
+                disabled={languageSaving}
+                className="bg-transparent text-[11px] uppercase tracking-wider text-slate-200 outline-none disabled:opacity-60"
+                aria-label={pickLocalized(language, 'Dil seçimi', 'Language selection')}
+              >
+                {LANGUAGE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value} className="bg-[#0A0F1A] text-white">
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={12} className="text-slate-400" />
+            </label>
             <button
               type="button"
               onClick={() => setIsOpen((prev) => !prev)}

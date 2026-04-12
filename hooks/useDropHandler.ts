@@ -10,6 +10,7 @@ import { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { reportClientError } from '@/lib/logger';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
 const STUDIO_TOTAL_MAX_FILE_SIZE_BYTES = 35 * 1024 * 1024;
 const STUDIO_MAX_FILES = 8;
@@ -19,13 +20,14 @@ const PDF_SECURITY_SCAN_TIMEOUT_MS = 3000;
 
 interface UseDropHandlerOptions {
   isPremiumUser?: boolean;
+  preferredLanguage?: SupportedLanguage;
 }
 
 async function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ''));
-    reader.onerror = () => reject(new Error('Dosya okunamadı.'));
+    reader.onerror = () => reject(new Error('File could not be read.'));
     reader.readAsDataURL(file);
   });
 }
@@ -118,7 +120,7 @@ async function runOptionalPdfTask<T>(
 }
 
 export function useDropHandler(options: UseDropHandlerOptions = {}) {
-  void options;
+  const language = options.preferredLanguage ?? 'tr';
   const maxTotalSizeMb = Math.round((STUDIO_TOTAL_MAX_FILE_SIZE_BYTES / (1024 * 1024)) * 10) / 10;
 
   const {
@@ -145,7 +147,7 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
     };
 
     if (acceptedFiles.length > STUDIO_MAX_FILES) {
-      const message = `Studio Desk en fazla ${STUDIO_MAX_FILES} dosya kabul eder.`;
+      const message = pickLocalized(language, `Studio Desk en fazla ${STUDIO_MAX_FILES} dosya kabul eder.`, `Studio Desk accepts at most ${STUDIO_MAX_FILES} files.`);
       setUploadValidationError(message);
       addToast(message, 'error');
       clearUploadState();
@@ -154,7 +156,7 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
 
     const invalidMime = acceptedFiles.find((file) => !ALLOWED_MIME_TYPES.has(file.type));
     if (invalidMime) {
-      const message = 'Sadece JPG, PNG veya PDF yükleyebilirsiniz.';
+      const message = pickLocalized(language, 'Sadece JPG, PNG veya PDF yükleyebilirsiniz.', 'You can only upload JPG, PNG, or PDF files.');
       setUploadValidationError(message);
       addToast(message, 'error');
       clearUploadState();
@@ -163,7 +165,7 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
 
     const emptyFile = acceptedFiles.find((file) => file.size <= 0);
     if (emptyFile) {
-      const message = 'Boş dosya yüklenemez.';
+      const message = pickLocalized(language, 'Boş dosya yüklenemez.', 'Empty files cannot be uploaded.');
       setUploadValidationError(message);
       addToast(message, 'error');
       clearUploadState();
@@ -173,7 +175,7 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
     const totalSizeBytes = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
     if (totalSizeBytes > STUDIO_TOTAL_MAX_FILE_SIZE_BYTES) {
       const sizeMb = (totalSizeBytes / (1024 * 1024)).toFixed(1);
-      const message = `Toplam dosya boyutu ${sizeMb} MB. Studio Desk limiti ${maxTotalSizeMb} MB. Dosyaları küçültüp tekrar deneyin.`;
+      const message = pickLocalized(language, `Toplam dosya boyutu ${sizeMb} MB. Studio Desk limiti ${maxTotalSizeMb} MB. Dosyaları küçültüp tekrar deneyin.`, `Total file size is ${sizeMb} MB. Studio Desk limit is ${maxTotalSizeMb} MB. Please reduce the files and try again.`);
       setUploadValidationError(message);
       addToast(message, 'error', 6500);
       clearUploadState();
@@ -220,21 +222,24 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
         },
       });
       setUploadValidationError('Ek dosyalar okunamadı. Lütfen tekrar deneyin.');
-      addToast('Ek dosyalar okunamadı. Lütfen tekrar deneyin.', 'error');
+      const message = pickLocalized(language, 'Ek dosyalar okunamadı. Lütfen tekrar deneyin.', 'Additional files could not be read. Please try again.');
+      setUploadValidationError(message);
+      addToast(message, 'error');
       clearUploadState();
       return;
     }
 
     if (additionalFiles.length > 0) {
-      addToast(`${additionalFiles.length + 1} dosya Studio Desk'e yüklendi.`, 'success', 3200);
+      addToast(pickLocalized(language, `${additionalFiles.length + 1} dosya Studio Desk'e yüklendi.`, `${additionalFiles.length + 1} files were uploaded to Studio Desk.`), 'success', 3200);
     }
 
     if (file.type === 'application/pdf') {
       try {
         const isValidPdf = await validatePdfMagicBytes(file);
         if (!isValidPdf) {
-          addToast('Geçersiz PDF dosyası algılandı.', 'error');
-          setUploadValidationError('Geçersiz PDF dosyası algılandı.');
+          const message = pickLocalized(language, 'Geçersiz PDF dosyası algılandı.', 'Invalid PDF file detected.');
+          addToast(message, 'error');
+          setUploadValidationError(message);
           clearUploadState();
           return;
         }
@@ -308,6 +313,7 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
     }
   }, [
     addToast,
+    language,
     maxTotalSizeMb,
     setImage,
     setImageBase64,

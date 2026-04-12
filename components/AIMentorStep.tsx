@@ -7,6 +7,8 @@ import { Badge } from '@/types';
 import { reportClientError } from '@/lib/logger';
 import { account } from '@/lib/appwrite';
 import type { SupportedLanguage } from '@/lib/i18n';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 interface AIMentorStepProps {
     isAuthenticated: boolean;
@@ -76,6 +78,7 @@ type MentorMessagesResponse = {
 
 const MAX_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 const DEFAULT_MENTOR_ERROR = 'Mentor yanıtı alınamadı. Lütfen tekrar deneyin.';
+const DEFAULT_MENTOR_ERROR_EN = 'Could not load mentor response. Please try again.';
 
 type ApiFailure = Error & {
     code?: string;
@@ -123,6 +126,7 @@ function normalizeChatLabel(value: string): string {
 }
 
 export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, isPremiumUser, progressionScore, earnedBadges: _earnedBadges, onNavigateStudioDesk, onUpgradeClick, preferredLanguage = 'tr' }: AIMentorStepProps) {
+    const language = useLanguage();
     const [chats, setChats] = useState<MentorChat[]>([]);
     const [messages, setMessages] = useState<MentorMessage[]>([]);
     const [activeChatId, setActiveChatId] = useState<string | null>(null);
@@ -165,7 +169,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
     const parseError = useCallback(async (response: Response): Promise<ApiFailure> => {
         const payload = await response.json().catch(() => ({}));
         const err = new Error(
-            typeof payload?.error === 'string' ? payload.error : DEFAULT_MENTOR_ERROR
+            typeof payload?.error === 'string' ? payload.error : pickLocalized(language, DEFAULT_MENTOR_ERROR, DEFAULT_MENTOR_ERROR_EN)
         ) as ApiFailure;
         err.code = typeof payload?.code === 'string' ? payload.code : undefined;
         err.status = response.status;
@@ -250,7 +254,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                     setActiveChatId(existingChats[0].id);
                 }
             } catch (error) {
-                const message = error instanceof Error ? error.message : DEFAULT_MENTOR_ERROR;
+                const message = error instanceof Error ? error.message : pickLocalized(language, DEFAULT_MENTOR_ERROR, DEFAULT_MENTOR_ERROR_EN);
                 setNotice(message);
             } finally {
                 if (!cancelled) setIsBootstrapping(false);
@@ -267,7 +271,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
         if (!activeChatId || !isAuthenticated) return;
         setQuickActions([]);
         void loadMessages(activeChatId).catch((error) => {
-            setNotice(error instanceof Error ? error.message : DEFAULT_MENTOR_ERROR);
+            setNotice(error instanceof Error ? error.message : pickLocalized(language, DEFAULT_MENTOR_ERROR, DEFAULT_MENTOR_ERROR_EN));
         });
     }, [activeChatId, isAuthenticated, loadMessages]);
 
@@ -304,12 +308,12 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
 
         const allowed = ['image/jpeg', 'image/png', 'application/pdf'];
         if (!allowed.includes(file.type)) {
-            setNotice('Mentor için sadece JPG, PNG veya PDF yükleyebilirsin.');
+            setNotice(pickLocalized(language, 'Mentor için sadece JPG, PNG veya PDF yükleyebilirsin.', 'You can only upload JPG, PNG, or PDF files for the mentor.'));
             return;
         }
 
         if (file.size > MAX_ATTACHMENT_BYTES) {
-            setNotice('Mentor dosya limiti 2 MB. Lütfen daha küçük dosya yükleyin.');
+            setNotice(pickLocalized(language, 'Mentor dosya limiti 2 MB. Lütfen daha küçük dosya yükleyin.', 'Mentor file limit is 2 MB. Please upload a smaller file.'));
             return;
         }
 
@@ -317,7 +321,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
             const dataUrl = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onload = () => resolve(String(reader.result ?? ''));
-                reader.onerror = () => reject(new Error('file read failed'));
+                reader.onerror = () => reject(new Error(pickLocalized(language, 'Dosya okunamadı.', 'File could not be read.')));
                 reader.readAsDataURL(file);
             });
 
@@ -336,7 +340,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                     error: error instanceof Error ? error.message : String(error),
                 },
             });
-            setNotice('Dosya okunamadı. Lütfen tekrar deneyin.');
+            setNotice(pickLocalized(language, 'Dosya okunamadı. Lütfen tekrar deneyin.', 'File could not be read. Please try again.'));
         }
     };
 
@@ -350,7 +354,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
         if (isLocked && !options?.extendPremiumChat) {
             setBlockedDraftMessage(userText);
             setShowPremiumLimitPrompt(true);
-            setNotice(`Bu sohbet ${activeChat.tokenLimit} token limitine ulasti. 2 Rapido ile devam edebilir veya yeni sohbet acabilirsin.`);
+            setNotice(pickLocalized(language, `Bu sohbet ${activeChat.tokenLimit} token limitine ulaştı. 2 Rapido ile devam edebilir veya yeni sohbet açabilirsin.`, `This chat reached its ${activeChat.tokenLimit} token limit. You can continue with 2 Rapido or start a new chat.`));
             return;
         }
 
@@ -386,7 +390,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
 
             const nextActive = nextChats.find((chat) => chat.id === activeChat.id);
             if (nextActive?.status === 'locked' || (nextActive && nextActive.tokensUsed >= nextActive.tokenLimit)) {
-                setNotice(`Bu sohbet ${nextActive.tokenLimit} token limitine ulaştı. 2 Rapido ile devam veya yeni sohbet seç.`);
+                setNotice(pickLocalized(language, `Bu sohbet ${nextActive.tokenLimit} token limitine ulaştı. 2 Rapido ile devam edebilir veya yeni sohbet seçebilirsin.`, `This chat reached its ${nextActive.tokenLimit} token limit. You can continue with 2 Rapido or choose a new chat.`));
                 setShowPremiumLimitPrompt(true);
             }
 
@@ -394,7 +398,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
             setBlockedDraftMessage(null);
             setPendingAttachment(null);
         } catch (error) {
-            const message = error instanceof Error ? error.message : 'Mentor yanıtı alınamadı.';
+            const message = error instanceof Error ? error.message : pickLocalized(language, 'Mentor yanıtı alınamadı.', 'Could not load mentor response.');
 
             void reportClientError({
                 scope: 'mentor.send',
@@ -407,16 +411,16 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
             if (message === 'MENTOR_PREMIUM_LIMIT_REACHED' || message === 'CHAT_TOKEN_LIMIT_REACHED') {
                 setBlockedDraftMessage(userText);
                 setShowPremiumLimitPrompt(true);
-                setNotice('Sohbet limiti doldu. 2 Rapido ile devam edebilir veya yeni sohbet açabilirsin.');
+                setNotice(pickLocalized(language, 'Sohbet limiti doldu. 2 Rapido ile devam edebilir veya yeni sohbet açabilirsin.', 'The chat limit has been reached. You can continue with 2 Rapido or start a new chat.'));
             } else if (message === 'GUEST_MENTOR_DISABLED' || /misafir hesaplarda kapali/i.test(message)) {
-                setNotice('AI Mentor misafir hesaplarda kapali. Lutfen kayitli hesaba gecin.');
+                setNotice(pickLocalized(language, 'AI Mentor misafir hesaplarda kapalı. Lütfen kayıtlı hesaba geçin.', 'AI Mentor is disabled for guest accounts. Please switch to a registered account.'));
             } else if (message.startsWith('INSUFFICIENT_RAPIDO')) {
                 setShowUpgradePrompt(true);
-                setNotice('Yetersiz Rapido. Lütfen bakiye yükleyin.');
+                setNotice(pickLocalized(language, 'Yetersiz Rapido. Lütfen bakiye yükleyin.', 'Insufficient Rapido. Please top up your balance.'));
             } else if (message.startsWith('RATE_LIMITED:')) {
                 const waitRaw = Number(message.split(':')[1] ?? '60');
                 const waitSeconds = Number.isFinite(waitRaw) ? Math.max(1, Math.ceil(waitRaw)) : 60;
-                setNotice(`Çok fazla istek gönderdiniz. Lütfen ${waitSeconds} sn bekleyiniz.`);
+                setNotice(pickLocalized(language, `Çok fazla istek gönderdiniz. Lütfen ${waitSeconds} sn bekleyiniz.`, `Too many requests. Please wait ${waitSeconds} seconds.`));
             } else {
                 setNotice(message);
             }
@@ -439,7 +443,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
         const chat = chats.find((entry) => entry.id === chatId);
         if (!chat) return;
 
-        const confirmed = window.confirm(`"${normalizeChatLabel(chat.title)}" sohbetini silmek istiyor musun?`);
+        const confirmed = window.confirm(pickLocalized(language, `"${normalizeChatLabel(chat.title)}" sohbetini silmek istiyor musun?`, `Do you want to delete "${normalizeChatLabel(chat.title)}"?`));
         if (!confirmed) return;
 
         setDeletingChatId(chatId);
@@ -475,9 +479,9 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
             setBlockedDraftMessage(null);
             setShowPremiumLimitPrompt(false);
             setShowUpgradePrompt(false);
-            setNotice('Sohbet silindi.');
+            setNotice(pickLocalized(language, 'Sohbet silindi.', 'Chat deleted.'));
         } catch (error) {
-            setNotice(error instanceof Error ? error.message : DEFAULT_MENTOR_ERROR);
+            setNotice(error instanceof Error ? error.message : pickLocalized(language, DEFAULT_MENTOR_ERROR, DEFAULT_MENTOR_ERROR_EN));
         } finally {
             setDeletingChatId(null);
         }
@@ -487,8 +491,8 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
         return (
             <div className="w-full max-w-4xl flex flex-col items-center justify-center p-12 bg-black/50 border border-white/10 rounded-xl">
                 <AlertTriangle size={48} className="text-yellow-500 mb-4" />
-                <h2 className="text-2xl font-display font-bold text-white mb-2 uppercase tracking-wide">AI Mentor için Giriş Gerekli</h2>
-                <p className="text-slate-400 text-center mb-2">Mentor sohbetleri hesabına bağlı saklanır. Devam etmek için giriş yap.</p>
+                <h2 className="text-2xl font-display font-bold text-white mb-2 uppercase tracking-wide">{pickLocalized(language, 'AI Mentor için Giriş Gerekli', 'Sign-in required for AI Mentor')}</h2>
+                <p className="text-slate-400 text-center mb-2">{pickLocalized(language, 'Mentor sohbetleri hesabına bağlı saklanır. Devam etmek için giriş yap.', 'Mentor chats are tied to your account. Sign in to continue.')}</p>
             </div>
         );
     }
@@ -497,8 +501,8 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
         return (
             <div className="w-full max-w-4xl flex flex-col items-center justify-center p-12 bg-black/50 border border-white/10 rounded-xl">
                 <AlertTriangle size={48} className="text-yellow-500 mb-4" />
-                <h2 className="text-2xl font-display font-bold text-white mb-2 uppercase tracking-wide">AI Mentor Misafir Modunda Kapali</h2>
-                <p className="text-slate-400 text-center mb-2">AI Mentor kullanimi icin kayitli hesap gerekli.</p>
+                <h2 className="text-2xl font-display font-bold text-white mb-2 uppercase tracking-wide">{pickLocalized(language, 'AI Mentor Misafir Modunda Kapalı', 'AI Mentor is closed in guest mode')}</h2>
+                <p className="text-slate-400 text-center mb-2">{pickLocalized(language, 'AI Mentor kullanımı için kayıtlı hesap gerekli.', 'A registered account is required to use AI Mentor.')}</p>
             </div>
         );
     }
@@ -506,7 +510,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
     if (isBootstrapping) {
         return (
             <div className="w-full max-w-4xl flex items-center justify-center p-12 bg-black/50 border border-white/10 rounded-xl text-slate-300 font-mono">
-                Sohbet yükleniyor...
+                {pickLocalized(language, 'Sohbet yükleniyor...', 'Loading chat...')}
             </div>
         );
     }
@@ -524,14 +528,14 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                         onClick={handleNewChat}
                         className="w-full py-2.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
                     >
-                        <Plus size={16} /> Yeni Sohbet
+                        <Plus size={16} /> {pickLocalized(language, 'Yeni Sohbet', 'New chat')}
                     </button>
                     <div className="mt-3 text-[11px] font-mono text-slate-400 flex items-center gap-2">
-                        <span>{isPremiumUser ? 'Premium' : 'Kayitli'}</span>
+                        <span>{isPremiumUser ? 'Premium' : pickLocalized(language, 'Kayıtlı', 'Registered')}</span>
                         <div className="relative group inline-flex items-center">
                             <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-slate-500/60 text-[10px]">i</span>
                             <div className="pointer-events-none absolute left-0 top-6 z-30 hidden w-72 rounded-md border border-cyan-400/30 bg-[#0A0F1A] p-2 text-[10px] leading-relaxed text-cyan-100 group-hover:block">
-                                Sohbet basina {isPremiumUser ? '12000' : '6000'} token. Her 1000 token kullaniminda 3 Rapido dusulur.
+                                {pickLocalized(language, `Sohbet başına ${isPremiumUser ? '12000' : '6000'} token. Her 1000 token kullanımında 3 Rapido düşülür.`, `Per chat: ${isPremiumUser ? '12000' : '6000'} tokens. 3 Rapido are deducted for every 1000 tokens used.`)}
                             </div>
                         </div>
                     </div>
@@ -550,7 +554,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                             </button>
                             <button
                                 type="button"
-                                aria-label="Sohbeti sil"
+                                aria-label={pickLocalized(language, 'Sohbeti sil', 'Delete chat')}
                                 onClick={() => void handleDeleteChat(chat.id)}
                                 disabled={deletingChatId === chat.id}
                                 className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-md border border-red-400/30 bg-red-500/10 text-red-200 opacity-100 transition-colors hover:bg-red-500/20 disabled:opacity-50 md:opacity-0 md:group-hover:opacity-100"
@@ -570,7 +574,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                         </div>
                         <div>
                             <h2 className="font-display font-bold text-lg text-white">AI Mentor</h2>
-                            <p className="text-xs text-slate-400 font-mono">Sohbet token limiti: {activeChat ? activeChat.tokenLimit : '-'}</p>
+                            <p className="text-xs text-slate-400 font-mono">{pickLocalized(language, 'Sohbet token limiti:', 'Chat token limit:')} {activeChat ? activeChat.tokenLimit : '-'}</p>
                         </div>
                     </div>
 
@@ -590,22 +594,22 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
 
                 {showUpgradePrompt && (
                     <div className="mx-4 mt-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-3 text-yellow-100 text-sm">
-                        <p className="font-mono text-xs uppercase tracking-wider mb-2">Limit Uyarisi</p>
-                        <p className="mb-3">Mentor kullanimina devam etmek icin Premium plana gecebilir veya Rapido bakiyesi satin alabilirsin.</p>
+                        <p className="font-mono text-xs uppercase tracking-wider mb-2">{pickLocalized(language, 'Limit Uyarısı', 'Limit warning')}</p>
+                        <p className="mb-3">{pickLocalized(language, 'Mentor kullanımına devam etmek için Premium plana geçebilir veya Rapido bakiyesi satın alabilirsin.', 'To keep using the mentor, you can upgrade to Premium or buy Rapido balance.')}</p>
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
                                 onClick={() => onUpgradeClick?.()}
                                 className="px-3 py-2 rounded border border-yellow-400/50 bg-yellow-500/20 text-yellow-50 text-xs font-mono uppercase tracking-wider hover:bg-yellow-500/30"
                             >
-                                Premium Planlari Gor
+                                {pickLocalized(language, 'Premium Planları Gör', 'View Premium plans')}
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setShowUpgradePrompt(false)}
                                 className="px-3 py-2 rounded border border-white/30 bg-white/10 text-slate-100 text-xs font-mono uppercase tracking-wider hover:bg-white/20"
                             >
-                                Kapat
+                                {pickLocalized(language, 'Kapat', 'Close')}
                             </button>
                         </div>
                     </div>
@@ -613,8 +617,8 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
 
                 {showPremiumLimitPrompt && (
                     <div className="mx-4 mt-3 rounded-lg border border-cyan-500/40 bg-cyan-500/10 p-3 text-cyan-100 text-sm">
-                        <p className="font-mono text-xs uppercase tracking-wider mb-2">Sohbet Limiti Doldu</p>
-                        <p className="mb-3">Bu sohbeti kapatmadan devam etmek için 2 Rapido ile token limiti artırabilirsin.</p>
+                        <p className="font-mono text-xs uppercase tracking-wider mb-2">{pickLocalized(language, 'Sohbet Limiti Doldu', 'Chat limit reached')}</p>
+                        <p className="mb-3">{pickLocalized(language, 'Bu sohbeti kapatmadan devam etmek için 2 Rapido ile token limiti artırabilirsin.', 'You can extend the token limit with 2 Rapido to continue without closing this chat.')}</p>
                         <div className="flex flex-wrap gap-2">
                             <button
                                 type="button"
@@ -625,7 +629,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                                 disabled={isLoading || !(blockedDraftMessage || input.trim())}
                                 className="px-3 py-2 rounded border border-cyan-400/50 bg-cyan-500/20 text-cyan-50 text-xs font-mono uppercase tracking-wider hover:bg-cyan-500/30 disabled:opacity-50"
                             >
-                                2x Rapido ile Devam Et
+                                {pickLocalized(language, '2x Rapido ile Devam Et', 'Continue with 2x Rapido')}
                             </button>
                             <button
                                 type="button"
@@ -635,7 +639,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                                 }}
                                 className="px-3 py-2 rounded border border-white/30 bg-white/10 text-slate-100 text-xs font-mono uppercase tracking-wider hover:bg-white/20"
                             >
-                                Yeni Sohbet Aç
+                                {pickLocalized(language, 'Yeni Sohbet Aç', 'Open new chat')}
                             </button>
                         </div>
                     </div>
@@ -684,7 +688,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                         </div>
                     )}
                     {isMessagesLoading && !isLoading && (
-                        <div className="text-xs text-slate-400 font-mono">Mesajlar yükleniyor...</div>
+                        <div className="text-xs text-slate-400 font-mono">{pickLocalized(language, 'Mesajlar yükleniyor...', 'Loading messages...')}</div>
                     )}
                     </div>
                 </div>
@@ -709,14 +713,14 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                         <div className="mb-2 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-cyan-400/40 bg-cyan-400/10 text-cyan-200 text-xs font-mono">
                             <Paperclip size={14} />
                             {pendingAttachment.name} ({(pendingAttachment.sizeBytes / 1024).toFixed(0)} KB)
-                            <button onClick={() => setPendingAttachment(null)} className="hover:text-white" aria-label="Eki kaldır">
+                            <button onClick={() => setPendingAttachment(null)} className="hover:text-white" aria-label={pickLocalized(language, 'Eki kaldır', 'Remove attachment')}>
                                 <X size={14} />
                             </button>
                         </div>
                     )}
 
                     <div className="flex gap-2">
-                        <label className="w-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg cursor-pointer transition-colors" title="2MB JPG/PNG/PDF ekle">
+                        <label className="w-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg cursor-pointer transition-colors" title={pickLocalized(language, '2MB JPG/PNG/PDF ekle', 'Attach 2MB JPG/PNG/PDF') }>
                             <Paperclip size={18} className="text-slate-300" />
                             <input
                                 type="file"
@@ -732,7 +736,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Mentora danış..."
+                            placeholder={pickLocalized(language, 'Mentora danış...', 'Ask the mentor...')}
                             className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors text-sm"
                             disabled={isLoading}
                         />

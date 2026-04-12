@@ -1,0 +1,23 @@
+{
+  "mainFile": "File principale",
+  "extraSheet": "Tavola aggiuntiva {n}",
+  "autoFillWait": "Carica prima un file e attendi che venga elaborato.",
+  "autoFillFailed": "La risposta del riempimento automatico non è arrivata. Riprova.",
+  "autoFillSuccess": "I campi dello Studio Desk sono stati compilati automaticamente.",
+  "autoFillError": "Compilazione automatica non riuscita.",
+  "closeTutorial": "Chiudi tutorial",
+  "skipTutorial": "Salta tutorial",
+  "back": "Indietro",
+  "start": "Inizia",
+  "next": "Avanti",
+  "replaceFile": "Sostituisci file",
+  "removeFiles": "Rimuovi file",
+  "zoomHint": "Ingrandisci, sposta e controlla i dettagli. Passa tra le tavole con l'elenco dei file in basso.",
+  "uploadHint": "Carica una tavola A0/A1, uno schizzo o un render",
+  "dragDropHint": "Trascina e rilascia o clicca per selezionare (JPG, PNG, PDF)",
+  "maxFilesHint": "Fino a 8 file, 35 MB totali",
+  "studioDeskFiles": "File di Studio Desk",
+  "tutorialTitle": "Tutorial di Studio Desk",
+  "tutorialButton": "Tutorial",
+  "studioDesk": "Studio Desk"
+}

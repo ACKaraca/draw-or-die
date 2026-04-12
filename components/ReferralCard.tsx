@@ -36,7 +36,7 @@ export function ReferralCard() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard API başarısız olursa fallback
+      // Clipboard API fallback when direct copy fails.
       const el = document.createElement('textarea');
       el.value = referralLink;
       el.style.position = 'fixed';
@@ -55,7 +55,7 @@ export function ReferralCard() {
 
     const normalized = manualCode.trim().toUpperCase();
     if (!normalized) {
-      setManualError('Referral kodu girin.');
+      setManualError(pickLocalized(language, 'Referral kodu girin.', 'Enter a referral code.'));
       setManualMessage(null);
       return;
     }
@@ -79,7 +79,7 @@ export function ReferralCard() {
 
       const linkPayload = await linkResponse.json().catch(() => ({})) as { error?: string };
       if (!linkResponse.ok) {
-        throw new Error(linkPayload.error || 'Referral kodu kaydedilemedi.');
+        throw new Error(linkPayload.error || pickLocalized(language, 'Referral kodu kaydedilemedi.', 'Could not save referral code.'));
       }
 
       const applyResponse = await fetch('/api/referral/apply', {
@@ -88,14 +88,18 @@ export function ReferralCard() {
       });
       const applyPayload = await applyResponse.json().catch(() => ({})) as { error?: string; rewarded?: boolean };
       if (!applyResponse.ok) {
-        throw new Error(applyPayload.error || 'Referral ödülü uygulanamadı.');
+        throw new Error(applyPayload.error || pickLocalized(language, 'Referral ödülü uygulanamadı.', 'Could not apply referral reward.'));
       }
 
       setManualCode('');
-      setManualMessage(applyPayload.rewarded ? 'Referral kodu uygulandı. +5 Rapido eklendi.' : 'Referral kodu kaydedildi.');
+      setManualMessage(
+        applyPayload.rewarded
+          ? pickLocalized(language, 'Referral kodu uygulandı. +5 Rapido eklendi.', 'Referral code applied. +5 Rapido added.')
+          : pickLocalized(language, 'Referral kodu kaydedildi.', 'Referral code saved.'),
+      );
       await refreshProfile();
     } catch (error) {
-      setManualError(error instanceof Error ? error.message : 'Referral kodu uygulanamadı.');
+      setManualError(error instanceof Error ? error.message : pickLocalized(language, 'Referral kodu uygulanamadı.', 'Could not apply referral code.'));
     } finally {
       setManualLoading(false);
     }
@@ -105,16 +109,24 @@ export function ReferralCard() {
     <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
       <div className="flex items-center gap-2 border-b border-emerald-500/15 pb-3 mb-4">
         <Share2 size={16} className="text-emerald-400" />
-        <h3 className="font-mono text-sm uppercase tracking-widest text-emerald-300">
-          Arkadaşını Davet Et
+          <h3 className="font-mono text-sm uppercase tracking-widest text-emerald-300">
+          {pickLocalized(language, 'Arkadaşını Davet Et', 'Invite a friend')}
         </h3>
       </div>
 
       <p className="text-sm text-slate-300 mb-1">
-        Referral linkini paylaş. Arkadaşın hesabını doğruladıktan sonra <span className="text-emerald-300 font-bold">ikiniz de 5 Rapido</span> kazanırsınız.
+        {pickLocalized(
+          language,
+          'Referral linkini paylaş. Arkadaşın hesabını doğruladıktan sonra ikiniz de 5 Rapido kazanırsınız.',
+          'Share your referral link. After your friend verifies their account, both of you earn 5 Rapido.',
+        )}
       </p>
       <p className="text-xs text-slate-500 mb-4">
-        Ödül, email doğrulaması tamamlandıktan sonra otomatik olarak eklenir.
+        {pickLocalized(
+          language,
+          'Ödül, email doğrulaması tamamlandıktan sonra otomatik olarak eklenir.',
+          'The reward is added automatically after email verification is complete.',
+        )}
       </p>
 
       <div className="mb-4 rounded-lg border border-emerald-500/20 bg-black/20 px-3 py-2.5">
@@ -137,24 +149,32 @@ export function ReferralCard() {
       </div>
 
       <p className="mt-3 text-[11px] font-mono text-slate-500 uppercase tracking-wider">
-        Referral kodun: <span className="text-slate-300">{referralCode}</span>
+        {pickLocalized(language, 'Referral kodun:', 'Your referral code:')} <span className="text-slate-300">{referralCode}</span>
       </p>
 
       <div className="mt-5 border-t border-emerald-500/15 pt-4">
         {referredBy ? (
           <div className="rounded-lg border border-emerald-500/20 bg-black/20 px-3 py-2.5">
-            <p className="text-[11px] font-mono uppercase tracking-wider text-emerald-200">Girilen referral kodu</p>
+            <p className="text-[11px] font-mono uppercase tracking-wider text-emerald-200">
+              {pickLocalized(language, 'Girilen referral kodu', 'Applied referral code')}
+            </p>
             <p className="mt-1 text-sm font-mono text-white">{referredBy}</p>
           </div>
         ) : (
           <>
-            <p className="text-xs text-slate-400">Referral kodunu manuel girerek bir kez ödül alabilirsin.</p>
+            <p className="text-xs text-slate-400">
+              {pickLocalized(
+                language,
+                'Referral kodunu manuel girerek bir kez ödül alabilirsin.',
+                'You can enter a referral code manually once to receive the reward.',
+              )}
+            </p>
             <div className="mt-3 flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={manualCode}
                 onChange={(event) => setManualCode(event.target.value.toUpperCase().replace(/\s+/g, '').slice(0, 16))}
-                placeholder="ABCD1234"
+                placeholder={pickLocalized(language, 'ABCD1234', 'ABCD1234')}
                 className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5 text-sm font-mono uppercase tracking-wider text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-emerald-400"
                 disabled={manualLoading}
               />
@@ -164,7 +184,7 @@ export function ReferralCard() {
                 disabled={manualLoading}
                 className="inline-flex items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-emerald-100 text-xs font-mono uppercase tracking-wider hover:bg-emerald-500/20 disabled:opacity-50"
               >
-                {manualLoading ? 'Uygulanıyor...' : 'Kodu Uygula'}
+                {manualLoading ? pickLocalized(language, 'Uygulanıyor...', 'Applying...') : pickLocalized(language, 'Kodu Uygula', 'Apply code')}
               </button>
             </div>
             {manualError && <p className="mt-2 text-sm text-red-300">{manualError}</p>}

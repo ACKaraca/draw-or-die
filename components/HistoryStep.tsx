@@ -8,20 +8,21 @@ import { account } from '@/lib/appwrite';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { aspectRatioToStyleValue, clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
 
 const PAGE_SIZE = 12;
 
-const ANALYSIS_KIND_LABELS: Record<string, string> = {
-  SINGLE_JURY: 'Tek Jüri',
-  REVISION_SAME: 'Revizyon',
-  MULTI_JURY: 'Çoklu Jüri',
-  PREMIUM_RESCUE: 'Premium Rescue',
-  AUTO_CONCEPT: 'Konsept Üretimi',
-  MATERIAL_BOARD: 'Malzeme Paftası',
-};
-
-function getAnalysisKindLabel(kind: string): string {
-  return ANALYSIS_KIND_LABELS[kind] ?? kind.replace(/_/g, ' ');
+function getAnalysisKindLabel(kind: string, language: ReturnType<typeof useLanguage>): string {
+  switch (kind) {
+    case 'SINGLE_JURY': return pickLocalized(language, 'Tek Jüri', 'Single jury');
+    case 'REVISION_SAME': return pickLocalized(language, 'Revizyon', 'Revision');
+    case 'MULTI_JURY': return pickLocalized(language, 'Çoklu Jüri', 'Multi jury');
+    case 'PREMIUM_RESCUE': return pickLocalized(language, 'Premium Rescue', 'Premium rescue');
+    case 'AUTO_CONCEPT': return pickLocalized(language, 'Konsept Üretimi', 'Concept generation');
+    case 'MATERIAL_BOARD': return pickLocalized(language, 'Malzeme Paftası', 'Material board');
+    default: return kind.replace(/_/g, ' ');
+  }
 }
 
 function parseMultiHistoryCritique(raw: string) {
@@ -102,6 +103,7 @@ function toHistoryExcerpt(item: AnalysisHistoryItem): string {
 }
 
 export function HistoryStep() {
+  const language = useLanguage();
   const [items, setItems] = useState<AnalysisHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,7 +161,7 @@ export function HistoryStep() {
       const res = await authedFetch(`/api/analysis-history?${params.toString()}`);
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
-        throw new Error(typeof payload?.error === 'string' ? payload.error : 'Geçmiş yüklenemedi.');
+        throw new Error(typeof payload?.error === 'string' ? payload.error : pickLocalized(language, 'Geçmiş yüklenemedi.', 'Could not load history.'));
       }
 
       const payload = (await res.json()) as {
@@ -178,11 +180,11 @@ export function HistoryStep() {
       setTotal(nextTotal);
       setOffset(nextOffset + PAGE_SIZE);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Geçmiş yüklenemedi.');
+      setError(err instanceof Error ? err.message : pickLocalized(language, 'Geçmiş yüklenemedi.', 'Could not load history.'));
     } finally {
       setIsLoading(false);
     }
-  }, [authedFetch]);
+  }, [authedFetch, language]);
 
   useEffect(() => {
     void fetchHistory(0, true);
@@ -247,7 +249,7 @@ export function HistoryStep() {
       };
 
       if (!response.ok) {
-        throw new Error(payload.error || 'Analiz silinemedi.');
+        throw new Error(payload.error || pickLocalized(language, 'Analiz silinemedi.', 'Could not delete analysis.'));
       }
 
       setItems((prev) => prev.map((entry) =>
@@ -261,9 +263,9 @@ export function HistoryStep() {
           : entry,
       ));
 
-      addToast('Analiz ve proje silindi olarak işaretlendi. 30 gün sonra kalıcı silinecek.', 'success');
+      addToast(pickLocalized(language, 'Analiz ve proje silindi olarak işaretlendi. 30 gün sonra kalıcı silinecek.', 'Analysis and project marked deleted. They will be permanently removed after 30 days.'), 'success');
     } catch (deleteError) {
-      addToast(deleteError instanceof Error ? deleteError.message : 'Analiz silinemedi.', 'error');
+      addToast(deleteError instanceof Error ? deleteError.message : pickLocalized(language, 'Analiz silinemedi.', 'Could not delete analysis.'), 'error');
     } finally {
       setDeletingId(null);
     }
@@ -283,9 +285,9 @@ export function HistoryStep() {
       <div className="flex items-center justify-between gap-4 mb-8">
         <div>
           <h2 className="font-display text-3xl font-bold uppercase tracking-wider text-white flex items-center gap-2">
-            <Clock3 className="text-cyan-400" /> Analiz Geçmişi
+            <Clock3 className="text-cyan-400" /> {pickLocalized(language, 'Analiz Geçmişi', 'Analysis history')}
           </h2>
-          <p className="text-slate-400 text-sm mt-1">Önceki jüri raporlarını ve puanlarını buradan inceleyebilirsin.</p>
+          <p className="text-slate-400 text-sm mt-1">{pickLocalized(language, 'Önceki jüri raporlarını ve puanlarını buradan inceleyebilirsin.', 'Review previous jury reports and scores here.')}</p>
         </div>
 
         <div className="flex items-center gap-2 text-xs font-mono">
@@ -293,25 +295,25 @@ export function HistoryStep() {
             onClick={() => setFilter('ALL')}
             className={`px-3 py-2 border rounded ${filter === 'ALL' ? 'border-cyan-400 text-cyan-300 bg-cyan-500/10' : 'border-white/20 text-slate-300 hover:text-white'}`}
           >
-            Tümü
+            {pickLocalized(language, 'Tümü', 'All')}
           </button>
           <button
             onClick={() => setFilter('HALL_OF_FAME')}
             className={`px-3 py-2 border rounded ${filter === 'HALL_OF_FAME' ? 'border-emerald-400 text-emerald-300 bg-emerald-500/10' : 'border-white/20 text-slate-300 hover:text-white'}`}
           >
-            Hall
+            {pickLocalized(language, 'Hall', 'Hall')}
           </button>
           <button
             onClick={() => setFilter('WALL_OF_DEATH')}
             className={`px-3 py-2 border rounded ${filter === 'WALL_OF_DEATH' ? 'border-red-400 text-red-300 bg-red-500/10' : 'border-white/20 text-slate-300 hover:text-white'}`}
           >
-            Wall
+            {pickLocalized(language, 'Wall', 'Wall')}
           </button>
           <button
             onClick={() => setFilter('NONE')}
             className={`px-3 py-2 border rounded ${filter === 'NONE' ? 'border-slate-400 text-slate-200 bg-slate-500/10' : 'border-white/20 text-slate-300 hover:text-white'}`}
           >
-            Galeri Dışı
+            {pickLocalized(language, 'Galeri Dışı', 'Outside gallery')}
           </button>
         </div>
       </div>
@@ -341,16 +343,16 @@ export function HistoryStep() {
                 <h3 className="font-display text-lg font-bold text-white leading-tight line-clamp-1">{item.title}</h3>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-300">
-                    {getAnalysisKindLabel(item.analysisKind)}
+                    {getAnalysisKindLabel(item.analysisKind, language)}
                   </span>
                   {item.galleryType === 'HALL_OF_FAME' && <Trophy size={16} className="text-emerald-400" />}
                   {item.galleryType === 'WALL_OF_DEATH' && <Skull size={16} className="text-red-400" />}
                 </div>
               </div>
-              <p className="text-xs text-slate-400 mb-3 font-mono">{new Date(item.createdAt).toLocaleString('tr-TR')}</p>
+              <p className="text-xs text-slate-400 mb-3 font-mono">{new Date(item.createdAt).toLocaleString(language === 'en' ? 'en-US' : 'tr-TR')}</p>
               {renderHistoryPreview(item)}
               <div className="mt-4 flex items-center justify-between text-xs font-mono">
-                <span className="text-slate-400">Puan</span>
+                <span className="text-slate-400">{pickLocalized(language, 'Puan', 'Score')}</span>
                 <span className="text-white font-bold">{typeof item.score === 'number' ? item.score : '-'}</span>
               </div>
               <button
@@ -359,7 +361,7 @@ export function HistoryStep() {
                 disabled={item.isDeleted}
                 className="mt-4 w-full rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-cyan-100 text-xs font-mono uppercase tracking-wider hover:bg-cyan-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
               >
-                <ExternalLink size={13} /> Analizi Aç
+                <ExternalLink size={13} /> {pickLocalized(language, 'Analizi Aç', 'Open analysis')}
               </button>
               <button
                 type="button"
@@ -368,12 +370,12 @@ export function HistoryStep() {
                 className="mt-2 w-full rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-red-100 text-xs font-mono uppercase tracking-wider hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <Trash2 size={13} />
-                {item.isDeleted ? 'Silindi (30 gun icinde kalici silinecek)' : (deletingId === item.id ? 'Siliniyor...' : 'Analizi ve Projeyi Sil')}
+                {item.isDeleted ? pickLocalized(language, 'Silindi (30 gün içinde kalıcı silinecek)', 'Deleted (permanently removed within 30 days)') : (deletingId === item.id ? pickLocalized(language, 'Siliniyor...', 'Deleting...') : pickLocalized(language, 'Analizi ve Projeyi Sil', 'Delete analysis and project'))}
               </button>
               {item.isDeleted && (
                 <p className="mt-2 text-[11px] text-red-200 font-mono">
-                  Analiz ve proje silindi olarak işaretlendi.
-                  {item.purgeAfter ? ` Kalıcı silinme: ${new Date(item.purgeAfter).toLocaleString('tr-TR')}` : ''}
+                  {pickLocalized(language, 'Analiz ve proje silindi olarak işaretlendi.', 'Analysis and project marked deleted.')}
+                  {item.purgeAfter ? ` ${pickLocalized(language, 'Kalıcı silinme:', 'Permanent removal:')} ${new Date(item.purgeAfter).toLocaleString(language === 'en' ? 'en-US' : 'tr-TR')}` : ''}
                 </p>
               )}
             </div>
@@ -384,7 +386,7 @@ export function HistoryStep() {
       {!isLoading && visibleItems.length === 0 && !error && (
         <div className="col-span-full text-center py-16 text-slate-500 font-mono border border-white/10 rounded-xl mt-4">
           <AlertTriangle className="mx-auto mb-3" />
-          Henüz kayıtlı analiz geçmişi bulunamadı.
+          {pickLocalized(language, 'Henüz kayıtlı analiz geçmişi bulunamadı.', 'No saved analysis history yet.')}
         </div>
       )}
 
@@ -397,10 +399,10 @@ export function HistoryStep() {
           >
             {isLoading ? (
               <>
-                <Loader2 size={16} className="animate-spin" /> Yükleniyor...
+                <Loader2 size={16} className="animate-spin" /> {pickLocalized(language, 'Yükleniyor...', 'Loading...')}
               </>
             ) : (
-              'Daha Fazla Geçmiş'
+              pickLocalized(language, 'Daha Fazla Geçmiş', 'Load more history')
             )}
           </button>
         </div>

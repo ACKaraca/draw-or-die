@@ -17,6 +17,14 @@ import { RAPIDO_COSTS, TIER_DEFAULTS } from '@/lib/pricing';
 import { generateAIResponse } from '@/lib/ai';
 import { SimplePdfPreview } from '@/components/SimplePdfPreview';
 import type { SupportedLanguage } from '@/lib/i18n';
+import { pickLocalized } from '@/lib/i18n';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import {
+  STUDIO_CATEGORY_VALUES,
+  STUDIO_PERSONA_I18N,
+  studioCategoryLabel,
+  studioTutorialSteps,
+} from '@/lib/locales/uploadForm';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import type { AdditionalUpload } from '@/stores/drawOrDieStore';
 
@@ -67,53 +75,7 @@ interface UploadStepProps {
   preferredLanguage?: SupportedLanguage;
 }
 
-const CATEGORY_OPTIONS = [
-  'Vaziyet Planı',
-  'Kentsel Tasarım',
-  'Kamusal Yapı',
-  'Eğitim Yapısı',
-  'Sağlık Yapısı',
-  'Konut',
-  'Karma Kullanım',
-  'Pafta Tasarımı',
-  'Render',
-  'Strüktürel Kesit',
-  'Konsept Diyagram',
-  'Peyzaj ve Açık Alan',
-  'Restorasyon / Yeniden İşlevlendirme',
-  'İç Mekan Kurgusu',
-];
-
-const PERSONA_OPTIONS: Array<{ id: JuryPersonaId; label: string; detail: string }> = [
-  { id: 'constructive', label: 'Yapıcı Mentor', detail: 'Dengeyi korur, net iyileştirme adımları verir.' },
-  { id: 'structural', label: 'Strüktürcü', detail: 'Taşıyıcı sistem, uygulanabilirlik ve teknik tutarlılığa odaklanır.' },
-  { id: 'conceptual', label: 'Konseptüel', detail: 'Mekânsal fikir, anlatı ve kavramsal bağlantıları sorgular.' },
-  { id: 'grumpy', label: 'Huysuz Jüri', detail: 'Sert, doğrudan ve acımasız teknik geri bildirim verir.' },
-  { id: 'contextualist', label: 'Bağlamcı', detail: 'Yer, iklim, kamusal akış ve çevre ilişkilerini öne çıkarır.' },
-  { id: 'sustainability', label: 'Sürdürülebilirlik Uzmanı', detail: 'Enerji, malzeme ömrü ve karbon etkisini değerlendirir.' },
-];
-
-const PERSONA_MAP = Object.fromEntries(PERSONA_OPTIONS.map((persona) => [persona.id, persona])) as Record<
-  JuryPersonaId,
-  (typeof PERSONA_OPTIONS)[number]
->;
-
 const STUDIO_TUTORIAL_STORAGE_KEY = 'dod_studio_tutorial_seen_v1';
-
-const TUTORIAL_STEPS = [
-  {
-    title: 'Studio Desk Hoş Geldin',
-    text: 'Ana dosyanı ve ek paftalarını aynı anda yükleyebilirsin. Sol panelde dosyalar arasında geçiş yaparak tek tek inceleme yap.',
-  },
-  {
-    title: 'Otomatik Doldur',
-    text: 'Konu, arazi, konsept ve savunma alanlarını AI ile doldurabilirsin. Her alanın yanında otomatik anahtarını açıp kapat.',
-  },
-  {
-    title: 'Analiz Derinliği',
-    text: 'Üyelik seviyene göre analiz uzunluğu değişir. Misafir kısa, kayıtlı kısa/orta, premium kısa/orta/uzun seçeneklerine sahiptir.',
-  },
-];
 
 function safeParseJsonObject(value: string): Record<string, unknown> {
   try {
@@ -140,11 +102,15 @@ function toDataUrl(base64: string, mimeType: string): string {
 
 function AutoToggle({
   enabled,
-  label,
+  title,
+  onLabel,
+  offLabel,
   onToggle,
 }: {
   enabled: boolean;
-  label: string;
+  title: string;
+  onLabel: string;
+  offLabel: string;
   onToggle: () => void;
 }) {
   return (
@@ -152,9 +118,9 @@ function AutoToggle({
       type="button"
       onClick={onToggle}
       className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider transition-colors ${enabled ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200' : 'border-white/20 bg-white/5 text-slate-400 hover:text-slate-200'}`}
-      title={`${label} alanı için otomatik doldurmayı ${enabled ? 'kapat' : 'aç'}`}
+      title={title}
     >
-      <Sparkles size={10} /> {enabled ? 'Otomatik Açık' : 'Otomatik Kapalı'}
+      <Sparkles size={10} /> {enabled ? onLabel : offLabel}
     </button>
   );
 }
@@ -185,8 +151,28 @@ export function UploadStep({
   guestDrawingCount,
   pdfText,
   onGuestUpgradeRequired,
-  preferredLanguage = 'tr',
+  preferredLanguage: _preferredLanguage = 'tr',
 }: UploadStepProps) {
+  const language = useLanguage();
+  const tutorialSteps = useMemo(() => studioTutorialSteps(language), [language]);
+  const personaOptions = useMemo(
+    () =>
+      STUDIO_PERSONA_I18N.map((p) => ({
+        id: p.id,
+        label: pickLocalized(language, p.label.tr, p.label.en),
+        detail: pickLocalized(language, p.detail.tr, p.detail.en),
+      })),
+    [language],
+  );
+  const personaMap = useMemo(
+    () =>
+      Object.fromEntries(personaOptions.map((persona) => [persona.id, persona])) as Record<
+        JuryPersonaId,
+        (typeof personaOptions)[number]
+      >,
+    [personaOptions],
+  );
+
   const canRunAnalysis = Boolean(image) && Boolean(imageBase64) && isAuthenticated && !uploadValidationError;
   const isFileProcessing = Boolean(image) && !Boolean(imageBase64);
   const isGuestAtLimit = isAnonymous && !isPremiumUser && guestDrawingCount >= 1;
@@ -222,7 +208,7 @@ export function UploadStep({
 
       files.push({
         id: 'main-file',
-        badge: 'Ana Dosya',
+        badge: pickLocalized(language, 'Ana Dosya', 'Main file'),
         name: image.name,
         mimeType: resolvedMime || 'application/octet-stream',
         sizeBytes: image.size,
@@ -233,7 +219,7 @@ export function UploadStep({
     additionalUploads.forEach((entry, index) => {
       files.push({
         id: `extra-${index}`,
-        badge: `Ek Dosya ${index + 1}`,
+        badge: pickLocalized(language, `Ek Dosya ${index + 1}`, `Extra sheet ${index + 1}`),
         name: entry.name,
         mimeType: entry.mimeType,
         sizeBytes: entry.sizeBytes,
@@ -242,7 +228,7 @@ export function UploadStep({
     });
 
     return files;
-  }, [additionalUploads, image, imageBase64, mimeType, previewUrl]);
+  }, [additionalUploads, image, imageBase64, language, mimeType, previewUrl]);
 
   const setImageState = useDrawOrDieStore((s) => s.setImage);
   const setImageBase64State = useDrawOrDieStore((s) => s.setImageBase64);
@@ -298,7 +284,7 @@ export function UploadStep({
     const nextSingle = formData.singlePersonaId || 'constructive';
     const currentMulti = Array.isArray(formData.multiPersonaIds) ? formData.multiPersonaIds : [];
     const uniqueMulti = Array.from(new Set(
-      currentMulti.filter((entry): entry is JuryPersonaId => Boolean(PERSONA_MAP[entry as JuryPersonaId])),
+      currentMulti.filter((entry): entry is JuryPersonaId => Boolean(personaMap[entry as JuryPersonaId])),
     ));
     const normalizedMulti: JuryPersonaId[] = uniqueMulti.length >= 2
       ? uniqueMulti.slice(0, 4)
@@ -311,7 +297,7 @@ export function UploadStep({
         multiPersonaIds: normalizedMulti,
       });
     }
-  }, [formData, setFormData]);
+  }, [formData, personaMap, setFormData]);
 
   useEffect(() => {
     if (selectedPreviewIndex >= previewFiles.length && previewFiles.length > 0) {
@@ -388,7 +374,7 @@ export function UploadStep({
   };
 
   const moveSinglePersona = (direction: 'left' | 'right') => {
-    const ids = PERSONA_OPTIONS.map((persona) => persona.id);
+    const ids = personaOptions.map((persona) => persona.id);
     const currentIndex = Math.max(0, ids.indexOf(formData.singlePersonaId));
     const nextIndex = direction === 'left'
       ? (currentIndex - 1 + ids.length) % ids.length
@@ -403,7 +389,7 @@ export function UploadStep({
     }
 
     if (!imageBase64 || !mimeType) {
-      setAutoFillNotice('Önce bir dosya yükleyip işlenmesini beklemelisin.');
+      setAutoFillNotice(pickLocalized(language, 'Önce bir dosya yükleyip işlenmesini beklemelisin.', 'Upload a file and wait for it to process first.'));
       return;
     }
 
@@ -412,12 +398,12 @@ export function UploadStep({
 
     try {
       const response = await generateAIResponse({
-        locale: preferredLanguage,
+        locale: language,
         operation: 'AUTO_FILL_FORM',
         imageBase64,
         imageMimeType: mimeType,
         params: {
-          language: preferredLanguage,
+          language,
           topic: formData.topic,
           site: formData.site,
           concept: formData.concept,
@@ -436,7 +422,7 @@ export function UploadStep({
       });
 
       if (!response?.result) {
-        setAutoFillNotice('Otomatik doldurma yanıtı alınamadı. Tekrar dene.');
+        setAutoFillNotice(pickLocalized(language, 'Otomatik doldurma yanıtı alınamadı. Tekrar dene.', 'Auto-fill response failed. Try again.'));
         return;
       }
 
@@ -457,7 +443,7 @@ export function UploadStep({
           autoFillFields.category &&
           typeof payload.category === 'string' &&
           payload.category.trim() &&
-          CATEGORY_OPTIONS.includes(payload.category.trim())
+          STUDIO_CATEGORY_VALUES.includes(payload.category.trim() as (typeof STUDIO_CATEGORY_VALUES)[number])
             ? payload.category.trim()
             : formData.category,
         analysisLength:
@@ -467,9 +453,9 @@ export function UploadStep({
       };
 
       setFormData(merged);
-      setAutoFillNotice('Studio Desk alanları otomatik dolduruldu.');
+      setAutoFillNotice(pickLocalized(language, 'Studio Desk alanları otomatik dolduruldu.', 'Studio Desk fields were auto-filled.'));
     } catch (error) {
-      setAutoFillNotice(error instanceof Error ? error.message : 'Otomatik doldurma başarısız oldu.');
+      setAutoFillNotice(error instanceof Error ? error.message : pickLocalized(language, 'Otomatik doldurma başarısız oldu.', 'Auto-fill failed.'));
     } finally {
       setIsAutoFilling(false);
     }
@@ -485,20 +471,20 @@ export function UploadStep({
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-widest text-neon-red/90">
-                  Studio Desk Tutorial {tutorialStep + 1}/{TUTORIAL_STEPS.length}
+                  Studio Desk Tutorial {tutorialStep + 1}/{tutorialSteps.length}
                 </p>
-                <h3 className="mt-2 font-display text-2xl text-white">{TUTORIAL_STEPS[tutorialStep].title}</h3>
+                <h3 className="mt-2 font-display text-2xl text-white">{tutorialSteps[tutorialStep].title}</h3>
               </div>
               <button
                 onClick={dismissTutorial}
                 className="rounded-full border border-white/20 p-2 text-slate-300 hover:text-white hover:border-white/40"
-                title="Tutorial'ı kapat"
+                title={pickLocalized(language, "Tutorial'ı kapat", 'Close tutorial')}
               >
                 <X size={16} />
               </button>
             </div>
 
-            <p className="mt-4 text-slate-300 leading-relaxed">{TUTORIAL_STEPS[tutorialStep].text}</p>
+            <p className="mt-4 text-slate-300 leading-relaxed">{tutorialSteps[tutorialStep].text}</p>
 
             <div className="mt-6 flex items-center justify-between gap-3">
               <button
@@ -506,7 +492,7 @@ export function UploadStep({
                 onClick={dismissTutorial}
                 className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 text-sm font-mono"
               >
-                Skip Tutorial
+                {pickLocalized(language, 'Tutorial\'ı atla', 'Skip tutorial')}
               </button>
               <div className="flex items-center gap-2">
                 <button
@@ -515,20 +501,20 @@ export function UploadStep({
                   disabled={tutorialStep === 0}
                   className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 text-sm font-mono disabled:opacity-40"
                 >
-                  Geri
+                  {pickLocalized(language, 'Geri', 'Back')}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    if (tutorialStep >= TUTORIAL_STEPS.length - 1) {
+                    if (tutorialStep >= tutorialSteps.length - 1) {
                       dismissTutorial();
                       return;
                     }
-                    setTutorialStep((prev) => Math.min(TUTORIAL_STEPS.length - 1, prev + 1));
+                    setTutorialStep((prev) => Math.min(tutorialSteps.length - 1, prev + 1));
                   }}
                   className="px-4 py-2 rounded-lg bg-neon-red text-white hover:bg-[#d1002a] text-sm font-bold uppercase tracking-wider"
                 >
-                  {tutorialStep >= TUTORIAL_STEPS.length - 1 ? 'Başla' : 'İleri'}
+                  {tutorialStep >= tutorialSteps.length - 1 ? pickLocalized(language, 'Başla', 'Start') : pickLocalized(language, 'İleri', 'Next')}
                 </button>
               </div>
             </div>
@@ -573,7 +559,7 @@ export function UploadStep({
                     htmlFor="studio-desk-upload-input"
                     className="px-3 py-1.5 rounded border border-white/20 text-[11px] font-mono text-slate-200 hover:border-neon-red hover:text-white transition-colors cursor-pointer"
                   >
-                    Dosya Değiştir
+                    {pickLocalized(language, 'Dosya Değiştir', 'Replace file')}
                   </label>
                   {previewFiles.length > 0 && (
                     <button
@@ -581,7 +567,7 @@ export function UploadStep({
                       onClick={clearAllStudioFiles}
                       className="px-3 py-1.5 rounded border border-red-400/40 text-[11px] font-mono text-red-200 hover:bg-red-500/15 transition-colors"
                     >
-                      Dosyalari Sil
+                      {pickLocalized(language, 'Dosyaları Sil', 'Remove files')}
                     </button>
                   )}
                 </div>
@@ -599,7 +585,11 @@ export function UploadStep({
                 </div>
 
                 <p className="mt-2 text-[11px] font-mono text-slate-400 text-left px-1">
-                  Dosyayı büyüt, kaydır ve detayları incele. Farklı paftalara alttaki dosya listesiyle geçiş yap.
+                  {pickLocalized(
+                    language,
+                    'Dosyayı büyüt, kaydır ve detayları incele. Farklı paftalara alttaki dosya listesiyle geçiş yap.',
+                    'Zoom, pan, and inspect details. Switch sheets using the file list below.',
+                  )}
                 </p>
               </>
             ) : (
@@ -607,9 +597,15 @@ export function UploadStep({
                 <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4">
                   <Upload size={24} className="text-slate-300" />
                 </div>
-                <p className="font-mono text-lg mb-2">A0/A1 Pafta, Eskiz veya Render Yükle</p>
-                <p className="text-sm text-slate-500">Sürükle bırak veya seçmek için tıkla (JPG, PNG, PDF)</p>
-                <p className="mt-2 text-[11px] text-slate-400 font-mono">Maksimum 8 dosya, toplam 35 MB</p>
+                <p className="font-mono text-lg mb-2">
+                  {pickLocalized(language, 'A0/A1 Pafta, Eskiz veya Render Yükle', 'Upload A0/A1 sheet, sketch, or render')}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {pickLocalized(language, 'Sürükle bırak veya seçmek için tıkla (JPG, PNG, PDF)', 'Drag and drop or click to select (JPG, PNG, PDF)')}
+                </p>
+                <p className="mt-2 text-[11px] text-slate-400 font-mono">
+                  {pickLocalized(language, 'Maksimum 8 dosya, toplam 35 MB', 'Up to 8 files, 35 MB total')}
+                </p>
               </>
             )}
           </div>
@@ -618,7 +614,7 @@ export function UploadStep({
             <div className="rounded-xl border border-white/10 bg-black/30 p-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="font-mono text-[11px] uppercase tracking-wider text-slate-300">
-                  Studio Desk Dosyaları ({previewFiles.length})
+                  {pickLocalized(language, 'Studio Desk Dosyaları', 'Studio Desk files')} ({previewFiles.length})
                 </p>
                 <p className="font-mono text-[11px] text-cyan-300">{totalUploadedSizeMb} MB / 35 MB</p>
               </div>
@@ -645,7 +641,7 @@ export function UploadStep({
                         }}
                         className="mt-2 inline-block rounded border border-red-400/40 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-red-200 hover:bg-red-500/15"
                       >
-                        Sil
+                        {pickLocalized(language, 'Sil', 'Remove')}
                       </button>
                     </button>
                   );
@@ -657,14 +653,19 @@ export function UploadStep({
 
         <div className="flex flex-col gap-6 bg-white/5 p-6 rounded-xl border border-white/10">
           <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-2">
-            <h3 className="font-mono text-sm uppercase tracking-widest text-slate-400">Proje Savunması</h3>
+            <h3 className="font-mono text-sm uppercase tracking-widest text-slate-400">
+              {pickLocalized(language, 'Proje Savunması', 'Project defense')}
+            </h3>
             <button
               type="button"
               onClick={handleAutoFill}
               disabled={isAutoFilling || !imageBase64 || !isAuthenticated}
               className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-mono uppercase tracking-wider text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-45 disabled:cursor-not-allowed"
             >
-              <Wand2 size={12} /> {isAutoFilling ? 'Dolduruluyor...' : 'Otomatik Doldur'}
+              <Wand2 size={12} />{' '}
+              {isAutoFilling
+                ? pickLocalized(language, 'Dolduruluyor...', 'Filling...')
+                : pickLocalized(language, 'Otomatik Doldur', 'Auto-fill')}
             </button>
           </div>
 
@@ -678,15 +679,21 @@ export function UploadStep({
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <FileText size={14} /> Konu
+                  <FileText size={14} /> {pickLocalized(language, 'Konu', 'Topic')}
                 </label>
-                <AutoToggle enabled={autoFillFields.topic} label="Konu" onToggle={() => toggleAutoFillField('topic')} />
+                <AutoToggle
+                  enabled={autoFillFields.topic}
+                  title={pickLocalized(language, 'Konu alanı için otomatik doldurmayı aç veya kapat', 'Toggle auto-fill for the topic field')}
+                  onLabel={pickLocalized(language, 'Otomatik Açık', 'Auto on')}
+                  offLabel={pickLocalized(language, 'Otomatik Kapalı', 'Auto off')}
+                  onToggle={() => toggleAutoFillField('topic')}
+                />
               </div>
               <input
                 type="text"
                 value={formData.topic}
                 onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
-                placeholder="Örn: Sürdürülebilir Kütüphane"
+                placeholder={pickLocalized(language, 'Örn: Sürdürülebilir Kütüphane', 'e.g. Sustainable library')}
                 className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors"
               />
             </div>
@@ -694,15 +701,21 @@ export function UploadStep({
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <Map size={14} /> Arazi
+                  <Map size={14} /> {pickLocalized(language, 'Arazi', 'Site')}
                 </label>
-                <AutoToggle enabled={autoFillFields.site} label="Arazi" onToggle={() => toggleAutoFillField('site')} />
+                <AutoToggle
+                  enabled={autoFillFields.site}
+                  title={pickLocalized(language, 'Arazi alanı için otomatik doldurmayı aç veya kapat', 'Toggle auto-fill for the site field')}
+                  onLabel={pickLocalized(language, 'Otomatik Açık', 'Auto on')}
+                  offLabel={pickLocalized(language, 'Otomatik Kapalı', 'Auto off')}
+                  onToggle={() => toggleAutoFillField('site')}
+                />
               </div>
               <input
                 type="text"
                 value={formData.site}
                 onChange={(e) => setFormData({ ...formData, site: e.target.value })}
-                placeholder="Örn: Karaköy, İstanbul"
+                placeholder={pickLocalized(language, 'Örn: Karaköy, İstanbul', 'e.g. Karaköy, Istanbul')}
                 className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors"
               />
             </div>
@@ -710,14 +723,20 @@ export function UploadStep({
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <Lightbulb size={14} /> Konsept
+                  <Lightbulb size={14} /> {pickLocalized(language, 'Konsept', 'Concept')}
                 </label>
-                <AutoToggle enabled={autoFillFields.concept} label="Konsept" onToggle={() => toggleAutoFillField('concept')} />
+                <AutoToggle
+                  enabled={autoFillFields.concept}
+                  title={pickLocalized(language, 'Konsept alanı için otomatik doldurmayı aç veya kapat', 'Toggle auto-fill for the concept field')}
+                  onLabel={pickLocalized(language, 'Otomatik Açık', 'Auto on')}
+                  offLabel={pickLocalized(language, 'Otomatik Kapalı', 'Auto off')}
+                  onToggle={() => toggleAutoFillField('concept')}
+                />
               </div>
               <textarea
                 value={formData.concept}
                 onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
-                placeholder="Örn: Boşlukların geçirgenliği üzerine..."
+                placeholder={pickLocalized(language, 'Örn: Boşlukların geçirgenliği üzerine...', 'e.g. On the permeability of voids...')}
                 rows={3}
                 className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors resize-none"
               />
@@ -726,14 +745,24 @@ export function UploadStep({
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
                 <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <FileText size={14} /> Jüri Önü Savunma Metni
+                  <FileText size={14} /> {pickLocalized(language, 'Jüri Önü Savunma Metni', 'Defense statement for the jury')}
                 </label>
-                <AutoToggle enabled={autoFillFields.defense} label="Savunma" onToggle={() => toggleAutoFillField('defense')} />
+                <AutoToggle
+                  enabled={autoFillFields.defense}
+                  title={pickLocalized(language, 'Savunma alanı için otomatik doldurmayı aç veya kapat', 'Toggle auto-fill for the defense field')}
+                  onLabel={pickLocalized(language, 'Otomatik Açık', 'Auto on')}
+                  offLabel={pickLocalized(language, 'Otomatik Kapalı', 'Auto off')}
+                  onToggle={() => toggleAutoFillField('defense')}
+                />
               </div>
               <textarea
                 value={formData.defense}
                 onChange={(e) => setFormData({ ...formData, defense: e.target.value })}
-                placeholder="Jüriye açıklamak istediğin güçlü yönler, kararların ve gerekçelerin..."
+                placeholder={pickLocalized(
+                  language,
+                  'Jüriye açıklamak istediğin güçlü yönler, kararların ve gerekçelerin...',
+                  'Strengths, decisions, and reasoning you want to explain to the jury...',
+                )}
                 rows={4}
                 className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors resize-none"
               />
@@ -742,45 +771,72 @@ export function UploadStep({
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="block text-sm font-medium text-slate-300">Kategori</label>
-                  <AutoToggle enabled={autoFillFields.category} label="Kategori" onToggle={() => toggleAutoFillField('category')} />
+                  <label className="block text-sm font-medium text-slate-300">
+                    {pickLocalized(language, 'Kategori', 'Category')}
+                  </label>
+                  <AutoToggle
+                    enabled={autoFillFields.category}
+                    title={pickLocalized(language, 'Kategori alanı için otomatik doldurmayı aç veya kapat', 'Toggle auto-fill for the category field')}
+                    onLabel={pickLocalized(language, 'Otomatik Açık', 'Auto on')}
+                    offLabel={pickLocalized(language, 'Otomatik Kapalı', 'Auto off')}
+                    onToggle={() => toggleAutoFillField('category')}
+                  />
                 </div>
                 <select
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors appearance-none"
                 >
-                  {CATEGORY_OPTIONS.map((entry) => (
-                    <option key={entry}>{entry}</option>
+                  {STUDIO_CATEGORY_VALUES.map((entry) => (
+                    <option key={entry} value={entry}>
+                      {studioCategoryLabel(language, entry)}
+                    </option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="block text-sm font-medium text-slate-300">Analiz Uzunluğu</label>
-                  <AutoToggle enabled={autoFillFields.analysisLength} label="Uzunluk" onToggle={() => toggleAutoFillField('analysisLength')} />
+                  <label className="block text-sm font-medium text-slate-300">
+                    {pickLocalized(language, 'Analiz Uzunluğu', 'Analysis length')}
+                  </label>
+                  <AutoToggle
+                    enabled={autoFillFields.analysisLength}
+                    title={pickLocalized(language, 'Analiz uzunluğu için otomatik doldurmayı aç veya kapat', 'Toggle auto-fill for analysis length')}
+                    onLabel={pickLocalized(language, 'Otomatik Açık', 'Auto on')}
+                    offLabel={pickLocalized(language, 'Otomatik Kapalı', 'Auto off')}
+                    onToggle={() => toggleAutoFillField('analysisLength')}
+                  />
                 </div>
                 <select
                   value={formData.analysisLength}
                   onChange={(e) => setFormData({ ...formData, analysisLength: e.target.value as AnalysisLengthOption })}
                   className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors appearance-none"
                 >
-                  <option value="SHORT">Kısa</option>
-                  <option value="MEDIUM" disabled={!canUseMedium}>Orta {!canUseMedium ? '(kayıtlı kullanıcı)' : ''}</option>
-                  <option value="LONG" disabled={!canUseLong}>Uzun {!canUseLong ? '(premium)' : ''}</option>
+                  <option value="SHORT">{pickLocalized(language, 'Kısa', 'Short')}</option>
+                  <option value="MEDIUM" disabled={!canUseMedium}>
+                    {pickLocalized(language, 'Orta', 'Medium')}
+                    {!canUseMedium ? ` ${pickLocalized(language, '(kayıtlı kullanıcı)', '(signed-in)')}` : ''}
+                  </option>
+                  <option value="LONG" disabled={!canUseLong}>
+                    {pickLocalized(language, 'Uzun', 'Long')}
+                    {!canUseLong ? ` ${pickLocalized(language, '(premium)', '(premium)')}` : ''}
+                  </option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium mb-2 text-slate-300 flex items-center justify-between">
-                  <span className="flex items-center gap-1"><GraduationCap size={14} /> Jüri Sertliği</span>
+                  <span className="flex items-center gap-1">
+                    <GraduationCap size={14} /> {pickLocalized(language, 'Jüri Sertliği', 'Jury harshness')}
+                  </span>
                   <span className="text-neon-red font-mono text-xs">
-                    {formData.harshness === 1 && 'Yapıcı (Acı Gerçekler)'}
-                    {formData.harshness === 2 && 'Normal'}
-                    {formData.harshness === 3 && 'Sert'}
-                    {formData.harshness === 4 && 'Roast (Göm)'}
-                    {formData.harshness === 5 && 'Brutal'}
+                    {formData.harshness === 1 &&
+                      pickLocalized(language, 'Yapıcı (Acı Gerçekler)', 'Constructive (hard truths)')}
+                    {formData.harshness === 2 && pickLocalized(language, 'Normal', 'Normal')}
+                    {formData.harshness === 3 && pickLocalized(language, 'Sert', 'Harsh')}
+                    {formData.harshness === 4 && pickLocalized(language, 'Roast (Göm)', 'Roast')}
+                    {formData.harshness === 5 && pickLocalized(language, 'Brutal', 'Brutal')}
                   </span>
                 </label>
                 <input
@@ -793,28 +849,30 @@ export function UploadStep({
                   className="w-full h-2 bg-black/50 rounded-lg appearance-none cursor-pointer accent-neon-red"
                 />
                 <div className="flex justify-between text-[10px] font-mono text-slate-500 mt-2 px-1">
-                  <span>Yapıcı</span>
-                  <span>Brutal</span>
+                  <span>{pickLocalized(language, 'Yapıcı', 'Mild')}</span>
+                  <span>{pickLocalized(language, 'Brutal', 'Brutal')}</span>
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <label className="block text-sm font-medium text-slate-300">Jüri Modu</label>
+                  <label className="block text-sm font-medium text-slate-300">
+                    {pickLocalized(language, 'Jüri Modu', 'Jury mode')}
+                  </label>
                   <div className="inline-flex rounded-full border border-white/10 bg-black/40 p-1 text-[10px] font-mono uppercase tracking-wider">
                     <button
                       type="button"
                       onClick={() => setJuryMode('single')}
                       className={`px-4 py-1.5 rounded-full transition-all ${juryMode === 'single' ? 'bg-white text-black font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
-                      Tekli
+                      {pickLocalized(language, 'Tekli', 'Single')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setJuryMode('multi')}
                       className={`px-4 py-1.5 rounded-full transition-all ${juryMode === 'multi' ? 'bg-purple-500 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
-                      Çoklu
+                      {pickLocalized(language, 'Çoklu', 'Multi')}
                     </button>
                   </div>
                 </div>
@@ -822,25 +880,31 @@ export function UploadStep({
                 {juryMode === 'single' ? (
                   <div className="space-y-2 rounded-xl border border-white/10 bg-black/30 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Tekli Jüri Persona</span>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                        {pickLocalized(language, 'Tekli Jüri Persona', 'Single-jury persona')}
+                      </span>
                       <div className="flex items-center gap-1">
                         <button type="button" onClick={() => moveSinglePersona('left')} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">←</button>
                         <button type="button" onClick={() => moveSinglePersona('right')} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">→</button>
                       </div>
                     </div>
                     <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
-                      <p className="text-sm font-bold text-white">{PERSONA_MAP[formData.singlePersonaId]?.label}</p>
-                      <p className="mt-1 text-[10px] font-mono text-slate-400">{PERSONA_MAP[formData.singlePersonaId]?.detail}</p>
+                      <p className="text-sm font-bold text-white">{personaMap[formData.singlePersonaId]?.label}</p>
+                      <p className="mt-1 text-[10px] font-mono text-slate-400">{personaMap[formData.singlePersonaId]?.detail}</p>
                     </div>
                   </div>
                 ) : (
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <label className="block text-sm font-medium text-slate-300">Çoklu Jüri Persona Seçimi</label>
-                      <span className="text-[10px] font-mono text-slate-400">{selectedMultiPersonaIds.length}/4 seçili (min 2)</span>
+                      <label className="block text-sm font-medium text-slate-300">
+                        {pickLocalized(language, 'Çoklu Jüri Persona Seçimi', 'Multi-jury persona selection')}
+                      </label>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        {selectedMultiPersonaIds.length}/4 {pickLocalized(language, 'seçili (min 2)', 'selected (min 2)')}
+                      </span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {PERSONA_OPTIONS.map((persona) => {
+                      {personaOptions.map((persona) => {
                         const selected = selectedMultiPersonaIds.includes(persona.id);
                         const disableSelect = !selected && selectedMultiPersonaIds.length >= 4;
                         const disableUnselect = selected && selectedMultiPersonaIds.length <= 2;
@@ -868,13 +932,17 @@ export function UploadStep({
             {isGuestAtLimit && (
               <div className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
                 <p className="font-mono text-[11px] leading-relaxed text-amber-100 mb-3">
-                  You&apos;ve completed your 1-drawing trial! Create an account to submit more designs and save your work.
+                  {pickLocalized(
+                    language,
+                    'Tek çizimlik denemen tamamlandı! Daha fazla gönderi ve kayıt için hesap oluştur.',
+                    "You've completed your 1-drawing trial! Create an account to submit more designs and save your work.",
+                  )}
                 </p>
                 <button
                   onClick={onUpgradeClick}
                   className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 rounded text-amber-100 text-sm font-mono transition-colors"
                 >
-                  Upgrade Now
+                  {pickLocalized(language, 'Şimdi Yükselt', 'Upgrade now')}
                 </button>
               </div>
             )}
@@ -883,21 +951,26 @@ export function UploadStep({
               <div className="mb-3 rounded-lg border border-cyan-400/30 bg-cyan-400/10 p-3">
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-mono text-[11px] text-cyan-100">
-                    Trial Bakiye: <span className="font-bold">{Math.max(0, rapidoPens).toFixed(1)} / {trialTotal} Rapido</span>
+                    {pickLocalized(language, 'Deneme bakiyesi', 'Trial balance')}:{' '}
+                    <span className="font-bold">{Math.max(0, rapidoPens).toFixed(1)} / {trialTotal} Rapido</span>
                   </p>
                   <button
                     type="button"
                     onClick={onUpgradeClick}
                     className="text-[10px] font-mono uppercase tracking-wider text-cyan-200 hover:text-white transition-colors"
                   >
-                    Premium&apos;a Geç
+                    {pickLocalized(language, "Premium'a Geç", 'Go Premium')}
                   </button>
                 </div>
                 <div className="mt-2 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
                   <div className="h-full bg-cyan-400" style={{ width: `${trialPercent}%` }} />
                 </div>
                 <p className="mt-2 text-[10px] text-cyan-100/80 font-mono">
-                  Trial ilerlemesi arttıkça premium modlar ve daha yüksek Rapido limiti önerilir.
+                  {pickLocalized(
+                    language,
+                    'Deneme ilerledikçe premium modlar ve daha yüksek Rapido limiti önerilir.',
+                    'As you progress, premium modes and higher Rapido limits are recommended.',
+                  )}
                 </p>
               </div>
             )}
@@ -905,7 +978,11 @@ export function UploadStep({
             {!isAuthenticated && (
               <div className="mb-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3">
                 <p className="font-mono text-[11px] leading-relaxed text-amber-100">
-                  Analiz modları yalnızca giriş yapan kullanıcılar için açıktır. Giriş yaptıktan sonra Rapido bakiyeniz gerçek hesabınızdan kullanılır.
+                  {pickLocalized(
+                    language,
+                    'Analiz modları yalnızca giriş yapan kullanıcılar için açıktır. Giriş sonrası Rapido bakiyeniz hesabınızdan kullanılır.',
+                    'Analysis modes are only available when signed in. After sign-in, Rapido is drawn from your account.',
+                  )}
                 </p>
               </div>
             )}
@@ -914,7 +991,11 @@ export function UploadStep({
               <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
                 <p className="font-mono text-[11px] leading-relaxed text-red-200">{uploadValidationError}</p>
                 <p className="mt-1 font-mono text-[10px] text-red-200/80">
-                  Gönderim kapatıldı. Lütfen dosya boyutunu küçültüp yeniden yükleyin.
+                  {pickLocalized(
+                    language,
+                    'Gönderim kapatıldı. Lütfen dosya boyutunu küçültüp yeniden yükleyin.',
+                    'Submission is blocked. Reduce file size and upload again.',
+                  )}
                 </p>
               </div>
             )}
@@ -925,19 +1006,22 @@ export function UploadStep({
               className={`w-full py-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 mb-3 ${(canRunAnalysis && !isGuestAtLimit) || (!isAuthenticated && !isGuestAtLimit) ? 'bg-white text-black hover:bg-slate-200' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}
             >
               {isGuestAtLimit ? (
-                'Guest Limit Reached - Upgrade to Continue'
+                pickLocalized(language, 'Misafir limiti — devam için yükselt', 'Guest limit reached — upgrade to continue')
               ) : isAuthenticated ? (
                 isFileProcessing ? (
-                  'Dosya işleniyor...'
+                  pickLocalized(language, 'Dosya işleniyor...', 'Processing file...')
                 ) : uploadValidationError ? (
-                  'Dosyayı Küçült ve Yeniden Yükle'
+                  pickLocalized(language, 'Dosyayı Küçült ve Yeniden Yükle', 'Shrink file and re-upload')
                 ) : (
                   <>
-                    Jüri Karşısına Çık <span className="text-xs font-mono opacity-70">({isRevisionMode ? RAPIDO_COSTS.REVISION_SAME : RAPIDO_COSTS.SINGLE_JURY} Rapido)</span>
+                    {pickLocalized(language, 'Jüri Karşısına Çık', 'Face the jury')}{' '}
+                    <span className="text-xs font-mono opacity-70">
+                      ({isRevisionMode ? RAPIDO_COSTS.REVISION_SAME : RAPIDO_COSTS.SINGLE_JURY} Rapido)
+                    </span>
                   </>
                 )
               ) : (
-                'Giriş Yap ve Analize Başla'
+                pickLocalized(language, 'Giriş Yap ve Analize Başla', 'Sign in and start analysis')
               )}
             </button>
 
@@ -949,19 +1033,22 @@ export function UploadStep({
               >
                 {isGuestAtLimit ? (
                   <>
-                    <Layers size={18} /> Upgrade to Access Multi-Jury
+                    <Layers size={18} /> {pickLocalized(language, 'Çoklu Jüri için yükselt', 'Upgrade for multi-jury')}
                   </>
                 ) : isAuthenticated ? isPremiumUser ? (
                   <>
-                    <Layers size={18} /> Çoklu Jüri ({selectedMultiPersonaIds.length} Persona) <span className="text-xs font-mono opacity-70">({RAPIDO_COSTS.MULTI_JURY} Rapido)</span>
+                    <Layers size={18} /> {pickLocalized(language, 'Çoklu Jüri', 'Multi-jury')} ({selectedMultiPersonaIds.length}{' '}
+                    {pickLocalized(language, 'persona', 'personas')}){' '}
+                    <span className="text-xs font-mono opacity-70">({RAPIDO_COSTS.MULTI_JURY} Rapido)</span>
                   </>
                 ) : (
                   <>
-                    <Layers size={18} /> Çoklu Jüri Premium&apos;da <span className="text-xs font-mono opacity-70">(Yükselt)</span>
+                    <Layers size={18} /> {pickLocalized(language, "Çoklu Jüri Premium'da", 'Multi-jury on Premium')}{' '}
+                    <span className="text-xs font-mono opacity-70">({pickLocalized(language, 'Yükselt', 'Upgrade')})</span>
                   </>
                 ) : (
                   <>
-                    <Layers size={18} /> Çoklu Jüri için Giriş Yap
+                    <Layers size={18} /> {pickLocalized(language, 'Çoklu Jüri için giriş yap', 'Sign in for multi-jury')}
                   </>
                 )}
               </button>
@@ -976,11 +1063,12 @@ export function UploadStep({
                 >
                   {isAuthenticated ? (
                     <>
-                      <Lightbulb size={16} /> Konsept Analizi ve Onerisi <span className="opacity-70">({RAPIDO_COSTS.AUTO_CONCEPT} Rapido)</span>
+                      <Lightbulb size={16} /> {pickLocalized(language, 'Konsept Analizi ve Önerisi', 'Concept analysis & proposal')}{' '}
+                      <span className="opacity-70">({RAPIDO_COSTS.AUTO_CONCEPT} Rapido)</span>
                     </>
                   ) : (
                     <>
-                      <Lightbulb size={16} /> Konsept Analizi için Giriş Yap
+                      <Lightbulb size={16} /> {pickLocalized(language, 'Konsept analizi için giriş yap', 'Sign in for concept analysis')}
                     </>
                   )}
                 </button>
@@ -991,15 +1079,17 @@ export function UploadStep({
                 >
                   {isAuthenticated ? isPremiumUser ? (
                     <>
-                      <Layers size={16} /> Malzeme Analizi <span className="opacity-70">({RAPIDO_COSTS.MATERIAL_BOARD} Rapido)</span>
+                      <Layers size={16} /> {pickLocalized(language, 'Malzeme Analizi', 'Material analysis')}{' '}
+                      <span className="opacity-70">({RAPIDO_COSTS.MATERIAL_BOARD} Rapido)</span>
                     </>
                   ) : (
                     <>
-                      <Layers size={16} /> Malzeme Analizi Premium&apos;da <span className="opacity-70">(Yükselt)</span>
+                      <Layers size={16} /> {pickLocalized(language, "Malzeme analizi Premium'da", 'Material analysis on Premium')}{' '}
+                      <span className="opacity-70">({pickLocalized(language, 'Yükselt', 'Upgrade')})</span>
                     </>
                   ) : (
                     <>
-                      <Layers size={16} /> Malzeme Analizi için Giriş Yap
+                      <Layers size={16} /> {pickLocalized(language, 'Malzeme analizi için giriş yap', 'Sign in for material analysis')}
                     </>
                   )}
                 </button>
@@ -1008,7 +1098,11 @@ export function UploadStep({
 
             {!isPremiumUser && (
               <p className="text-[10px] text-slate-500 font-mono text-center mt-3 leading-relaxed">
-                Projeleriniz yalnızca tarayıcı oturumunuzda tutulur ve herkese açık olarak sergilenmez.
+                {pickLocalized(
+                  language,
+                  'Projeler yalnızca tarayıcı oturumunda tutulur; herkese açık sergilenmez.',
+                  'Projects stay in your browser session only; they are not shown publicly.',
+                )}
               </p>
             )}
           </div>

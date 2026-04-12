@@ -79,7 +79,7 @@ export function ResultStep({
                 link.click();
             } catch (err) {
                 console.error("Export failed", err);
-                alert("Dışa aktarma başarısız oldu.");
+                alert(pickLocalized(language, 'Dışa aktarma başarısız oldu.', 'Export failed.'));
             }
         }
     };
@@ -105,19 +105,27 @@ export function ResultStep({
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div className="mb-4 text-4xl">🎨</div>
-                        <h2 className="font-display text-2xl font-bold mb-3 text-white">Great Work!</h2>
+                        <h2 className="font-display text-2xl font-bold mb-3 text-white">
+                            {pickLocalized(language, 'Harika iş!', 'Great work!')}
+                        </h2>
                         <p className="text-slate-300 mb-6 text-sm leading-relaxed">
-                            Your design is complete and ready for the jury. Create an account to save your work and submit more designs.
+                            {pickLocalized(
+                                language,
+                                'Çizimin tamamlandı ve jüriye hazır. Kayıt olarak çalışmalarını saklayıp daha fazla gönderi yapabilirsin.',
+                                'Your design is complete and ready for the jury. Create an account to save your work and submit more designs.',
+                            )}
                         </p>
                         
                         <div className="space-y-2 mb-6 text-left bg-slate-800/50 rounded-lg p-4">
-                            <p className="text-xs text-slate-400 font-mono uppercase tracking-widest mb-2">Benefits of Premium:</p>
+                            <p className="text-xs text-slate-400 font-mono uppercase tracking-widest mb-2">
+                                {pickLocalized(language, 'Premium avantajları', 'Premium benefits')}
+                            </p>
                             <ul className="text-sm text-slate-300 space-y-1">
-                                <li>✓ Save unlimited designs</li>
-                                <li>✓ Submit multiple jury critiques</li>
-                                <li>✓ Access jury defense chat</li>
-                                <li>✓ AI mentor assistance</li>
-                                <li>✓ Weekly rescue tokens</li>
+                                <li>✓ {pickLocalized(language, 'Sınırsız tasarım kaydı', 'Save unlimited designs')}</li>
+                                <li>✓ {pickLocalized(language, 'Birden fazla jüri eleştirisi', 'Multiple jury critiques')}</li>
+                                <li>✓ {pickLocalized(language, 'Jüri savunma sohbeti', 'Jury defense chat')}</li>
+                                <li>✓ {pickLocalized(language, 'AI mentor desteği', 'AI mentor assistance')}</li>
+                                <li>✓ {pickLocalized(language, 'Haftalık kurtarma tokenları', 'Weekly rescue tokens')}</li>
                             </ul>
                         </div>
 
@@ -125,9 +133,9 @@ export function ResultStep({
                             <button
                                 onClick={() => setShowGuestUpgradePrompt(false)}
                                 className="flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg text-white font-mono text-sm transition-colors"
-                                aria-label="Dismiss and continue browsing"
+                                aria-label={pickLocalized(language, 'Kapat ve gezinmeye devam et', 'Dismiss and continue browsing')}
                             >
-                                Maybe Later
+                                {pickLocalized(language, 'Belki sonra', 'Maybe later')}
                             </button>
                             <button
                                 onClick={() => {
@@ -135,9 +143,9 @@ export function ResultStep({
                                     onUpgradeClick();
                                 }}
                                 className="flex-1 py-3 px-4 bg-amber-500 hover:bg-amber-600 rounded-lg text-black font-bold transition-colors"
-                                aria-label="Create account to save designs"
+                                aria-label={pickLocalized(language, 'Hesap oluştur', 'Create account to save designs')}
                             >
-                                Create Account
+                                {pickLocalized(language, 'Hesap Oluştur', 'Create account')}
                             </button>
                         </div>
                     </div>
@@ -175,7 +183,7 @@ export function ResultStep({
                             mimeType === 'application/pdf' ? (
                                 <SimplePdfPreview src={previewUrl} className="h-full w-full" />
                             ) : (
-                                <img src={previewUrl} alt="Uploaded" className="w-full h-full object-contain" />
+                                <img src={previewUrl} alt={pickLocalized(language, 'Yüklenen pafta', 'Uploaded board')} className="w-full h-full object-contain" />
                             )
                         )
                     )}
@@ -186,7 +194,9 @@ export function ResultStep({
                                 onClick={() => setShowCompare(!showCompare)}
                                 className="bg-black/80 text-white px-4 py-2 rounded-full font-mono text-xs tracking-wider border border-white/20 hover:border-neon-red transition-colors"
                             >
-                                {showCompare ? 'Kapat' : 'Evrim Görünümü (Önce/Sonra)'}
+                                {showCompare
+                                  ? pickLocalized(language, 'Kapat', 'Close')
+                                  : pickLocalized(language, 'Evrim Görünümü (Önce/Sonra)', 'Evolution view (before/after)')}
                             </button>
                         </div>
                     )}
@@ -197,14 +207,14 @@ export function ResultStep({
                         disabled={!handlePreserveAnalysis}
                         className="flex-1 flex items-center justify-center gap-2 py-3 border border-emerald-400/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-100 transition-colors text-sm font-mono uppercase"
                     >
-                        Analizi Koru (1.5 Rapido)
+                        {pickLocalized(language, 'Analizi Koru', 'Preserve analysis')} (1.5 Rapido)
                     </button>
                     <button
                         onClick={handleShareToCommunity}
                         disabled={!handleShareToCommunity}
                         className="flex-1 flex items-center justify-center gap-2 py-3 border border-cyan-400/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-100 transition-colors text-sm font-mono uppercase disabled:opacity-50"
                     >
-                        Community&apos;de Paylas
+                        {pickLocalized(language, "Community'de Paylaş", 'Share on Community')}
                     </button>
                     <button
                         onClick={handleNewProject}
@@ -236,12 +246,12 @@ export function ResultStep({
                             </span>
                         )}
                         <span className="ml-auto px-3 py-1 bg-white/5 border border-white/10 rounded text-xs font-mono text-slate-400">
-                            Sertlik: {formData.harshness}/5
+                            {pickLocalized(language, 'Sertlik', 'Harshness')}: {formData.harshness}/5
                         </span>
                         <button
                             onClick={handleExport}
                             className="ml-2 hover:bg-white/10 p-2 rounded transition-colors text-slate-400 hover:text-white"
-                            title="Roast'u İndir"
+                            title={pickLocalized(language, "Roast'u İndir", 'Download roast')}
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         </button>
@@ -257,23 +267,41 @@ export function ResultStep({
                             <div>
                                 <h3 className={`font-display font-bold text-xl flex items-center gap-2 mb-1 ${galleryPlacement === 'HALL_OF_FAME' ? 'text-emerald-500' : 'text-neon-red'}`}>
                                     {galleryPlacement === 'HALL_OF_FAME' ? <Crown size={20} /> : <AlertTriangle size={20} />}
-                                    {galleryPlacement === 'HALL_OF_FAME' ? 'Hall of Fame Adayı!' : 'Wall of Death Adayı!'}
+                                    {galleryPlacement === 'HALL_OF_FAME'
+                                      ? pickLocalized(language, 'Hall of Fame Adayı!', 'Hall of Fame nominee!')
+                                      : pickLocalized(language, 'Wall of Death Adayı!', 'Wall of Death nominee!')}
                                 </h3>
                                 <p className="text-sm text-slate-400">
-                                    Jüri bu projeyi {galleryPlacement === 'HALL_OF_FAME' ? 'başarısından dolayı Hall of Fame' : 'ibret olması için Wall of Death'} galerisine eklemeye karar verdi.
+                                    {galleryPlacement === 'HALL_OF_FAME'
+                                      ? pickLocalized(
+                                          language,
+                                          'Jüri bu projeyi başarısından dolayı Hall of Fame galerisine eklemeyi önerdi.',
+                                          'The jury recommends adding this project to the Hall of Fame gallery.',
+                                        )
+                                      : pickLocalized(
+                                          language,
+                                          'Jüri bu projeyi ibret olması için Wall of Death galerisine eklemeyi önerdi.',
+                                          'The jury recommends adding this project to the Wall of Death gallery.',
+                                        )}
                                 </p>
                             </div>
 
                             <div className="flex-shrink-0">
                                 {galleryConsent === null ? (
                                     <div className="flex gap-3">
-                                        <button onClick={() => handleGalleryConsent(true)} className="px-4 py-2 bg-white text-black font-bold text-sm rounded hover:bg-slate-200 transition-colors">İzin Ver</button>
-                                        <button onClick={() => handleGalleryConsent(false)} className="px-4 py-2 border border-white/20 text-white font-bold text-sm rounded hover:bg-white/10 transition-colors">Gizli Tut</button>
+                                        <button onClick={() => handleGalleryConsent(true)} className="px-4 py-2 bg-white text-black font-bold text-sm rounded hover:bg-slate-200 transition-colors">
+                                            {pickLocalized(language, 'İzin Ver', 'Allow')}
+                                        </button>
+                                        <button onClick={() => handleGalleryConsent(false)} className="px-4 py-2 border border-white/20 text-white font-bold text-sm rounded hover:bg-white/10 transition-colors">
+                                            {pickLocalized(language, 'Gizli Tut', 'Keep private')}
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className="text-right">
                                         <span className="text-sm font-bold text-white">
-                                            {galleryConsent ? 'Sergilenmesine İzin Verildi' : 'Gizli Tutuldu'}
+                                            {galleryConsent
+                                              ? pickLocalized(language, 'Sergilenmesine İzin Verildi', 'Allowed for display')
+                                              : pickLocalized(language, 'Gizli Tutuldu', 'Kept private')}
                                         </span>
                                     </div>
                                 )}
@@ -299,15 +327,21 @@ export function ResultStep({
                 <div className="mt-6 bg-gradient-to-r from-neon-red/20 to-transparent border border-neon-red/30 rounded-xl p-6 flex items-center justify-between">
                     <div>
                         <h3 className="font-display font-bold text-xl text-white flex items-center gap-2 mb-1">
-                            <Crown className="text-yellow-500" size={20} /> Projeyi Kurtar (Premium)
+                            <Crown className="text-yellow-500" size={20} /> {pickLocalized(language, 'Projeyi Kurtar (Premium)', 'Rescue the project (Premium)')}
                         </h3>
-                        <p className="text-sm text-slate-400">Kırmızı kalem revizyonu, referanslar ve pratik çözümler al.</p>
+                        <p className="text-sm text-slate-400">
+                            {pickLocalized(
+                                language,
+                                'Kırmızı kalem revizyonu, referanslar ve pratik çözümler al.',
+                                'Get red-pen revisions, references, and practical fixes.',
+                            )}
+                        </p>
                     </div>
                     <button
                         onClick={handlePremium}
                         className="px-6 py-3 bg-neon-red hover:bg-[#cc0029] text-white font-bold uppercase tracking-wider text-sm transition-colors"
                     >
-                        Kilidi Aç ({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)
+                        {pickLocalized(language, 'Kilidi Aç', 'Unlock')} ({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)
                     </button>
                 </div>
             </div>
