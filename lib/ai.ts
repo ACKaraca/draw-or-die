@@ -28,7 +28,7 @@ export interface AIResponse {
 
 export interface AIError {
     error: string;
-    code?: 'PREMIUM_REQUIRED' | 'INSUFFICIENT_RAPIDO' | 'RATE_LIMITED' | 'AI_PROVIDER_FAILURE' | 'CHAT_TOKEN_LIMIT_REACHED' | 'MENTOR_PREMIUM_LIMIT_REACHED' | 'GUEST_MENTOR_DISABLED';
+    code?: 'PREMIUM_REQUIRED' | 'INSUFFICIENT_RAPIDO' | 'RATE_LIMITED' | 'AI_PROVIDER_FAILURE' | 'AI_PROVIDER_CREDITS_REQUIRED' | 'CHAT_TOKEN_LIMIT_REACHED' | 'MENTOR_PREMIUM_LIMIT_REACHED' | 'GUEST_MENTOR_DISABLED';
     required?: number;
     available?: number;
     waitSeconds?: number;
@@ -67,6 +67,15 @@ const formatStructuredAIError = (err: AIError, lang: SupportedLanguage): Error =
                 lang,
                 `AI sağlayıcısı geçici bir hata döndürdü (${providerStatus ?? unknown}). Lütfen tekrar deneyin.`,
                 `The AI provider returned a temporary error (${providerStatus ?? unknown}). Please try again.`,
+            ),
+        );
+    }
+    if (err.code === 'AI_PROVIDER_CREDITS_REQUIRED') {
+        return new Error(
+            pickLocalized(
+                lang,
+                'AI sağlayıcısında ücretsiz kredi erişimi geçici olarak kısıtlı. Lütfen daha sonra tekrar deneyin.',
+                'The AI provider has temporarily restricted free-credit access. Please try again later.',
             ),
         );
     }

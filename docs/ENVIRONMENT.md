@@ -13,6 +13,8 @@ APPWRITE_PROJECT_ID=draw-or-die
 APPWRITE_API_KEY=your-appwrite-server-api-key
 # Optional (development): local-only server key override to avoid OS-level env collisions
 APPWRITE_API_KEY_LOCAL=your-local-appwrite-server-api-key
+# Optional: reset the early-registration bonus cohort window.
+APPWRITE_EARLY_REGISTRATION_BONUS_START_AT_V2=2026-04-12T00:00:00.000Z
 
 # Optional: dedicated email provider for edu verification emails.
 # If empty, the default configured Appwrite email provider is used.
@@ -39,7 +41,8 @@ These are used by `/api/ai-generate` to call the LLM.
 |---|---|---|
 | `AI_API_KEY` | API key for the AI provider | — |
 | `AI_BASE_URL` | OpenAI-compatible endpoint base URL | `https://ai-gateway.vercel.sh/v1` |
-| `AI_MODEL` | Model identifier string | `google/gemini-3.1-pro` |
+| `AI_MODEL` | Model identifier string | `google/gemini-3.1-flash-lite-preview` |
+| `AI_MODEL_FALLBACKS` | Comma-separated fallback models when primary model is temporarily unavailable | `google/gemini-2.5-flash-lite` |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.ackaraca.me,https://drawordie.app` |
 
 ## Security Rules
@@ -65,3 +68,8 @@ Fix: Vercel Dashboard → Settings → Environment Variables → add `STRIPE_SEC
 ### Auth failures after deploy
 
 Verify `APPWRITE_ENDPOINT` and `APPWRITE_PROJECT_ID` match the project in Appwrite Cloud. Also confirm `APPWRITE_API_KEY` has the correct scopes.
+
+### Google OAuth redirects to localhost or fails on mobile
+
+If `NEXT_PUBLIC_APP_URL` is set to `https://localhost:3000` in a deployed build, OAuth and email verification flows can bounce to localhost and fail.
+Use your real deployed domain in environment settings, or rely on runtime origin based redirects.
