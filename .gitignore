@@ -10,7 +10,6 @@ coverage/
 
 .vercel
 public/pdf.worker.min.mjs
-*.png
 nul
 *.tsbuildinfo
 test-results/.last-run.json
