@@ -12,9 +12,9 @@ function getClientIp(request: NextRequest): string {
   const vercelIp = request.headers.get('x-vercel-forwarded-for')?.split(',').map((value) => value.trim()).find(Boolean);
 
   return runtimeIp
+    || vercelIp
     || request.headers.get('cf-connecting-ip')?.trim()
     || request.headers.get('x-real-ip')?.trim()
-    || vercelIp
     || 'unknown-ip';
 }
 
