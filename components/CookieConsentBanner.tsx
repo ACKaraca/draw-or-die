@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
@@ -16,11 +16,7 @@ import {
 
 export function CookieConsentBanner() {
   const language = useLanguage();
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    setVisible(getCookieConsentStatus() === 'unset');
-  }, []);
+  const [visible, setVisible] = useState(() => getCookieConsentStatus() === 'unset');
 
   if (!visible) return null;
 
