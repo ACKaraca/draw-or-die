@@ -4,51 +4,34 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { createAdminClient } from '@/lib/appwrite/server';
 import { canonicalizeAuthEmail, isValidEmailFormat } from '@/lib/auth-email';
 
-const LIST_PAGE_SIZE = 100;
-const MAX_SCANNED_USERS = 10000;
-
 function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
-  }
-
-  return request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown-ip';
+  return request.headers.get('cf-connecting-ip')
+    || request.headers.get('x-real-ip')
+    || request.headers.get('x-vercel-forwarded-for')
+    || request.headers.get('x-forwarded-for')?.split(',').map((value) => value.trim()).find(Boolean)
+    || 'unknown-ip';
 }
 
 async function hasGmailCanonicalConflict(users: Users, canonicalEmail: string): Promise<boolean> {
-  let offset = 0;
-  let scannedUsers = 0;
+  const atIndex = canonicalEmail.lastIndexOf('@');
+  if (atIndex <= 0) return false;
 
-  while (scannedUsers < MAX_SCANNED_USERS) {
-    const response = await users.list({
-      queries: [
-        Query.limit(LIST_PAGE_SIZE),
-        Query.offset(offset),
-      ],
-    });
+  const canonicalLocalPart = canonicalEmail.slice(0, atIndex);
+  const response = await users.list({
+    queries: [
+      Query.search('email', canonicalLocalPart),
+      Query.limit(100),
+    ],
+  });
 
-    const pageUsers = Array.isArray(response.users) ? response.users : [];
-    if (pageUsers.length === 0) {
-      return false;
-    }
+  const candidates = Array.isArray(response.users) ? response.users : [];
+  for (const user of candidates) {
+    const email = typeof user.email === 'string' ? user.email : '';
+    if (!email) continue;
 
-    for (const user of pageUsers) {
-      const email = typeof user.email === 'string' ? user.email : '';
-      if (!email) continue;
-
-      const existingCanonical = canonicalizeAuthEmail(email);
-      if (existingCanonical.isGmailFamily && existingCanonical.canonicalEmail === canonicalEmail) {
-        return true;
-      }
-    }
-
-    scannedUsers += pageUsers.length;
-    offset += pageUsers.length;
-
-    if (pageUsers.length < LIST_PAGE_SIZE) {
-      return false;
+    const existingCanonical = canonicalizeAuthEmail(email);
+    if (existingCanonical.isGmailFamily && existingCanonical.canonicalEmail === canonicalEmail) {
+      return true;
     }
   }
 
