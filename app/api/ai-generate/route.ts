@@ -135,11 +135,15 @@ function parseProviderErrorPayload(rawBody: string): {
   providerErrorMessage: string | null;
   providerBodySnippet: string | null;
 } {
+  const normalizedBody = rawBody.trim();
   const providerBodySnippet = SHOULD_INCLUDE_PROVIDER_ERROR_BODY
     ? sanitizeProviderBodySnippet(rawBody)
     : null;
+  const hasCreditRestrictionFragment = normalizedBody
+    .toLowerCase()
+    .includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT);
 
-  if (!rawBody.trim()) {
+  if (!normalizedBody) {
     return {
       providerErrorCode: null,
       providerErrorType: null,
@@ -157,7 +161,9 @@ function parseProviderErrorPayload(rawBody: string): {
       providerErrorCode: null,
       providerErrorType: null,
       providerErrorParam: null,
-      providerErrorMessage: providerBodySnippet,
+      providerErrorMessage: hasCreditRestrictionFragment
+        ? PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT
+        : providerBodySnippet,
       providerBodySnippet,
     };
   }
@@ -173,9 +179,27 @@ function parseProviderErrorPayload(rawBody: string): {
     providerErrorMessage:
       readStringField(source, 'message') ||
       readStringField(payload, 'error') ||
-      providerBodySnippet,
+      (hasCreditRestrictionFragment
+        ? PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT
+        : providerBodySnippet),
     providerBodySnippet,
   };
+}
+
+function hasProviderCreditRestriction(params: {
+  type: string | null;
+  message: string | null;
+  snippet: string | null;
+}): boolean {
+  const providerType = (params.type ?? '').toLowerCase();
+  const providerMessage = (params.message ?? '').toLowerCase();
+  const providerSnippet = (params.snippet ?? '').toLowerCase();
+
+  return (
+    providerType === PROVIDER_ERROR_TYPE_NO_PROVIDERS_AVAILABLE ||
+    providerMessage.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT) ||
+    providerSnippet.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT)
+  );
 }
 
 function isProviderCreditRestrictionError(
@@ -184,18 +208,11 @@ function isProviderCreditRestrictionError(
 ): boolean {
   if (providerStatus !== 403) return false;
 
-  const providerType =
-    readStringField(providerDebug ?? null, 'providerErrorType')?.toLowerCase() ?? '';
-  const providerMessage =
-    readStringField(providerDebug ?? null, 'providerErrorMessage')?.toLowerCase() ?? '';
-  const providerSnippet =
-    readStringField(providerDebug ?? null, 'providerBodySnippet')?.toLowerCase() ?? '';
-
-  return (
-    providerType === PROVIDER_ERROR_TYPE_NO_PROVIDERS_AVAILABLE ||
-    providerMessage.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT) ||
-    providerSnippet.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT)
-  );
+  return hasProviderCreditRestriction({
+    type: readStringField(providerDebug ?? null, 'providerErrorType'),
+    message: readStringField(providerDebug ?? null, 'providerErrorMessage'),
+    snippet: readStringField(providerDebug ?? null, 'providerBodySnippet'),
+  });
 }
 
 function parseAiModelFallbackCandidates(): string[] {
@@ -229,15 +246,11 @@ function shouldRetryWithModelFallback(params: {
   if (params.aiHostname !== 'ai-gateway.vercel.sh') return false;
   if (params.providerStatus !== 403) return false;
 
-  const providerType = (params.parsedProviderError.providerErrorType ?? '').toLowerCase();
-  const providerMessage = (params.parsedProviderError.providerErrorMessage ?? '').toLowerCase();
-  const providerSnippet = (params.parsedProviderError.providerBodySnippet ?? '').toLowerCase();
-
-  return (
-    providerType === PROVIDER_ERROR_TYPE_NO_PROVIDERS_AVAILABLE ||
-    providerMessage.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT) ||
-    providerSnippet.includes(PROVIDER_CREDIT_RESTRICTION_MESSAGE_FRAGMENT)
-  );
+  return hasProviderCreditRestriction({
+    type: params.parsedProviderError.providerErrorType,
+    message: params.parsedProviderError.providerErrorMessage,
+    snippet: params.parsedProviderError.providerBodySnippet,
+  });
 }
 
 const FILE_SIZE_LIMITS = {
