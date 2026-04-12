@@ -1,6 +1,7 @@
 'use client';
 
 import Image from 'next/image';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ShieldAlert, ArrowRight, ChevronDown, Sparkles, Layers, Cpu } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -12,8 +13,11 @@ interface HeroStepProps {
   setStep: (step: StepType) => void;
 }
 
+const HERO_FALLBACK_IMAGE_SRC = '/icon';
+
 export function HeroStep({ setStep }: HeroStepProps) {
   const language = useLanguage();
+  const [failedVisualIds, setFailedVisualIds] = useState<Record<string, boolean>>({});
 
   const scrollToContent = () => {
     document.getElementById('landing-discover')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -144,12 +148,16 @@ export function HeroStep({ setStep }: HeroStepProps) {
             >
               <div className="relative w-full aspect-[5/3]">
                 <Image
-                  src={visual.src}
+                  src={failedVisualIds[visual.id] ? HERO_FALLBACK_IMAGE_SRC : visual.src}
                   alt={language === 'en' ? visual.altEn : visual.altTr}
                   fill
                   sizes="(max-width: 768px) 100vw, 33vw"
                   className="object-cover opacity-90 transition-opacity group-hover:opacity-100"
+                  unoptimized
                   priority={idx === 0}
+                  onError={() => {
+                    setFailedVisualIds((prev) => (prev[visual.id] ? prev : { ...prev, [visual.id]: true }));
+                  }}
                 />
               </div>
               <figcaption className="p-4 text-left flex flex-col gap-2 flex-1">

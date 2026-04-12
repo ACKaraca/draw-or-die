@@ -412,13 +412,13 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
         </div>
       )}
 
-      <div className="columns-1 md:columns-2 xl:columns-3 gap-6 [column-fill:_balance]">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         {filteredItems.map((item) => {
           const normalizedJury = normalizeCritiqueText(item.jury) || item.jury;
           const isMineApproved = mineApprovedIds.includes(item.id);
 
           return (
-            <article key={item.id} className="group mb-6 break-inside-avoid rounded-xl border border-white/10 bg-black/40 overflow-hidden">
+            <article key={item.id} className="group rounded-xl border border-white/10 bg-black/40 overflow-hidden">
               <div
                 className="relative w-full bg-black"
                 style={{ aspectRatio: getCardAspect(item) }}
@@ -463,7 +463,7 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
         })}
 
         {filteredItems.length === 0 && !isLoading && (
-          <div className="text-center py-20 text-slate-500 font-mono border border-white/10 rounded-xl bg-white/5">
+          <div className="text-center py-20 text-slate-500 font-mono border border-white/10 rounded-xl bg-white/5 sm:col-span-2 lg:col-span-3 xl:col-span-5">
             Bu feedde henuz gonderi yok.
           </div>
         )}
