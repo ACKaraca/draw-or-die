@@ -575,6 +575,13 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                         <div>
                             <h2 className="font-display font-bold text-lg text-white">AI Mentor</h2>
                             <p className="text-xs text-slate-400 font-mono">{pickLocalized(language, 'Sohbet token limiti:', 'Chat token limit:')} {activeChat ? activeChat.tokenLimit : '-'}</p>
+                            <p className="text-[10px] text-slate-500 font-mono mt-0.5 max-w-md">
+                                {pickLocalized(
+                                    language,
+                                    'Sayılan değer: bu sohbetteki tüm mesajlarda kullanılan toplam token (girdi + çıktı, sağlayıcı kullanımı). Tek bir mesajın boyutu değildir.',
+                                    'This counts total tokens used in this chat (input + output from the provider). It is not a single-message size.',
+                                )}
+                            </p>
                         </div>
                     </div>
 
@@ -582,7 +589,10 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                         <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                             <div className="h-full bg-emerald-400" style={{ width: `${tokenPercent}%` }} />
                         </div>
-                        <p className="mt-1 text-[11px] text-slate-400 font-mono text-right">{activeChat ? activeChat.tokensUsed : 0} / {activeChat ? activeChat.tokenLimit : 0} token</p>
+                        <p className="mt-1 text-[11px] text-slate-400 font-mono text-right">
+                            {activeChat ? activeChat.tokensUsed : 0} / {activeChat ? activeChat.tokenLimit : 0}{' '}
+                            {pickLocalized(language, 'toplam token', 'total tokens')}
+                        </p>
                     </div>
                 </div>
 

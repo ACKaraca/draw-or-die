@@ -12,11 +12,11 @@ export const RAPIDO_COSTS = {
     PREMIUM_RESCUE: 6,       // Premium kurtarma analizi (3x artirildi)
 } as const;
 
-// Hidden AI mentor billing (token -> rapido).
+// Hidden AI mentor billing (token -> rapido). Billable tokens = prompt + completion per round.
 // User-facing UI should not expose this conversion directly.
 export const AI_MENTOR_BILLING = {
-    TOKENS_PER_UNIT: 15000,
-    RAPIDO_PER_UNIT: 5,
+    TOKENS_PER_UNIT: 1000,
+    RAPIDO_PER_UNIT: 3,
     MIN_CHARGE: 0.01,
 } as const;
 

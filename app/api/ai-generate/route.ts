@@ -3,6 +3,7 @@ import { ID, Query } from 'node-appwrite';
 import { createHash, randomUUID } from 'crypto';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { RAPIDO_COSTS } from '@/lib/pricing';
+import { isMultiJuryPromoEnabled } from '@/lib/multi-jury-promo';
 import type { Badge } from '@/types';
 import { logServerError } from '@/lib/logger';
 import { ensureAtLeastTwoParagraphs, normalizeCritiqueText } from '@/lib/critique';
@@ -2507,15 +2508,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const premiumOnly = ['MULTI_JURY', 'MATERIAL_BOARD', 'DEFENSE'];
-    if (premiumOnly.includes(operation) && !typedProfile.is_premium) {
-      return respond(
-        {
-          error: pickLocalized(requestLanguage, 'Premium gerekli.', 'Premium required.'),
-          code: 'PREMIUM_REQUIRED',
-        },
-        403,
-      );
+    if (!typedProfile.is_premium) {
+      if (operation === 'MATERIAL_BOARD' || operation === 'DEFENSE') {
+        return respond(
+          {
+            error: pickLocalized(requestLanguage, 'Premium gerekli.', 'Premium required.'),
+            code: 'PREMIUM_REQUIRED',
+          },
+          403,
+        );
+      }
+      if (operation === 'MULTI_JURY' && !(await isMultiJuryPromoEnabled())) {
+        return respond(
+          {
+            error: pickLocalized(requestLanguage, 'Premium gerekli.', 'Premium required.'),
+            code: 'PREMIUM_REQUIRED',
+          },
+          403,
+        );
+      }
     }
 
     if (operation === 'AI_MENTOR' && !user.email) {
@@ -3263,8 +3274,9 @@ export async function POST(request: NextRequest) {
       const estimatedPromptTokens = estimateTokenCount(prompt) + attachmentTokenEstimate;
       const mentorSpendableRapidoCents = Math.max(0, currentRapidoCents - appliedPremiumExtensionCents);
       const maxAffordableTokens = rapidoCentsToMentorTokens(mentorSpendableRapidoCents);
-      const estimatedPromptCostCents = mentorTokensToRapidoCents(estimatedPromptTokens);
-      const minimumAssistantCostCents = mentorTokensToRapidoCents(1);
+      const estimatedCompletionReserve = 400;
+      const estimatedRoundTokens = estimatedPromptTokens + estimatedCompletionReserve;
+      const estimatedRoundCostCents = mentorTokensToRapidoCents(estimatedRoundTokens);
 
       if (maxAffordableTokens <= 0 || estimatedPromptTokens >= maxAffordableTokens) {
         const requiredCents = appliedPremiumExtensionCents + mentorTokensToRapidoCents(estimatedPromptTokens);
@@ -3283,8 +3295,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (mentorSpendableRapidoCents < estimatedPromptCostCents + minimumAssistantCostCents) {
-        const requiredCents = appliedPremiumExtensionCents + estimatedPromptCostCents + minimumAssistantCostCents;
+      if (mentorSpendableRapidoCents < estimatedRoundCostCents) {
+        const requiredCents = appliedPremiumExtensionCents + estimatedRoundCostCents;
         return respond(
           {
             error: pickLocalized(
@@ -3497,11 +3509,10 @@ export async function POST(request: NextRequest) {
           ? userMessage.substring(0, 60)
           : chat.title;
 
-      const userMessageCostCents = mentorTokensToRapidoCents(userTokens);
-      const assistantMessageCostCents = mentorTokensToRapidoCents(mentorTokens);
+      const roundMentorCostCents = mentorTokensToRapidoCents(consumedTokens);
       finalCostCents = Math.min(
         currentRapidoCents,
-        appliedPremiumExtensionCents + userMessageCostCents + assistantMessageCostCents,
+        appliedPremiumExtensionCents + roundMentorCostCents,
       );
 
       await tables.updateRow({

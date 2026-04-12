@@ -95,6 +95,8 @@ interface UseAnalysisOptions {
   refreshProfile: () => Promise<void>;
   setProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
   preferredLanguage?: SupportedLanguage;
+  /** When true, non-premium users may run multi-jury (server + feature_flags). */
+  multiJuryPromoActive?: boolean;
 }
 
 type PremiumRescuePageInput = {
@@ -754,6 +756,7 @@ export function useAnalysis({
   refreshProfile,
   setProfile,
   preferredLanguage,
+  multiJuryPromoActive = false,
 }: UseAnalysisOptions) {
   const store = useDrawOrDieStore();
   const uiLanguage = useMemo<SupportedLanguage>(() => {
@@ -1457,7 +1460,7 @@ export function useAnalysis({
       return;
     }
 
-    if (!isPremiumUser) {
+    if (!isPremiumUser && !multiJuryPromoActive) {
       store.addToast(t('Çoklu Jüri analizi Premium üyelere özeldir!', 'Multi jury is for Premium members only!'), 'error');
       return;
     }
@@ -1567,7 +1570,7 @@ export function useAnalysis({
 
       store.setStep('upload');
     }
-  }, [store, isPremiumUser, rapidoPens, refreshProfile, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
+  }, [store, isPremiumUser, multiJuryPromoActive, rapidoPens, refreshProfile, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
   // -------------------------------------------------------------------------
   // handlePremium — PREMIUM_RESCUE

@@ -44,6 +44,7 @@ interface StepRouterProps {
   progressionScore: number;
   earnedBadges: import('@/types').Badge[];
   preferredLanguage?: SupportedLanguage;
+  multiJuryPromoActive?: boolean;
 
   // AI handlers (from useAnalysis hook)
   handleAnalyze: () => void;
@@ -70,6 +71,7 @@ export function StepRouter({
   progressionScore,
   earnedBadges,
   preferredLanguage = 'tr',
+  multiJuryPromoActive = false,
   handleAnalyze,
   handleMultiAnalyze,
   handlePremium,
@@ -163,6 +165,7 @@ export function StepRouter({
             setStep('premium-upgrade');
           }}
           preferredLanguage={preferredLanguage}
+          multiJuryPromoActive={multiJuryPromoActive}
         />
       )}
 

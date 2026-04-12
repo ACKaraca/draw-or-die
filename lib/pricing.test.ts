@@ -45,8 +45,8 @@ describe('pricing', () => {
 
   it('keeps hidden mentor billing ratio aligned with product rules', () => {
     expect(AI_MENTOR_BILLING).toEqual({
-      TOKENS_PER_UNIT: 15000,
-      RAPIDO_PER_UNIT: 5,
+      TOKENS_PER_UNIT: 1000,
+      RAPIDO_PER_UNIT: 3,
       MIN_CHARGE: 0.01,
     });
   });

@@ -42,6 +42,7 @@ export default function Home() {
   const pathname = usePathname();
   const [routeHydrated, setRouteHydrated] = useState(false);
   const [preferredLanguage, setPreferredLanguageState] = useState<SupportedLanguage>('tr');
+  const [multiJuryPromoActive, setMultiJuryPromoActive] = useState(false);
 
   // ---- Auth & rapido economy -----------------------------------------------
   const { user, profile, setProfile, refreshProfile } = useAuth();
@@ -108,6 +109,21 @@ export default function Home() {
     if (!profile?.preferred_language) return;
     setPreferredLanguageState(normalizeLanguage(profile.preferred_language, 'tr'));
   }, [profile?.preferred_language]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/feature-flags')
+      .then((res) => res.json() as Promise<{ multiJuryPromo?: boolean }>)
+      .then((data) => {
+        if (!cancelled) setMultiJuryPromoActive(Boolean(data.multiJuryPromo));
+      })
+      .catch(() => {
+        if (!cancelled) setMultiJuryPromoActive(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const runtimeCopy = preferredLanguage === 'en'
     ? {
@@ -236,6 +252,7 @@ export default function Home() {
     refreshProfile,
     setProfile,
     preferredLanguage,
+    multiJuryPromoActive,
   });
 
   // ---- Toast color map -----------------------------------------------------
@@ -297,6 +314,7 @@ export default function Home() {
         progressionScore={progressionScore}
         earnedBadges={earnedBadges}
         preferredLanguage={preferredLanguage}
+        multiJuryPromoActive={multiJuryPromoActive}
         handleAnalyze={handleAnalyze}
         handleMultiAnalyze={handleMultiAnalyze}
         handlePremium={handlePremium}

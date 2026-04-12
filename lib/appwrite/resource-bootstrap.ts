@@ -726,6 +726,13 @@ async function setupFeatureFlagsTable(tables: TablesDB): Promise<void> {
     true,
     JSON.stringify({ referral_rapido: 5 }),
   );
+
+  await ensureFeatureFlagRow(
+    tables,
+    'multi_jury_promo',
+    true,
+    '{}',
+  );
 }
 
 async function setupPromoCodesTable(tables: TablesDB): Promise<void> {

@@ -73,6 +73,8 @@ interface UploadStepProps {
   pdfText?: string | null;
   onGuestUpgradeRequired?: () => void;
   preferredLanguage?: SupportedLanguage;
+  /** Server-driven: when true, multi-jury is available without Premium (promo). */
+  multiJuryPromoActive?: boolean;
 }
 
 const STUDIO_TUTORIAL_STORAGE_KEY = 'dod_studio_tutorial_seen_v1';
@@ -152,6 +154,7 @@ export function UploadStep({
   pdfText,
   onGuestUpgradeRequired,
   preferredLanguage: _preferredLanguage = 'tr',
+  multiJuryPromoActive = false,
 }: UploadStepProps) {
   const language = useLanguage();
   const tutorialSteps = useMemo(() => studioTutorialSteps(language), [language]);
@@ -180,6 +183,8 @@ export function UploadStep({
   const trialTotal = isAnonymous ? TIER_DEFAULTS.ANONYMOUS : TIER_DEFAULTS.REGISTERED;
   const trialUsed = Math.max(0, trialTotal - Math.max(0, rapidoPens));
   const trialPercent = Math.min(100, Math.max(0, (trialUsed / trialTotal) * 100));
+  const showTrialLowBalanceWarning =
+    isAuthenticated && !isPremiumUser && !isGuestAtLimit && rapidoPens < 15;
 
   const [selectedPreviewIndex, setSelectedPreviewIndex] = useState(0);
   const [juryMode, setJuryMode] = useState<'single' | 'multi'>('single');
@@ -947,29 +952,35 @@ export function UploadStep({
               </div>
             )}
 
-            {isAuthenticated && !isPremiumUser && !isGuestAtLimit && (
-              <div className="mb-3 rounded-lg border border-cyan-400/30 bg-cyan-400/10 p-3">
+            {showTrialLowBalanceWarning && (
+              <div className="mb-3 rounded-lg border border-amber-300/45 bg-amber-400/[0.12] p-3 shadow-[inset_0_0_0_1px_rgba(253,230,138,0.12)]">
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-mono text-[11px] text-cyan-100">
-                    {pickLocalized(language, 'Deneme bakiyesi', 'Trial balance')}:{' '}
-                    <span className="font-bold">{Math.max(0, rapidoPens).toFixed(1)} / {trialTotal} Rapido</span>
+                  <p className="font-mono text-[11px] text-amber-50">
+                    {pickLocalized(
+                      language,
+                      'Rapido bakiyeniz azalıyor.',
+                      'Your Rapido balance is running low.',
+                    )}{' '}
+                    <span className="font-bold">
+                      {Math.max(0, rapidoPens).toFixed(1)} / {trialTotal} Rapido
+                    </span>
                   </p>
                   <button
                     type="button"
                     onClick={onUpgradeClick}
-                    className="text-[10px] font-mono uppercase tracking-wider text-cyan-200 hover:text-white transition-colors"
+                    className="text-[10px] font-mono uppercase tracking-wider text-amber-100 hover:text-white transition-colors"
                   >
                     {pickLocalized(language, "Premium'a Geç", 'Go Premium')}
                   </button>
                 </div>
                 <div className="mt-2 h-1.5 w-full rounded-full bg-white/10 overflow-hidden">
-                  <div className="h-full bg-cyan-400" style={{ width: `${trialPercent}%` }} />
+                  <div className="h-full bg-amber-300/90" style={{ width: `${trialPercent}%` }} />
                 </div>
-                <p className="mt-2 text-[10px] text-cyan-100/80 font-mono">
+                <p className="mt-2 text-[10px] font-mono text-amber-100/85">
                   {pickLocalized(
                     language,
-                    'Deneme ilerledikçe premium modlar ve daha yüksek Rapido limiti önerilir.',
-                    'As you progress, premium modes and higher Rapido limits are recommended.',
+                    'Deneme limitine yaklaşıyorsunuz. Premium ile daha yüksek Rapido ve ek modlar açılır.',
+                    'You are close to your trial limit. Premium unlocks higher Rapido and extra modes.',
                   )}
                 </p>
               </div>
@@ -1027,7 +1038,15 @@ export function UploadStep({
 
             {!isRevisionMode && (
               <button
-                onClick={isGuestAtLimit ? onGuestUpgradeRequired : (!isAuthenticated ? onAuthRequired : isPremiumUser ? handleMultiAnalyze : onUpgradeClick)}
+                onClick={
+                  isGuestAtLimit
+                    ? onGuestUpgradeRequired
+                    : !isAuthenticated
+                      ? onAuthRequired
+                      : isPremiumUser || multiJuryPromoActive
+                        ? handleMultiAnalyze
+                        : onUpgradeClick
+                }
                 disabled={(isAuthenticated && (!canRunAnalysis || isFileProcessing)) || isGuestAtLimit}
                 className={`w-full py-3 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border-2 ${(canRunAnalysis && !isGuestAtLimit) || (!isAuthenticated && !isGuestAtLimit) ? 'border-purple-500 text-purple-400 hover:bg-purple-500/10' : 'border-white/10 text-white/30 cursor-not-allowed'}`}
               >
@@ -1035,11 +1054,16 @@ export function UploadStep({
                   <>
                     <Layers size={18} /> {pickLocalized(language, 'Çoklu Jüri için yükselt', 'Upgrade for multi-jury')}
                   </>
-                ) : isAuthenticated ? isPremiumUser ? (
+                ) : isAuthenticated ? isPremiumUser || multiJuryPromoActive ? (
                   <>
                     <Layers size={18} /> {pickLocalized(language, 'Çoklu Jüri', 'Multi-jury')} ({selectedMultiPersonaIds.length}{' '}
                     {pickLocalized(language, 'persona', 'personas')}){' '}
                     <span className="text-xs font-mono opacity-70">({RAPIDO_COSTS.MULTI_JURY} Rapido)</span>
+                    {!isPremiumUser && multiJuryPromoActive ? (
+                      <span className="ml-1 text-[9px] font-mono uppercase text-purple-300">
+                        {pickLocalized(language, 'Promo', 'Promo')}
+                      </span>
+                    ) : null}
                   </>
                 ) : (
                   <>
