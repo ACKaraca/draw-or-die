@@ -4,34 +4,52 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { createAdminClient } from '@/lib/appwrite/server';
 import { canonicalizeAuthEmail, isValidEmailFormat } from '@/lib/auth-email';
 
+const LIST_PAGE_SIZE = 100;
+const MAX_SCANNED_USERS = 10000;
+
 function getClientIp(request: NextRequest): string {
-  return request.headers.get('cf-connecting-ip')
-    || request.headers.get('x-real-ip')
-    || request.headers.get('x-vercel-forwarded-for')
-    || request.headers.get('x-forwarded-for')?.split(',').map((value) => value.trim()).find(Boolean)
+  const runtimeIp = (request as NextRequest & { ip?: string | null }).ip?.trim();
+  const vercelIp = request.headers.get('x-vercel-forwarded-for')?.split(',').map((value) => value.trim()).find(Boolean);
+
+  return runtimeIp
+    || request.headers.get('cf-connecting-ip')?.trim()
+    || request.headers.get('x-real-ip')?.trim()
+    || vercelIp
     || 'unknown-ip';
 }
 
 async function hasGmailCanonicalConflict(users: Users, canonicalEmail: string): Promise<boolean> {
-  const atIndex = canonicalEmail.lastIndexOf('@');
-  if (atIndex <= 0) return false;
+  let offset = 0;
+  let scannedUsers = 0;
 
-  const canonicalLocalPart = canonicalEmail.slice(0, atIndex);
-  const response = await users.list({
-    queries: [
-      Query.search('email', canonicalLocalPart),
-      Query.limit(100),
-    ],
-  });
+  while (scannedUsers < MAX_SCANNED_USERS) {
+    const response = await users.list({
+      queries: [
+        Query.limit(LIST_PAGE_SIZE),
+        Query.offset(offset),
+      ],
+    });
 
-  const candidates = Array.isArray(response.users) ? response.users : [];
-  for (const user of candidates) {
-    const email = typeof user.email === 'string' ? user.email : '';
-    if (!email) continue;
+    const pageUsers = Array.isArray(response.users) ? response.users : [];
+    if (pageUsers.length === 0) {
+      return false;
+    }
 
-    const existingCanonical = canonicalizeAuthEmail(email);
-    if (existingCanonical.isGmailFamily && existingCanonical.canonicalEmail === canonicalEmail) {
-      return true;
+    for (const user of pageUsers) {
+      const email = typeof user.email === 'string' ? user.email : '';
+      if (!email) continue;
+
+      const existingCanonical = canonicalizeAuthEmail(email);
+      if (existingCanonical.isGmailFamily && existingCanonical.canonicalEmail === canonicalEmail) {
+        return true;
+      }
+    }
+
+    scannedUsers += pageUsers.length;
+    offset += pageUsers.length;
+
+    if (pageUsers.length < LIST_PAGE_SIZE) {
+      return false;
     }
   }
 
