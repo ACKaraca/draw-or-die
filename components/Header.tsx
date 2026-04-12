@@ -119,7 +119,9 @@ export function Header({
             <div className="h-20 px-3 md:px-6 flex justify-between items-center gap-2">
                 <div className="flex items-center gap-3 md:gap-8 min-w-0">
                     <button className="flex items-center gap-2 cursor-pointer group min-w-0" onClick={goHome}>
-                        <div className="w-6 h-6 bg-neon-red rounded-sm transform rotate-45 group-hover:rotate-90 transition-transform duration-300"></div>
+                        <div className="relative w-7 h-7 shrink-0">
+                            <div className="absolute inset-0 rounded-lg bg-neon-red transform rotate-45 transition-transform duration-300 group-hover:rotate-[135deg]" />
+                        </div>
                         <h1 className="font-display font-bold text-lg sm:text-xl md:text-2xl tracking-widest text-white truncate">
                             DRAW<span className="text-neon-red">OR</span>DIE
                         </h1>
