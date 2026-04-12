@@ -38,18 +38,18 @@ export const metadata: Metadata = {
     siteName: 'Draw or Die',
     title: 'Draw or Die | Architectural Jury',
     description: 'AI-powered brutal architectural jury and critique platform.',
-    images: [{ url: '/icon' }],
+    images: [{ url: '/icon.svg' }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Draw or Die | Architectural Jury',
     description: 'AI-powered brutal architectural jury and critique platform.',
-    images: ['/icon'],
+    images: ['/icon.svg'],
   },
   icons: {
-    icon: '/icon',
-    shortcut: '/icon',
-    apple: '/icon',
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
   },
 };
 

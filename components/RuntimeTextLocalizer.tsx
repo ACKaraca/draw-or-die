@@ -32,11 +32,13 @@ interface RuntimeTextLocalizerProps {
 
 export function RuntimeTextLocalizer({ children }: RuntimeTextLocalizerProps) {
   const { profile } = useAuth();
-  const [clientLanguage, setClientLanguage] = useState<SupportedLanguage>(() => resolveStoredLanguage());
+  const [clientLanguage, setClientLanguage] = useState<SupportedLanguage>('tr');
   const language = normalizeLanguage(profile?.preferred_language, clientLanguage);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    setClientLanguage(resolveStoredLanguage());
 
     const onStorage = (event: StorageEvent) => {
       if (event.key !== 'dod_preferred_language') return;

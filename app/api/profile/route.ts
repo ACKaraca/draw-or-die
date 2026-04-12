@@ -33,9 +33,15 @@ export async function GET(request: NextRequest) {
 
     await ensureCoreAppwriteResources();
     const profile = await getOrCreateProfile(user);
-    const referralSignupCount = profile.referral_code
-      ? await getReferralSignupCountByCode(profile.referral_code)
-      : 0;
+    let referralSignupCount = 0;
+
+    if (profile.referral_code) {
+      try {
+        referralSignupCount = await getReferralSignupCountByCode(profile.referral_code);
+      } catch (error) {
+        logServerError('api.profile.GET.referralCount', error);
+      }
+    }
 
     return NextResponse.json({
       profile: {

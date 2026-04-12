@@ -8,13 +8,14 @@ const LIST_PAGE_SIZE = 100;
 const MAX_SCANNED_USERS = 10000;
 
 function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
-  }
+  const runtimeIp = (request as NextRequest & { ip?: string | null }).ip?.trim();
+  const vercelIp = request.headers.get('x-vercel-forwarded-for')?.split(',').map((value) => value.trim()).find(Boolean);
 
-  return request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown-ip';
+  return runtimeIp
+    || vercelIp
+    || request.headers.get('cf-connecting-ip')?.trim()
+    || request.headers.get('x-real-ip')?.trim()
+    || 'unknown-ip';
 }
 
 async function hasGmailCanonicalConflict(users: Users, canonicalEmail: string): Promise<boolean> {
