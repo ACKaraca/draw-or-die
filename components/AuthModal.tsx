@@ -7,6 +7,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 import { X, Mail, Lock, LogIn, Loader2, Sparkles, User, ArrowLeft, RefreshCw } from 'lucide-react'
 import { trackConversionEvent } from '@/lib/growth-tracking'
 import { account } from '@/lib/appwrite'
+import { canonicalizeAuthEmail, isValidEmailFormat } from '@/lib/auth-email'
 import { useLanguage } from '@/components/RuntimeTextLocalizer'
 import { REFERRAL_STORAGE_KEY } from '@/components/ReferralCapture'
 
@@ -30,6 +31,8 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             verificationMailFailedDomain: 'Verification email could not be sent. Add this domain to Appwrite Platform and check NEXT_PUBLIC_APP_URL.',
             verificationMailFailedGeneric: 'Verification email could not be sent. Check Appwrite email configuration.',
             emailRequired: 'Email is required.',
+            emailInvalid: 'Please enter a valid email address.',
+            gmailCanonicalConflict: 'This Gmail address (without dots) is already registered. Please log in or recover that account.',
             recoveryMailSent: 'Recovery email sent. Please check your inbox.',
             authErrorGeneric: 'An error occurred during authentication.',
             guestError: 'An error occurred entering as guest.',
@@ -64,6 +67,8 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             verificationMailFailedDomain: 'Dogrulama maili gonderilemedi. Appwrite Platform listesine bu domaini ekleyin ve NEXT_PUBLIC_APP_URL degerini kontrol edin.',
             verificationMailFailedGeneric: 'Dogrulama maili gonderilemedi. Appwrite email ayarlarini kontrol edin.',
             emailRequired: 'Email zorunludur.',
+            emailInvalid: 'Gecerli bir email adresi gir.',
+            gmailCanonicalConflict: 'Bu Gmail adresinin noktasiz surumu zaten kayitli. Lutfen giris yap veya sifre sifirla.',
             recoveryMailSent: 'Şifre sıfırlama maili gönderildi. Gelen kutunu kontrol et.',
             authErrorGeneric: 'Kimlik doğrulama sırasında bir hata oluştu.',
             guestError: 'Misafir girişinde bir hata oluştu.',
@@ -139,20 +144,70 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             ).replace(/\/$/, '')
             const verificationUrl = `${redirectBase}/auth/verify-email`
             const recoveryUrl = `${redirectBase}/auth/recovery`
+            const emailResolution = canonicalizeAuthEmail(email)
+            const canonicalEmail = emailResolution.canonicalEmail
+            const fallbackEmail = emailResolution.normalizedEmail
+
+            if (!fallbackEmail) {
+                throw new Error(copy.emailRequired)
+            }
+
+            if (!isValidEmailFormat(fallbackEmail)) {
+                throw new Error(copy.emailInvalid)
+            }
 
             if (mode === 'login') {
-                await account.createEmailPasswordSession({ email, password })
+                try {
+                    await account.createEmailPasswordSession({ email: canonicalEmail, password })
+                } catch (sessionError) {
+                    if (emailResolution.gmailCanonicalized && fallbackEmail !== canonicalEmail) {
+                        await account.createEmailPasswordSession({ email: fallbackEmail, password })
+                    } else {
+                        throw sessionError
+                    }
+                }
             } else if (mode === 'signup') {
                 if (!fullName.trim()) {
                     throw new Error(copy.fullNameRequired)
                 }
+
+                const precheckResponse = await fetch('/api/auth/signup-precheck', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email: fallbackEmail }),
+                })
+
+                const precheckPayload = await precheckResponse.json().catch(() => ({})) as {
+                    error?: string
+                    code?: string
+                    canonicalEmail?: string
+                }
+
+                if (!precheckResponse.ok) {
+                    if (precheckPayload.code === 'GMAIL_CANONICAL_CONFLICT') {
+                        throw new Error(copy.gmailCanonicalConflict)
+                    }
+
+                    throw new Error(
+                        typeof precheckPayload.error === 'string' && precheckPayload.error
+                            ? precheckPayload.error
+                            : copy.authErrorGeneric
+                    )
+                }
+
+                const signupEmail = typeof precheckPayload.canonicalEmail === 'string' && precheckPayload.canonicalEmail
+                    ? precheckPayload.canonicalEmail
+                    : canonicalEmail
+
                 await account.create({
                     userId: ID.unique(),
-                    email,
+                    email: signupEmail,
                     password,
                     name: fullName.trim().substring(0, 128),
                 })
-                await account.createEmailPasswordSession({ email, password })
+                await account.createEmailPasswordSession({ email: signupEmail, password })
                 try {
                     await account.createVerification(verificationUrl)
                 } catch (verifyError) {
@@ -191,10 +246,15 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                     // Referral hatası kayıt sürecini engellemez
                 }
             } else {
-                if (!email.trim()) {
-                    throw new Error(copy.emailRequired)
+                try {
+                    await account.createRecovery(canonicalEmail, recoveryUrl)
+                } catch (recoveryError) {
+                    if (emailResolution.gmailCanonicalized && fallbackEmail !== canonicalEmail) {
+                        await account.createRecovery(fallbackEmail, recoveryUrl)
+                    } else {
+                        throw recoveryError
+                    }
                 }
-                await account.createRecovery(email.trim(), recoveryUrl)
                 setNotice(copy.recoveryMailSent)
             }
 
