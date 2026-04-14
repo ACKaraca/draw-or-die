@@ -64,6 +64,7 @@ export default function Home() {
     setCheckoutMessage,
     toasts,
     removeToast,
+    addToast,
     setCurrentGallery,
     setStep,
     goHome,
@@ -168,14 +169,24 @@ export default function Home() {
       refreshProfile();
       window.history.replaceState({}, '', window.location.pathname);
     } else if (checkoutStatus === 'cancelled') {
-      setCheckoutMessage(runtimeCopy.checkoutCancelled);
+      addToast(runtimeCopy.checkoutCancelled, 'error');
       window.history.replaceState({}, '', window.location.pathname);
     } else if (authStatus === 'oauth_failed') {
-      setCheckoutMessage(runtimeCopy.oauthFailed);
+      let errStr = params.get('error_description') || params.get('error') || params.get('code') || '';
+      if (errStr) {
+        try { errStr = decodeURIComponent(errStr); } catch (e) { /* ignore */ }
+      }
+      
+      const isAccountExists = errStr.toLowerCase().includes('already exists') || errStr.toLowerCase().includes('conflict');
+      const detailMsg = isAccountExists 
+          ? (preferredLanguage === 'en' ? ' Account already exists. Please login using email and password.' : ' Bu email ile kayıtlı normal bir hesap mevcut. Lütfen şifrenizle giriş yapın.')
+          : (errStr ? ` (${errStr})` : '');
+          
+      addToast(runtimeCopy.oauthFailed + detailMsg, 'error', 7000);
       window.history.replaceState({}, '', window.location.pathname);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshProfile, runtimeCopy.checkoutCancelled, runtimeCopy.checkoutSuccess, runtimeCopy.oauthFailed, setCheckoutMessage]);
+  }, [refreshProfile, runtimeCopy.checkoutCancelled, runtimeCopy.checkoutSuccess, runtimeCopy.oauthFailed, setCheckoutMessage, addToast, preferredLanguage]);
 
   // Capture uncaught browser errors and mirror them into server-side site logs.
   useEffect(() => {

@@ -3,6 +3,7 @@
 import React, { useState } from 'react'
 import { ID } from 'appwrite'
 import { useAuth } from '@/hooks/useAuth'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { X, Mail, Lock, LogIn, Loader2, Sparkles, User, ArrowLeft, RefreshCw } from 'lucide-react'
 import { trackConversionEvent } from '@/lib/growth-tracking'
 import { account } from '@/lib/appwrite'
@@ -20,6 +21,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
     const [notice, setNotice] = useState<string | null>(null)
 
     const { signInAnonymously, signInWithGoogle, reloadSession } = useAuth()
+    const isMobile = useIsMobile()
     const language = useLanguage()
 
     const copy = language === 'en'
@@ -51,6 +53,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             sendRecoveryMail: 'Send Recovery Email',
             or: 'or',
             continueWithGoogle: 'Continue with Google',
+            mobileGoogleDisabled: 'Google sign-in is temporarily disabled on mobile. Please use desktop.',
             tryAsGuest: 'Try as Guest (1 Drawing)',
             guestModeLabel: 'Guest Mode:',
             guestModeText: 'Try one complete drawing to experience the jury. Create an account to save your work and unlock unlimited submissions.',
@@ -89,6 +92,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
             sendRecoveryMail: 'Sıfırlama Maili Gönder',
             or: 'veya',
             continueWithGoogle: 'Google ile Devam Et',
+            mobileGoogleDisabled: 'Google ile giriş mobilde geçici olarak kapalı. Lütfen masaüstü kullan.',
             tryAsGuest: 'Misafir Dene (1 Çizim)',
             guestModeLabel: 'Misafir Modu:',
             guestModeText: 'Jüriyi deneyimlemek için bir tam çizim dene. Çalışmanı kaydetmek ve sınırsız gönderim için hesap oluştur.',
@@ -282,6 +286,11 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
     }
 
     const handleGoogle = async () => {
+        if (isMobile) {
+            setError(copy.mobileGoogleDisabled)
+            return
+        }
+
         setLoading(true)
         setError(null)
         try {
@@ -430,7 +439,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
 
                     <button
                         onClick={handleGoogle}
-                        disabled={loading}
+                        disabled={loading || isMobile}
                         className="w-full mt-6 font-semibold text-sm py-3 rounded-lg border flex items-center justify-center gap-3 transition-colors disabled:opacity-80 bg-white text-black hover:bg-slate-100 border-white/20"
                         aria-label={copy.googleAriaLabel}
                     >
@@ -439,6 +448,12 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                         </svg>
                         {copy.continueWithGoogle}
                     </button>
+
+                    {isMobile && (
+                        <p className="mt-3 text-center text-xs text-slate-400">
+                            {copy.mobileGoogleDisabled}
+                        </p>
+                    )}
 
                     <button
                         onClick={handleGuest}
