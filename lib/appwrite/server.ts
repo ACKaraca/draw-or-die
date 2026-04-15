@@ -174,12 +174,27 @@ export async function getUserFromJwt(jwt: string): Promise<AppwriteAuthUser | nu
   }
 }
 
+const requestAuthMemo = new WeakMap<Request, Promise<AppwriteAuthUser | null>>();
+
 export async function getAuthenticatedUserFromRequest(request: NextRequest | Request): Promise<AppwriteAuthUser | null> {
-  const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) return null;
-  const jwt = authHeader.slice('Bearer '.length).trim();
-  if (!jwt) return null;
-  return getUserFromJwt(jwt);
+  const requestRef = request as Request;
+  const cached = requestAuthMemo.get(requestRef);
+  if (cached) {
+    return cached;
+  }
+
+  const resolveUserPromise = (async () => {
+    const authHeader = request.headers.get('authorization') ?? request.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) return null;
+
+    const jwt = authHeader.slice('Bearer '.length).trim();
+    if (!jwt) return null;
+
+    return getUserFromJwt(jwt);
+  })();
+
+  requestAuthMemo.set(requestRef, resolveUserPromise);
+  return resolveUserPromise;
 }
 
 export type UserProfileRow = Models.Row & {
