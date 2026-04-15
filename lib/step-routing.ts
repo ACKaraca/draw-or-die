@@ -15,6 +15,7 @@ export function resolveStepFromPath(pathname: string): RouteResolution {
   const normalized = normalizePathname(pathname);
 
   if (normalized === '/mentor') return { step: 'ai-mentor' };
+  if (normalized === '/archbuilder') return { step: 'archbuilder' };
   if (normalized === '/history') return { step: 'history' };
   if (normalized === '/profile') return { step: 'profile' };
   if (normalized === '/profile/account') return { step: 'account-details' };
@@ -39,6 +40,7 @@ export function resolvePathFromStep(
   currentGallery: GalleryType = 'WALL_OF_DEATH',
 ): string {
   if (step === 'ai-mentor') return '/mentor';
+  if (step === 'archbuilder') return '/archbuilder';
   if (step === 'history') return '/history';
   if (step === 'profile') return '/profile';
   if (step === 'account-details') return '/profile/account';
