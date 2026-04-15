@@ -13,6 +13,7 @@ import {
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
+import { getProfileStatsCache, setProfileStatsCache } from '@/lib/profile-stats-cache';
 
 const BILLING_SUMMARY_SCAN_LIMIT = 500;
 const MEMORY_SNIPPET_LIMIT = 24;
@@ -54,6 +55,11 @@ export async function GET(request: NextRequest) {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+    }
+
+    const cached = getProfileStatsCache<Record<string, unknown>>(user.id);
+    if (cached) {
+      return NextResponse.json(cached);
     }
 
     await ensureCoreAppwriteResources();
@@ -121,7 +127,7 @@ export async function GET(request: NextRequest) {
       }))
       .filter((row) => row.snippet && row.category);
 
-    return NextResponse.json({
+    const responsePayload = {
       stats: {
         historyTotal,
         approvedTotal,
@@ -131,7 +137,10 @@ export async function GET(request: NextRequest) {
       billingSummary,
       billingCurrency: (billingResult.rows[0]?.currency || 'try').toLowerCase(),
       memorySnippets,
-    });
+    };
+
+    setProfileStatsCache(user.id, responsePayload);
+    return NextResponse.json(responsePayload);
   } catch (error) {
     logServerError('api.profile.stats.GET', error);
     return NextResponse.json({ error: 'Profil istatistikleri alınamadı.' }, { status: 500 });

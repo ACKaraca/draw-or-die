@@ -18,7 +18,6 @@ import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { trackConversionEvent } from '@/lib/growth-tracking';
 import type { UserProfile } from '@/hooks/useAuth';
 import type { AppUser } from '@/hooks/useAuth';
-import { account } from '@/lib/appwrite';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
 import { deriveAspectRatio } from '@/lib/aspect-ratio';
@@ -92,6 +91,7 @@ interface UseAnalysisOptions {
   profile: UserProfile | null;
   isPremiumUser: boolean;
   rapidoPens: number;
+  getJWT: () => Promise<string>;
   refreshProfile: () => Promise<void>;
   setProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
   preferredLanguage?: SupportedLanguage;
@@ -753,6 +753,7 @@ export function useAnalysis({
   profile,
   isPremiumUser,
   rapidoPens,
+  getJWT,
   refreshProfile,
   setProfile,
   preferredLanguage,
@@ -960,12 +961,12 @@ export function useAnalysis({
       }
 
       try {
-        const jwt = await account.createJWT();
+        const jwt = await getJWT();
         const response = await fetch('/api/gallery', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${jwt.jwt}`,
+            Authorization: `Bearer ${jwt}`,
           },
           body: JSON.stringify({
             title,
@@ -998,6 +999,36 @@ export function useAnalysis({
             return false;
           }
 
+          if (response.status === 413 || payload.code === 'GALLERY_IMAGE_TOO_LARGE') {
+            store.addToast(
+              payload.error || t('Görsel boyutu yüksek. Daha düşük çözünürlükte tekrar deneyin.', 'Image is too large. Retry with a lower resolution.'),
+              'error',
+            );
+            return false;
+          }
+
+          if (response.status === 415 || payload.code === 'UNSUPPORTED_IMAGE_TYPE') {
+            store.addToast(
+              payload.error || t('Desteklenmeyen format. JPG/PNG/WEBP kullanın.', 'Unsupported format. Please use JPG/PNG/WEBP.'),
+              'error',
+            );
+            return false;
+          }
+
+          if (response.status === 401) {
+            store.addToast(t('Community paylaşımı için tekrar giriş yapmanız gerekiyor.', 'Please sign in again to share with the community.'), 'error');
+            store.setIsAuthModalOpen(true);
+            return false;
+          }
+
+          if (payload.code === 'GALLERY_WRITE_FAILED') {
+            store.addToast(
+              payload.error || t('Paylaşım servisi şu anda yanıt vermiyor. Lütfen kısa süre sonra tekrar deneyin.', 'Share service is currently unavailable. Please try again shortly.'),
+              'error',
+            );
+            return false;
+          }
+
           store.addToast(
             payload.error || t('Galeri kaydedilirken hata oluştu.', 'Error while saving to gallery.'),
             'error',
@@ -1011,27 +1042,42 @@ export function useAnalysis({
             img: string;
             title: string;
             jury: string;
-            type: 'HALL_OF_FAME' | 'WALL_OF_DEATH';
+            type: 'HALL_OF_FAME' | 'WALL_OF_DEATH' | 'COMMUNITY';
+            status?: 'approved' | 'pending' | 'archived';
             analysisKind?: string;
           };
+          moderationPendingReview?: boolean;
+          code?: string;
         };
 
         if (payload.item) {
           store.setGalleryItems((prev) => [
             {
               ...payload.item!,
+              status: payload.item?.status,
               analysisKind: payload.item?.analysisKind ?? 'SINGLE_JURY',
             },
             ...prev,
           ]);
         }
 
-        store.addToast(
-          galleryType === 'COMMUNITY'
-            ? t('Community paylaşımı tamamlandı!', 'Community share completed!')
-            : t('Proje galeriye eklendi!', 'Project added to gallery!'),
-          'success',
-        );
+        if (payload.moderationPendingReview) {
+          store.addToast(
+            t(
+              'Moderasyon servisi geçici olarak yanıt vermedi. Paylaşımın inceleme kuyruğuna alındı.',
+              'Moderation service is temporarily unavailable. Your share was queued for review.',
+            ),
+            'info',
+            6500,
+          );
+        } else {
+          store.addToast(
+            galleryType === 'COMMUNITY'
+              ? t('Community paylaşımı tamamlandı!', 'Community share completed!')
+              : t('Proje galeriye eklendi!', 'Project added to gallery!'),
+            'success',
+          );
+        }
         return true;
       } catch (err) {
         console.error('[gallery] Unexpected error:', err);
@@ -1039,7 +1085,7 @@ export function useAnalysis({
         return false;
       }
     },
-    [buildGalleryPreviewPayload, store, user, t]
+    [buildGalleryPreviewPayload, getJWT, store, user, t]
   );
 
   const handleShareToCommunity = useCallback(async () => {
@@ -1158,12 +1204,12 @@ export function useAnalysis({
     }
 
     try {
-      const jwt = await account.createJWT();
+      const jwt = await getJWT();
       const response = await fetch('/api/analysis-history', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${jwt.jwt}`,
+          Authorization: `Bearer ${jwt}`,
         },
         body: JSON.stringify({
           preserveMode: true,
@@ -1215,7 +1261,7 @@ export function useAnalysis({
         'error',
       );
     }
-  }, [refreshProfile, store, user, t]);
+  }, [getJWT, refreshProfile, store, user, t]);
 
   // -------------------------------------------------------------------------
   // handleGalleryConsent

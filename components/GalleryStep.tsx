@@ -15,7 +15,6 @@ import { GalleryItem, GalleryType } from '@/types';
 import { useGallery } from '@/hooks/useGallery';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { account } from '@/lib/appwrite';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { aspectRatioToStyleValue, clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
@@ -132,7 +131,7 @@ async function convertShareFileToJpeg(file: File): Promise<{ base64: string; wid
 export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }: GalleryStepProps) {
   const language = useLanguage();
   const { fetchGallery, loadMore, filterByType, isLoading, hasMore } = useGallery();
-  const { user } = useAuth();
+  const { user, getJWT } = useAuth();
   const critique = useDrawOrDieStore((s) => s.critique);
   const latestAnalysisKind = useDrawOrDieStore((s) => s.latestAnalysisKind);
 
@@ -153,12 +152,12 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
   const canSubmitCommunity = Boolean(user);
 
   const authedFetch = async (url: string, init?: RequestInit) => {
-    const jwt = await account.createJWT();
+    const jwt = await getJWT();
     return fetch(url, {
       ...init,
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${jwt.jwt}`,
+        Authorization: `Bearer ${jwt}`,
         ...(init?.headers ?? {}),
       },
     });
@@ -306,7 +305,11 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
         }),
       });
 
-      const payload = await response.json().catch(() => ({})) as { error?: string };
+      const payload = await response.json().catch(() => ({})) as {
+        error?: string;
+        moderationPendingReview?: boolean;
+        code?: string;
+      };
       if (!response.ok) {
         throw new Error(payload.error || pickLocalized(language, 'Paylaşım yayınlanamadı.', 'Could not publish the share.'));
       }
@@ -314,7 +317,11 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
       setCommunityFile(null);
       setCommunityTitle('');
       setCommunityNote('');
-      setCommunityMessage(pickLocalized(language, 'Paylaşım AI kontrolünden geçti ve community feedine eklendi.', 'The share passed AI review and was added to the community feed.'));
+      if (payload.moderationPendingReview || payload.code === 'COMMUNITY_PENDING_REVIEW') {
+        setCommunityMessage(pickLocalized(language, 'Paylaşımın inceleme kuyruğuna alındı. Moderasyon tamamlandığında feedde görünecek.', 'Your share is queued for review. It will appear in the feed after moderation.'));
+      } else {
+        setCommunityMessage(pickLocalized(language, 'Paylaşım AI kontrolünden geçti ve community feedine eklendi.', 'The share passed AI review and was added to the community feed.'));
+      }
       await filterByType('COMMUNITY');
       await syncMineItems('COMMUNITY');
     } catch (error) {

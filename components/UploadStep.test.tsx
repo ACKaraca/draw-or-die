@@ -14,6 +14,10 @@ const baseFormData = {
 };
 
 describe('UploadStep', () => {
+  beforeEach(() => {
+    window.localStorage.setItem('dod_studio_tutorial_seen_v1', '1');
+  });
+
   it('shows guest upgrade messaging and blocks the second submission path', () => {
     const onGuestUpgradeRequired = jest.fn();
 
@@ -46,8 +50,8 @@ describe('UploadStep', () => {
       />,
     );
 
-    expect(screen.getByText(/completed your 1-drawing trial/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /guest limit reached - upgrade to continue/i }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: /şimdi yükselt|upgrade now/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /misafir limiti|guest limit reached/i }).hasAttribute('disabled')).toBe(true);
     expect(onGuestUpgradeRequired).not.toHaveBeenCalled();
   });
 
@@ -87,7 +91,7 @@ describe('UploadStep', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /jüri karşısına çık/i }));
     fireEvent.click(screen.getByRole('button', { name: /çoklu jüri \(3 persona\)/i }));
-    fireEvent.click(screen.getByRole('button', { name: /konsept analizi ve onerisi/i }));
+    fireEvent.click(screen.getByRole('button', { name: /konsept analizi ve önerisi|concept analysis/i }));
     fireEvent.click(screen.getByRole('button', { name: /malzeme analizi/i }));
 
     expect(handleAnalyze).toHaveBeenCalledTimes(1);

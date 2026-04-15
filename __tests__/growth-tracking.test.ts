@@ -5,6 +5,7 @@ import {
   syncAnalyticsConsentFromStorage,
   trackConversionEvent,
 } from '@/lib/growth-tracking';
+import { COOKIE_CONSENT_STORAGE_KEY } from '@/lib/cookie-consent';
 
 describe('growth tracking helpers', () => {
   const originalFetch = global.fetch;
@@ -12,12 +13,14 @@ describe('growth tracking helpers', () => {
   beforeEach(() => {
     window.history.pushState({}, '', '/landing?utm_source=newsletter&utm_medium=email&utm_campaign=spring');
     window.localStorage.clear();
+    document.cookie = `${COOKIE_CONSENT_STORAGE_KEY}=; Max-Age=0; Path=/`;
     jest.spyOn(Date.prototype, 'toISOString').mockReturnValue('2026-03-19T00:00:00.000Z');
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
     global.fetch = originalFetch;
+    document.cookie = `${COOKIE_CONSENT_STORAGE_KEY}=; Max-Age=0; Path=/`;
     window.history.pushState({}, '', '/');
   });
 
@@ -87,7 +90,7 @@ describe('growth tracking helpers', () => {
   });
 
   it('re-applies persisted consent on boot', () => {
-    window.localStorage.setItem('draw_or_die_cookie_consent_v1', 'rejected');
+    document.cookie = `${COOKIE_CONSENT_STORAGE_KEY}=rejected; Path=/`;
     window.gtag = jest.fn();
 
     syncAnalyticsConsentFromStorage();

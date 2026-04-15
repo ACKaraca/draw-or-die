@@ -5,18 +5,27 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
+import type { CookieConsentStatus } from '@/lib/cookie-consent';
 import {
   applyAnalyticsConsent,
   captureUTMFromCurrentUrl,
-  type CookieConsentStatus,
   getCookieConsentStatus,
   trackConversionEvent,
   trackPageView,
 } from '@/lib/growth-tracking';
 
-export function CookieConsentBanner() {
+type CookieConsentBannerProps = {
+  initialConsentStatus?: CookieConsentStatus;
+};
+
+export function CookieConsentBanner({ initialConsentStatus }: CookieConsentBannerProps) {
   const language = useLanguage();
-  const [visible, setVisible] = useState(() => getCookieConsentStatus() === 'unset');
+  const [visible, setVisible] = useState(() => {
+    const initialStatus = initialConsentStatus === 'unset'
+      ? getCookieConsentStatus()
+      : (initialConsentStatus ?? getCookieConsentStatus());
+    return initialStatus === 'unset';
+  });
 
   if (!visible) return null;
 
@@ -43,8 +52,8 @@ export function CookieConsentBanner() {
 
   return (
     <div
-      style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2147483647 }}
-      className="border-t border-white/15 bg-[#0a0f1a]/95 backdrop-blur px-4 py-4"
+      style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2147483647, pointerEvents: 'auto', isolation: 'isolate' }}
+      className="pointer-events-auto isolate border-t border-white/15 bg-[#0a0f1a]/95 backdrop-blur px-4 py-4"
     >
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs leading-relaxed text-slate-300 sm:max-w-3xl pr-2">
@@ -60,7 +69,7 @@ export function CookieConsentBanner() {
           .
         </p>
 
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="pointer-events-auto flex flex-shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={() => dismiss('rejected')}

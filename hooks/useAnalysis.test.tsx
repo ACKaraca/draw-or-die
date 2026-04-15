@@ -1,7 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { useAnalysis } from '@/hooks/useAnalysis';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
-import { account } from '@/lib/appwrite';
 
 jest.mock('@/stores/drawOrDieStore', () => ({
   useDrawOrDieStore: jest.fn(),
@@ -21,14 +20,8 @@ jest.mock('@/lib/supabase/client', () => ({
   createClient: jest.fn(),
 }));
 
-jest.mock('@/lib/appwrite', () => ({
-  account: {
-    createJWT: jest.fn(),
-  },
-}));
-
 const mockedStore = jest.mocked(useDrawOrDieStore);
-const mockedAccount = jest.mocked(account);
+const getJWT = jest.fn().mockResolvedValue('test-jwt');
 
 describe('useAnalysis', () => {
   const addToast = jest.fn();
@@ -42,7 +35,7 @@ describe('useAnalysis', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedAccount.createJWT.mockResolvedValue({ jwt: 'test-jwt' } as never);
+    getJWT.mockResolvedValue('test-jwt');
 
     mockedStore.mockReturnValue({
       imageBase64: 'data:image/png;base64,abc',
@@ -69,6 +62,7 @@ describe('useAnalysis', () => {
         profile: null,
         isPremiumUser: false,
         rapidoPens: 0,
+        getJWT,
         refreshProfile,
         setProfile: jest.fn(),
         preferredLanguage: 'tr',
@@ -94,6 +88,7 @@ describe('useAnalysis', () => {
         profile: null,
         isPremiumUser: false,
         rapidoPens: 5,
+        getJWT,
         refreshProfile,
         setProfile: jest.fn(),
         preferredLanguage: 'tr',
@@ -120,6 +115,7 @@ describe('useAnalysis', () => {
         profile: null,
         isPremiumUser: true,
         rapidoPens: 10,
+        getJWT,
         refreshProfile,
         setProfile: jest.fn(),
         preferredLanguage: 'tr',
@@ -146,5 +142,87 @@ describe('useAnalysis', () => {
       expect.stringMatching(/Analiz korundu.*1\.5 Rapido düşüldü/),
       'success',
     );
+  });
+
+  it('requires authentication before community share', async () => {
+    const { result } = renderHook(() =>
+      useAnalysis({
+        user: null,
+        profile: null,
+        isPremiumUser: false,
+        rapidoPens: 5,
+        getJWT,
+        refreshProfile,
+        setProfile: jest.fn(),
+        preferredLanguage: 'tr',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleShareToCommunity();
+    });
+
+    expect(addToast).toHaveBeenCalledWith('Community paylaşımı için giriş yapmalısınız.', 'error');
+    expect(setIsAuthModalOpen).toHaveBeenCalledWith(true);
+  });
+
+  it('aborts community share when confirmation is cancelled', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
+
+    const { result } = renderHook(() =>
+      useAnalysis({
+        user: { id: 'user-1' } as never,
+        profile: null,
+        isPremiumUser: true,
+        rapidoPens: 10,
+        getJWT,
+        refreshProfile,
+        setProfile: jest.fn(),
+        preferredLanguage: 'tr',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleShareToCommunity();
+    });
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(addToast).toHaveBeenCalledWith('Community paylaşımı onaylanmadı.', 'info');
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it('shows moderation rejection message when community share is blocked by moderation', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      statusText: 'Unprocessable Entity',
+      text: jest.fn().mockResolvedValue(JSON.stringify({
+        code: 'COMMUNITY_MODERATION_REJECTED',
+        error: 'Moderation blocked this share.',
+      })),
+    });
+
+    const { result } = renderHook(() =>
+      useAnalysis({
+        user: { id: 'user-1' } as never,
+        profile: null,
+        isPremiumUser: true,
+        rapidoPens: 10,
+        getJWT,
+        refreshProfile,
+        setProfile: jest.fn(),
+        preferredLanguage: 'tr',
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleShareToCommunity();
+    });
+
+    expect(addToast).toHaveBeenCalledWith('Moderation blocked this share.', 'error');
+    confirmSpy.mockRestore();
   });
 });

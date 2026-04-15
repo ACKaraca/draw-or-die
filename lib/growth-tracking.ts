@@ -1,7 +1,13 @@
 'use client';
 
+import {
+  COOKIE_CONSENT_STORAGE_KEY,
+  normalizeCookieConsentStatus,
+  readCookieValueFromDocument,
+  type CookieConsentStatus,
+} from '@/lib/cookie-consent';
+
 const UTM_STORAGE_KEY = 'draw_or_die_growth_utm_v1';
-const COOKIE_CONSENT_STORAGE_KEY = 'draw_or_die_cookie_consent_v1';
 const DEFAULT_GA_DESTINATION_IDS = ['GT-5TCMV7L2', 'G-1159TDRHXC', 'G-53LBVDCHC6'] as const;
 const UTM_KEYS = [
   'utm_source',
@@ -45,8 +51,6 @@ type UTMData = Partial<Record<UTMKey, string>> & {
   captured_at?: string;
 };
 
-export type CookieConsentStatus = 'accepted' | 'rejected' | 'unset';
-
 declare global {
   interface Window {
     dataLayer?: unknown[];
@@ -70,6 +74,24 @@ function writeLocalStorage(key: string, value: string): void {
   } catch {
     // Ignore quota/privacy mode failures.
   }
+}
+
+function writeCookieConsent(status: Exclude<CookieConsentStatus, 'unset'>): void {
+  if (typeof document === 'undefined') return;
+
+  try {
+    const key = encodeURIComponent(COOKIE_CONSENT_STORAGE_KEY);
+    const value = encodeURIComponent(status);
+    const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    document.cookie = `${key}=${value}; Path=/; Max-Age=31536000; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+  } catch {
+    // Ignore browser cookie write failures.
+  }
+}
+
+function readCookieConsentStatus(): CookieConsentStatus {
+  const cookieValue = readCookieValueFromDocument(COOKIE_CONSENT_STORAGE_KEY);
+  return normalizeCookieConsentStatus(cookieValue);
 }
 
 function emitGtag(...args: unknown[]): void {
@@ -152,11 +174,13 @@ export function getPersistedUTM(): UTMData {
 }
 
 export function getCookieConsentStatus(): CookieConsentStatus {
-  const stored = readLocalStorage(COOKIE_CONSENT_STORAGE_KEY);
-  if (stored === 'accepted' || stored === 'rejected') {
-    return stored;
+  const fromCookie = readCookieConsentStatus();
+  if (fromCookie !== 'unset') {
+    return fromCookie;
   }
-  return 'unset';
+
+  const stored = readLocalStorage(COOKIE_CONSENT_STORAGE_KEY);
+  return normalizeCookieConsentStatus(stored);
 }
 
 export function hasAnalyticsConsent(): boolean {
@@ -164,6 +188,7 @@ export function hasAnalyticsConsent(): boolean {
 }
 
 export function applyAnalyticsConsent(status: Exclude<CookieConsentStatus, 'unset'>): void {
+  writeCookieConsent(status);
   writeLocalStorage(COOKIE_CONSENT_STORAGE_KEY, status);
   const consentValue = status === 'accepted' ? 'granted' : 'denied';
 

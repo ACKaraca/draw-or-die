@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Clock3, Loader2, AlertTriangle, Trophy, Skull, ExternalLink, Trash2 } from 'lucide-react';
 import type { AnalysisHistoryItem, GalleryPlacementType } from '@/types';
-import { account } from '@/lib/appwrite';
+import { useAuth } from '@/hooks/useAuth';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { aspectRatioToStyleValue, clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
@@ -104,6 +104,7 @@ function toHistoryExcerpt(item: AnalysisHistoryItem): string {
 
 export function HistoryStep() {
   const language = useLanguage();
+  const { getJWT } = useAuth();
   const [items, setItems] = useState<AnalysisHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -133,11 +134,11 @@ export function HistoryStep() {
   } = useDrawOrDieStore();
 
   const authedFetch = useCallback(async (url: string, init?: RequestInit) => {
-    const jwt = await account.createJWT();
+    const jwt = await getJWT();
 
     const mergedHeaders: HeadersInit = {
       ...(init?.headers ?? {}),
-      Authorization: `Bearer ${jwt.jwt}`,
+      Authorization: `Bearer ${jwt}`,
     };
 
     return fetch(url, {
@@ -146,7 +147,7 @@ export function HistoryStep() {
         ...mergedHeaders,
       },
     });
-  }, []);
+  }, [getJWT]);
 
   const fetchHistory = useCallback(async (nextOffset = 0, reset = false) => {
     setIsLoading(true);

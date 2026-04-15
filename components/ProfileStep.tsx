@@ -81,7 +81,7 @@ function formatCurrency(cents: number, currency: string): string {
 
 export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDetails, onOpenHistory, onAuthRequired }: ProfileStepProps) {
   const language = useLanguage();
-  const { user, profile, refreshProfile, setPreferredLanguage } = useAuth();
+  const { user, profile, refreshProfile, setPreferredLanguage, getJWT } = useAuth();
 
   const deleteReasonOptions = useMemo(
     () =>
@@ -139,8 +139,8 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
     setError(null);
 
     try {
-      const jwt = await account.createJWT();
-      const headers = { Authorization: `Bearer ${jwt.jwt}` };
+      const jwt = await getJWT();
+      const headers = { Authorization: `Bearer ${jwt}` };
 
       const response = await fetch('/api/profile/stats', { headers });
       const payload = (await response.json().catch(() => ({}))) as ProfileStatsResponse;
@@ -187,7 +187,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
     } finally {
       setIsLoading(false);
     }
-  }, [user, language]);
+  }, [getJWT, user, language]);
 
   useEffect(() => {
     void fetchStats();
@@ -196,12 +196,12 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
   const handleDeleteMemorySnippet = useCallback(async (snippetId: string, reason: string) => {
     setDeletingSnippetId(snippetId);
     try {
-      const jwt = await account.createJWT();
+      const jwt = await getJWT();
       const response = await fetch('/api/memory-snippets', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${jwt.jwt}`,
+          Authorization: `Bearer ${jwt}`,
         },
         body: JSON.stringify({
           snippetId,
@@ -227,7 +227,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
     } finally {
       setDeletingSnippetId(null);
     }
-  }, [language]);
+  }, [getJWT, language]);
 
   const handleLanguageChange = useCallback((nextLanguage: SupportedLanguage) => {
     void setPreferredLanguage(nextLanguage);

@@ -558,6 +558,24 @@ async function setupAnalysisHistoryTable(tables: TablesDB): Promise<void> {
     ['user_id'],
     [OrderBy.Asc],
   );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
+    'analysis_user_kind_idx',
+    TablesDBIndexType.Key,
+    ['user_id', 'analysis_kind'],
+    [OrderBy.Asc, OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
+    'analysis_user_deleted_idx',
+    TablesDBIndexType.Key,
+    ['user_id', 'is_deleted'],
+    [OrderBy.Asc, OrderBy.Asc],
+  );
 }
 
 async function setupAnalysisFileCacheTable(tables: TablesDB): Promise<void> {

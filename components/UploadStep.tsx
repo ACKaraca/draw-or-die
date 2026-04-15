@@ -16,6 +16,7 @@ import { AnalysisLengthOption, FormData, JuryPersonaId } from '@/types';
 import { RAPIDO_COSTS, TIER_DEFAULTS } from '@/lib/pricing';
 import { generateAIResponse } from '@/lib/ai';
 import { SimplePdfPreview } from '@/components/SimplePdfPreview';
+import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
 import type { SupportedLanguage } from '@/lib/i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -585,7 +586,12 @@ export function UploadStep({
                       className="h-full w-full"
                     />
                   ) : (
-                    <img src={activePreview.previewUrl} alt={activePreview.name} className="w-full h-full object-contain" />
+                    <InteractiveImagePreview
+                      src={activePreview.previewUrl}
+                      alt={activePreview.name}
+                      fileName={activePreview.name}
+                      className="h-full w-full"
+                    />
                   )}
                 </div>
 

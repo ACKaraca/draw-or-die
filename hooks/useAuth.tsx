@@ -1,12 +1,20 @@
-'use client'
+﻿'use client'
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { OAuthProvider } from 'appwrite'
 import { account } from '@/lib/appwrite'
 import { Badge } from '@/types'
 import type { SupportedLanguage } from '@/lib/i18n'
 
 const AUTH_SESSION_HINT_KEY = 'dod_has_appwrite_session'
+const JWT_CACHE_TTL_MS = 45_000
+const JWT_RETRY_ATTEMPTS = 3
+const JWT_RETRY_BASE_MS = 160
+
+type IdleWindow = Window & {
+    requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number
+    cancelIdleCallback?: (handle: number) => void
+}
 
 export type UserProfile = {
     id: string
@@ -43,6 +51,7 @@ type AuthContextType = {
     session: AppSession | null
     profile: UserProfile | null
     loading: boolean
+    getJWT: () => Promise<string>
     signInAnonymously: () => Promise<void>
     signInWithGoogle: () => Promise<void>
     refreshProfile: () => Promise<void>
@@ -69,13 +78,16 @@ const AuthContext = createContext<AuthContextType>({
     session: null,
     profile: null,
     loading: true,
+    getJWT: async () => {
+        throw new Error('AuthProvider not initialized')
+    },
     signInAnonymously: async () => { },
     signInWithGoogle: async () => { },
     refreshProfile: async () => { },
     reloadSession: async () => { },
     signOut: async () => { },
     setPreferredLanguage: async () => { },
-    setProfile: () => { }
+    setProfile: () => { },
 })
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -83,6 +95,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [session, setSession] = useState<AppSession | null>(null)
     const [profile, setProfile] = useState<UserProfile | null>(null)
     const [loading, setLoading] = useState(true)
+
+    const userRef = useRef<AppUser | null>(null)
+    const sessionRef = useRef<AppSession | null>(null)
+    const jwtCacheRef = useRef<{ token: string; expiresAt: number } | null>(null)
+    const jwtInflightRef = useRef<Promise<string> | null>(null)
+    const warmPrefetchUserIdRef = useRef<string | null>(null)
+
+    useEffect(() => {
+        userRef.current = user
+        sessionRef.current = session
+    }, [session, user])
 
     const setSessionHint = useCallback((hasSession: boolean) => {
         if (typeof window === 'undefined') return
@@ -97,41 +120,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, [])
 
-    const hasSessionHint = useCallback(() => {
-        if (typeof window === 'undefined') return false
-        try {
-            if (window.localStorage.getItem(AUTH_SESSION_HINT_KEY) === '1') {
-                return true
-            }
-
-            if (/a_session_[^=]+=/.test(document.cookie || '')) {
-                return true
-            }
-
-            for (let i = 0; i < window.localStorage.length; i += 1) {
-                const key = window.localStorage.key(i) || ''
-                if (/cookiefallback/i.test(key)) {
-                    const value = window.localStorage.getItem(key)
-                    if (value) {
-                        return true
-                    }
-                }
-            }
-        } catch {
-            return false
-        }
-
-        return false
+    const clearJwtCache = useCallback(() => {
+        jwtCacheRef.current = null
+        jwtInflightRef.current = null
     }, [])
 
     const createJwtWithRetry = useCallback(async () => {
-        try {
-            return await account.createJWT()
-        } catch {
-            await new Promise((resolve) => setTimeout(resolve, 220))
-            return account.createJWT()
+        let lastError: unknown = null
+
+        for (let attempt = 0; attempt < JWT_RETRY_ATTEMPTS; attempt += 1) {
+            try {
+                return await account.createJWT()
+            } catch (error) {
+                lastError = error
+
+                if (attempt >= JWT_RETRY_ATTEMPTS - 1) {
+                    break
+                }
+
+                const waitMs = JWT_RETRY_BASE_MS * (2 ** attempt)
+                await new Promise((resolve) => setTimeout(resolve, waitMs))
+            }
         }
+
+        throw (lastError instanceof Error ? lastError : new Error('JWT generation failed'))
     }, [])
+
+    const getJWT = useCallback(async (): Promise<string> => {
+        const now = Date.now()
+        const cached = jwtCacheRef.current
+        if (cached && cached.expiresAt > now) {
+            return cached.token
+        }
+
+        if (jwtInflightRef.current) {
+            return jwtInflightRef.current
+        }
+
+        const tokenPromise = (async () => {
+            const jwt = await createJwtWithRetry()
+            const token = jwt.jwt
+
+            jwtCacheRef.current = {
+                token,
+                expiresAt: Date.now() + JWT_CACHE_TTL_MS,
+            }
+
+            setSession((prev) => (prev ? { ...prev, access_token: token } : prev))
+            setSessionHint(true)
+
+            return token
+        })()
+
+        jwtInflightRef.current = tokenPromise
+
+        try {
+            return await tokenPromise
+        } finally {
+            if (jwtInflightRef.current === tokenPromise) {
+                jwtInflightRef.current = null
+            }
+        }
+    }, [createJwtWithRetry, setSessionHint])
 
     const mapUser = useCallback((rawUser: { $id: string; email?: string | null; name?: string | null }): AppUser => {
         const provider = rawUser.email ? 'email' : 'anonymous'
@@ -163,50 +213,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, [])
 
-    const refreshSession = useCallback(async (force = true) => {
-        setLoading(true)
+    const clearAuthState = useCallback(() => {
+        setUser(null)
+        setSession(null)
+        setProfile(null)
+        clearJwtCache()
+        setSessionHint(false)
+    }, [clearJwtCache, setSessionHint])
 
-        if (!force && !hasSessionHint()) {
-            setUser(null)
-            setSession(null)
-            setProfile(null)
-            setLoading(false)
-            return
-        }
+    const refreshSession = useCallback(async () => {
+        setLoading(true)
 
         try {
             const currentUser = await account.get()
-            const jwt = await createJwtWithRetry()
             const mappedUser = mapUser(currentUser)
+            const existingSession = sessionRef.current
+
+            let accessToken: string | null = null
+            try {
+                accessToken = await getJWT()
+            } catch {
+                if (existingSession?.user.id === mappedUser.id && existingSession.access_token) {
+                    accessToken = existingSession.access_token
+                }
+            }
+
+            if (!accessToken) {
+                throw new Error('JWT_SESSION_UNAVAILABLE')
+            }
+
             const nextSession: AppSession = {
-                access_token: jwt.jwt,
+                access_token: accessToken,
                 user: mappedUser,
             }
 
             setUser(mappedUser)
             setSession(nextSession)
-            await fetchProfile(nextSession.access_token)
+            await fetchProfile(accessToken)
             setSessionHint(true)
         } catch {
-            setUser(null)
-            setSession(null)
-            setProfile(null)
-            setSessionHint(false)
+            const activeUser = userRef.current
+            const activeSession = sessionRef.current
+            const hasActiveUiState = Boolean(activeUser && activeSession?.access_token)
+
+            if (!hasActiveUiState) {
+                clearAuthState()
+            }
         } finally {
             setLoading(false)
         }
-    }, [createJwtWithRetry, fetchProfile, hasSessionHint, mapUser, setSessionHint])
+    }, [clearAuthState, fetchProfile, getJWT, mapUser, setSessionHint])
 
     const reloadSession = useCallback(async () => {
-        await refreshSession(true)
+        await refreshSession()
     }, [refreshSession])
 
     useEffect(() => {
         const onAuthChanged = () => {
-            void refreshSession(true)
+            void refreshSession()
         }
 
-        void refreshSession(false)
+        void refreshSession()
         window.addEventListener('appwrite-auth-changed', onAuthChanged)
 
         return () => {
@@ -214,19 +281,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, [refreshSession])
 
+    useEffect(() => {
+        const activeUser = userRef.current
+        if (!activeUser) {
+            warmPrefetchUserIdRef.current = null
+            return
+        }
+
+        if (warmPrefetchUserIdRef.current === activeUser.id) {
+            return
+        }
+
+        warmPrefetchUserIdRef.current = activeUser.id
+        let cancelled = false
+
+        const prefetch = async () => {
+            try {
+                const jwt = await getJWT()
+                const headers = { Authorization: `Bearer ${jwt}` }
+                await Promise.allSettled([
+                    fetch('/api/profile/stats', { headers }),
+                    fetch('/api/analysis-history?limit=6&offset=0', { headers }),
+                ])
+            } catch {
+                // Prefetch should not affect foreground auth state.
+            }
+        }
+
+        const win = window as IdleWindow
+        if (typeof win.requestIdleCallback === 'function') {
+            const idleHandle = win.requestIdleCallback(() => {
+                if (!cancelled) {
+                    void prefetch()
+                }
+            }, { timeout: 1500 })
+
+            return () => {
+                cancelled = true
+                if (typeof win.cancelIdleCallback === 'function') {
+                    win.cancelIdleCallback(idleHandle)
+                }
+            }
+        }
+
+        const timeoutHandle = window.setTimeout(() => {
+            if (!cancelled) {
+                void prefetch()
+            }
+        }, 900)
+
+        return () => {
+            cancelled = true
+            window.clearTimeout(timeoutHandle)
+        }
+    }, [getJWT, user])
+
     const refreshProfile = async () => {
-        if (!user) {
+        const activeUser = userRef.current
+        if (!activeUser) {
             return
         }
 
         try {
-            const jwt = await createJwtWithRetry()
+            const jwt = await getJWT()
             setSession((prev) =>
                 prev
-                    ? { ...prev, access_token: jwt.jwt }
-                    : { access_token: jwt.jwt, user }
+                    ? { ...prev, access_token: jwt }
+                    : { access_token: jwt, user: activeUser }
             )
-            await fetchProfile(jwt.jwt)
+            await fetchProfile(jwt)
             setSessionHint(true)
         } catch {
             await reloadSession()
@@ -238,7 +361,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             await account.createAnonymousSession()
             window.dispatchEvent(new Event('appwrite-auth-changed'))
-            await refreshSession(true)
+            await refreshSession()
         } catch (error) {
             console.error('Error signing in anonymously:', error)
             setLoading(false)
@@ -266,11 +389,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
             await account.deleteSession('current')
         } finally {
-            setUser(null)
-            setSession(null)
-            setProfile(null)
+            clearAuthState()
             setLoading(false)
-            setSessionHint(false)
             window.dispatchEvent(new Event('appwrite-auth-changed'))
         }
     }
@@ -280,15 +400,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setProfile((prev) => (prev ? { ...prev, preferred_language: nextLanguage } : prev))
 
-        if (!user) {
+        const activeUser = userRef.current
+        if (!activeUser) {
             return
         }
 
         try {
-            const jwt = await createJwtWithRetry()
+            const jwt = await getJWT()
             setSession((prev) =>
                 prev
-                    ? { ...prev, access_token: jwt.jwt }
+                    ? { ...prev, access_token: jwt }
                     : prev
             )
 
@@ -296,7 +417,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${jwt.jwt}`,
+                    Authorization: `Bearer ${jwt}`,
                 },
                 body: JSON.stringify({ preferred_language: nextLanguage }),
             })
@@ -313,10 +434,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch {
             // Keep optimistic local language even if backend update fails.
         }
-    }, [createJwtWithRetry, setSessionHint, user])
+    }, [getJWT, setSessionHint])
 
     return (
-        <AuthContext.Provider value={{ user, session, profile, loading, signInAnonymously, signInWithGoogle, refreshProfile, reloadSession, signOut, setPreferredLanguage, setProfile }}>
+        <AuthContext.Provider
+            value={{
+                user,
+                session,
+                profile,
+                loading,
+                getJWT,
+                signInAnonymously,
+                signInWithGoogle,
+                refreshProfile,
+                reloadSession,
+                signOut,
+                setPreferredLanguage,
+                setProfile,
+            }}
+        >
             {children}
         </AuthContext.Provider>
     )

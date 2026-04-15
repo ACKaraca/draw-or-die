@@ -6,6 +6,7 @@ import { DefenseMessage, PremiumData } from '@/types';
 import html2canvas from 'html2canvas';
 import { useMemo, useRef, useState } from 'react';
 import { ChatDefense } from './ChatDefense';
+import { InteractiveImagePreview } from './InteractiveImagePreview';
 
 interface PremiumResultStepProps {
   premiumData: PremiumData;
@@ -230,56 +231,65 @@ export function PremiumResultStep({
               </div>
             </div>
           ) : currentPreview ? (
-            <img src={currentPreview} alt={`Pafta ${activePageEntry?.page ?? 1}`} className="w-full h-full object-contain bg-black/40" />
+            <InteractiveImagePreview
+              src={currentPreview}
+              alt={`Pafta ${activePageEntry?.page ?? 1}`}
+              className="h-full w-full"
+              showControls={false}
+              imageClassName="w-full h-full object-contain bg-black/40"
+              overlay={
+                <>
+                  {visibleFlaws
+                    .filter(({ flaw }) =>
+                      typeof flaw.x === 'number' &&
+                      typeof flaw.y === 'number' &&
+                      typeof flaw.width === 'number' &&
+                      typeof flaw.height === 'number',
+                    )
+                    .map(({ flaw, index }) => (
+                      <div
+                        key={`${index}-${flaw.reason}`}
+                        onClick={() => setSelectedFlawIndex(selectedFlawIndex === index ? null : index)}
+                        className={`pointer-events-auto absolute border-2 transition-all flex items-center justify-center group ${selectedFlawIndex === index ? 'border-yellow-400 bg-yellow-400/20 z-20 scale-105 shadow-[0_0_15px_rgba(250,204,21,0.5)] cursor-default' : 'border-neon-red bg-neon-red/10 hover:bg-neon-red/30 z-10 cursor-pointer'}`}
+                        style={{
+                          left: `${flaw.x}%`,
+                          top: `${flaw.y}%`,
+                          width: `${flaw.width}%`,
+                          height: `${flaw.height}%`,
+                        }}
+                      >
+                        <span className={`absolute -top-3 -right-3 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-lg transition-colors ${selectedFlawIndex === index ? 'bg-yellow-500' : 'bg-neon-red'}`}>
+                          {index + 1}
+                        </span>
+
+                        {selectedFlawIndex === index && (
+                          <div className="pointer-events-auto absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 sm:w-72 bg-black border border-yellow-500 p-3 text-sm text-white z-30 shadow-2xl rounded-lg cursor-auto">
+                            <div className="flex justify-between items-start mb-1 gap-2">
+                              <span className="font-bold text-yellow-500">Sorun #{index + 1}</span>
+                              <button onClick={(e) => { e.stopPropagation(); setSelectedFlawIndex(null); }} className="text-slate-400 hover:text-white p-1 -m-1">
+                                <X size={14} />
+                              </button>
+                            </div>
+                            <p>{flaw.reason}</p>
+                            {flaw.drawingGuide ? <p className="mt-2 text-xs text-yellow-100">Çizim yönlendirmesi: {flaw.drawingGuide}</p> : null}
+                          </div>
+                        )}
+
+                        {selectedFlawIndex !== index && (
+                          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-black border border-neon-red p-2 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                            {flaw.reason}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </>
+              }
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-slate-500 font-mono text-sm">
               Önizleme bulunamadı.
             </div>
           )}
-
-          {!showCompare && currentPreview && visibleFlaws
-            .filter(({ flaw }) =>
-              typeof flaw.x === 'number' &&
-              typeof flaw.y === 'number' &&
-              typeof flaw.width === 'number' &&
-              typeof flaw.height === 'number',
-            )
-            .map(({ flaw, index }) => (
-              <div
-                key={`${index}-${flaw.reason}`}
-                onClick={() => setSelectedFlawIndex(selectedFlawIndex === index ? null : index)}
-                className={`absolute border-2 transition-all flex items-center justify-center group ${selectedFlawIndex === index ? 'border-yellow-400 bg-yellow-400/20 z-20 scale-105 shadow-[0_0_15px_rgba(250,204,21,0.5)] cursor-default' : 'border-neon-red bg-neon-red/10 hover:bg-neon-red/30 z-10 cursor-pointer'}`}
-                style={{
-                  left: `${flaw.x}%`,
-                  top: `${flaw.y}%`,
-                  width: `${flaw.width}%`,
-                  height: `${flaw.height}%`,
-                }}
-              >
-                <span className={`absolute -top-3 -right-3 w-6 h-6 text-white rounded-full flex items-center justify-center text-xs font-bold shadow-lg transition-colors ${selectedFlawIndex === index ? 'bg-yellow-500' : 'bg-neon-red'}`}>
-                  {index + 1}
-                </span>
-
-                {selectedFlawIndex === index && (
-                  <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 sm:w-72 bg-black border border-yellow-500 p-3 text-sm text-white z-30 shadow-2xl rounded-lg cursor-auto pointer-events-auto">
-                    <div className="flex justify-between items-start mb-1 gap-2">
-                      <span className="font-bold text-yellow-500">Sorun #{index + 1}</span>
-                      <button onClick={(e) => { e.stopPropagation(); setSelectedFlawIndex(null); }} className="text-slate-400 hover:text-white p-1 -m-1">
-                        <X size={14} />
-                      </button>
-                    </div>
-                    <p>{flaw.reason}</p>
-                    {flaw.drawingGuide ? <p className="mt-2 text-xs text-yellow-100">Çizim yönlendirmesi: {flaw.drawingGuide}</p> : null}
-                  </div>
-                )}
-
-                {selectedFlawIndex !== index && (
-                  <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 w-48 bg-black border border-neon-red p-2 text-xs text-white opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                    {flaw.reason}
-                  </div>
-                )}
-              </div>
-            ))}
         </div>
 
         {pages.length > 1 && (

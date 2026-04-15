@@ -53,7 +53,7 @@ describe('useAuth', () => {
     expect(result.current.user).toBeNull();
     expect(result.current.session).toBeNull();
     expect(result.current.profile).toBeNull();
-    expect(mockedAccount.get).not.toHaveBeenCalled();
+    expect(mockedAccount.get).toHaveBeenCalledTimes(1);
   });
 
   it('fetches profile for authenticated session and refreshes on demand', async () => {
@@ -80,12 +80,42 @@ describe('useAuth', () => {
       await result.current.refreshProfile();
     });
 
-    expect(mockedAccount.createJWT).toHaveBeenCalledTimes(2);
+    expect(mockedAccount.createJWT).toHaveBeenCalledTimes(1);
     expect(mockedFetch).toHaveBeenCalledWith('/api/profile', expect.objectContaining({
       method: 'GET',
       headers: expect.objectContaining({ Authorization: 'Bearer jwt-token' }),
     }));
   });
+
+  it('returns cached JWT while token is warm', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let first = '';
+    let second = '';
+    await act(async () => {
+      first = await result.current.getJWT();
+      second = await result.current.getJWT();
+    });
+
+    expect(first).toBe('jwt-token');
+    expect(second).toBe('jwt-token');
+    expect(mockedAccount.createJWT).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries JWT creation with backoff before succeeding', async () => {
+    mockedAccount.createJWT
+      .mockRejectedValueOnce(new Error('transient-1'))
+      .mockRejectedValueOnce(new Error('transient-2'))
+      .mockResolvedValue({ jwt: 'jwt-after-retry' } as never);
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await expect(result.current.getJWT()).resolves.toBe('jwt-after-retry');
+    expect(mockedAccount.createJWT).toHaveBeenCalledTimes(3);
+  }, 10000);
 
   it('signs in anonymously and reloads session', async () => {
     mockedAccount.get.mockResolvedValueOnce({ $id: 'anon-1', email: null, name: null } as never);
