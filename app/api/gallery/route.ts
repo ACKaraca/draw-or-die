@@ -16,7 +16,6 @@ import type { GalleryType } from '@/types';
 import { logServerError } from '@/lib/logger';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
-import { invalidateProfileStatsCache } from '@/lib/profile-stats-cache';
 
 const MAX_PAGE_SIZE = 100;
 const MAX_STORAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -501,8 +500,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    invalidateProfileStatsCache(user.id);
-
     return NextResponse.json({
       item: toGalleryItem(created, user.id),
       submissionId: created.$id,
@@ -567,8 +564,6 @@ export async function PATCH(request: NextRequest) {
         status: nextStatus,
       },
     });
-
-    invalidateProfileStatsCache(user.id);
 
     return NextResponse.json({
       item: toGalleryItem(updated, user.id),

@@ -8,7 +8,6 @@ import {
   getAuthenticatedUserFromRequest,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
-import { invalidateProfileStatsCache } from '@/lib/profile-stats-cache';
 
 const ALLOWED_DELETE_REASONS = new Set(['yanlis', 'hatali', 'guncel_degil', 'artik_kullanilmiyor']);
 
@@ -138,8 +137,6 @@ export async function DELETE(request: NextRequest) {
         deleted_at: new Date().toISOString(),
       },
     });
-
-    invalidateProfileStatsCache(user.id);
 
     return NextResponse.json({ success: true });
   } catch {

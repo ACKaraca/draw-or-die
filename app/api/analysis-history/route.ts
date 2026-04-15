@@ -17,7 +17,6 @@ import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { getAppwriteErrorDetails } from '@/lib/appwrite/error-utils';
 import { logServerError } from '@/lib/logger';
 import { normalizeCritiqueText } from '@/lib/critique';
-import { invalidateProfileStatsCache } from '@/lib/profile-stats-cache';
 
 const MAX_PAGE_SIZE = 30;
 const MAX_SOURCE_UPLOAD_BYTES = 35 * 1024 * 1024;
@@ -330,8 +329,6 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    invalidateProfileStatsCache(user.id);
-
     return NextResponse.json({
       charged: preserveMode ? ANALYSIS_PRESERVE_COST_CENTS / RAPIDO_PRECISION_SCALE : 0,
       rapido_remaining: preserveRapidoRemaining,
@@ -415,8 +412,6 @@ export async function DELETE(request: NextRequest) {
         purge_after: purgeAfter.toISOString(),
       },
     });
-
-    invalidateProfileStatsCache(user.id);
 
     return NextResponse.json({
       success: true,

@@ -27,10 +27,7 @@ export function setProfileStatsCache<T>(userId: string, payload: T): void {
 }
 
 export function invalidateProfileStatsCache(userId?: string): void {
-  if (userId) {
-    profileStatsCache.delete(userId);
-    return;
+  if (!userId) {
+    profileStatsCache.clear();
   }
-
-  profileStatsCache.clear();
 }
