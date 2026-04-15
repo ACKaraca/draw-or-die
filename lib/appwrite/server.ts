@@ -124,6 +124,12 @@ export const APPWRITE_TABLE_FEEDBACK_ID = process.env.APPWRITE_TABLE_FEEDBACK_ID
 export const APPWRITE_TABLE_PROMO_CODES_ID = process.env.APPWRITE_TABLE_PROMO_CODES_ID ?? 'promo_codes';
 export const APPWRITE_TABLE_PROMO_REDEMPTIONS_ID = process.env.APPWRITE_TABLE_PROMO_REDEMPTIONS_ID ?? 'promo_redemptions';
 export const APPWRITE_TABLE_FEATURE_FLAGS_ID = process.env.APPWRITE_TABLE_FEATURE_FLAGS_ID ?? 'feature_flags';
+export const APPWRITE_TABLE_ARCHBUILDER_PROJECTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_PROJECTS_ID ?? 'archbuilder_projects';
+export const APPWRITE_TABLE_ARCHBUILDER_SESSIONS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_SESSIONS_ID ?? 'archbuilder_sessions';
+export const APPWRITE_TABLE_ARCHBUILDER_STEP_OUTPUTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_STEP_OUTPUTS_ID ?? 'archbuilder_step_outputs';
+export const APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID ?? 'archbuilder_exports';
+export const APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID ?? 'archbuilder_furniture_assets';
+export const APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID ?? 'archbuilder_furniture_placements';
 export const APPWRITE_BUCKET_GALLERY_ID = process.env.APPWRITE_BUCKET_GALLERY_ID ?? 'gallery';
 
 const EARLY_REGISTRATION_BONUS_LIMIT = 100;
@@ -319,6 +325,76 @@ export type FeatureFlagRow = Models.Row & {
   flag_key: string;
   enabled: boolean;
   value_json?: string;
+};
+
+export type ArchBuilderProjectRow = Models.Row & {
+  user_id: string;
+  title: string;
+  project_type: string;
+  location: string;
+  target_area_m2: number;
+  intent_json: string;
+  constraints_json: string;
+  status: string;
+  latest_session_id?: string;
+};
+
+export type ArchBuilderSessionRow = Models.Row & {
+  project_id: string;
+  user_id: string;
+  current_step: string;
+  approvals_json: string;
+  assumptions_json: string;
+  confidence_score: number;
+  status: string;
+};
+
+export type ArchBuilderStepOutputRow = Models.Row & {
+  project_id: string;
+  session_id: string;
+  user_id: string;
+  step_key: string;
+  output_json: string;
+  clarifications_json?: string;
+  confidence_score?: number;
+  is_approved: boolean;
+  approved_at?: string;
+};
+
+export type ArchBuilderExportRow = Models.Row & {
+  project_id: string;
+  session_id: string;
+  user_id: string;
+  export_format: string;
+  status: string;
+  artifact_url?: string;
+  preview_url?: string;
+  payload_json: string;
+  error_code?: string;
+  include_furniture: boolean;
+};
+
+export type ArchBuilderFurnitureAssetRow = Models.Row & {
+  asset_key: string;
+  category: string;
+  source_file_type: string;
+  source_url?: string;
+  bbox_json: string;
+  anchors_json: string;
+  style_tags_csv?: string;
+  placement_constraints_json: string;
+  active: boolean;
+};
+
+export type ArchBuilderFurniturePlacementRow = Models.Row & {
+  project_id: string;
+  session_id: string;
+  user_id: string;
+  asset_key: string;
+  room_id?: string;
+  quantity: number;
+  placement_json: string;
+  collision_score: number;
 };
 
 export type NormalizedUserProfile = {
