@@ -124,12 +124,6 @@ export const APPWRITE_TABLE_FEEDBACK_ID = process.env.APPWRITE_TABLE_FEEDBACK_ID
 export const APPWRITE_TABLE_PROMO_CODES_ID = process.env.APPWRITE_TABLE_PROMO_CODES_ID ?? 'promo_codes';
 export const APPWRITE_TABLE_PROMO_REDEMPTIONS_ID = process.env.APPWRITE_TABLE_PROMO_REDEMPTIONS_ID ?? 'promo_redemptions';
 export const APPWRITE_TABLE_FEATURE_FLAGS_ID = process.env.APPWRITE_TABLE_FEATURE_FLAGS_ID ?? 'feature_flags';
-export const APPWRITE_TABLE_ARCHBUILDER_PROJECTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_PROJECTS_ID ?? 'archbuilder_projects';
-export const APPWRITE_TABLE_ARCHBUILDER_SESSIONS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_SESSIONS_ID ?? 'archbuilder_sessions';
-export const APPWRITE_TABLE_ARCHBUILDER_STEP_OUTPUTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_STEP_OUTPUTS_ID ?? 'archbuilder_step_outputs';
-export const APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID ?? 'archbuilder_exports';
-export const APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID ?? 'archbuilder_furniture_assets';
-export const APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID ?? 'archbuilder_furniture_placements';
 export const APPWRITE_TABLE_REFERENCES_ID = process.env.APPWRITE_TABLE_REFERENCES_ID ?? 'references_library';
 export const APPWRITE_TABLE_PEER_REVIEWS_ID = process.env.APPWRITE_TABLE_PEER_REVIEWS_ID ?? 'peer_reviews';
 export const APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID = process.env.APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID ?? 'peer_review_openings';
@@ -402,6 +396,7 @@ export type ArchBuilderFurnitureAssetRow = Models.Row & {
   active: boolean;
 };
 
+<<<<<<< HEAD
 export type ReferenceRow = Models.Row & {
   slug: string;
   title: string;
@@ -466,17 +461,8 @@ export type ConfessionRow = Models.Row & {
   likes: number;
 };
 
-export type ArchBuilderFurniturePlacementRow = Models.Row & {
-  project_id: string;
-  session_id: string;
-  user_id: string;
-  asset_key: string;
-  room_id?: string;
-  quantity: number;
-  placement_json: string;
-  collision_score: number;
-};
-
+=======
+>>>>>>> beac247 (feat(archbuilder): close Release B flow)
 export type NormalizedUserProfile = {
   id: string;
   email: string | null;

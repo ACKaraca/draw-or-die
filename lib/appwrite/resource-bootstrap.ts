@@ -25,12 +25,6 @@ import {
   APPWRITE_TABLE_PROMO_REDEMPTIONS_ID,
   APPWRITE_TABLE_STRIPE_EVENTS_ID,
   APPWRITE_TABLE_FEATURE_FLAGS_ID,
-  APPWRITE_TABLE_ARCHBUILDER_PROJECTS_ID,
-  APPWRITE_TABLE_ARCHBUILDER_SESSIONS_ID,
-  APPWRITE_TABLE_ARCHBUILDER_STEP_OUTPUTS_ID,
-  APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID,
-  APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID,
-  APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
   APPWRITE_TABLE_REFERENCES_ID,
   APPWRITE_TABLE_PEER_REVIEWS_ID,
   APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID,
@@ -308,257 +302,9 @@ async function ensureFeatureFlagRow(
   }
 }
 
-async function ensureArchBuilderFurnitureAssetRow(
-  tables: TablesDB,
-  asset: {
-    assetKey: string;
-    category: 'table' | 'chair' | 'flower' | 'tree';
-    sourceFileType: string;
-    sourceUrl: string;
-    bboxJson: string;
-    anchorsJson: string;
-    styleTagsCsv: string;
-    placementConstraintsJson: string;
-  },
-): Promise<void> {
-  const existing = await tables.listRows({
-    databaseId: APPWRITE_DATABASE_ID,
-    tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID,
-    queries: [
-      Query.equal('asset_key', asset.assetKey),
-      Query.limit(1),
-    ],
-  });
-
-  if (existing.rows.length > 0) {
-    return;
-  }
-
-  try {
-    await tables.createRow({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID,
-      rowId: ID.unique(),
-      data: {
-        asset_key: asset.assetKey,
-        category: asset.category,
-        source_file_type: asset.sourceFileType,
-        source_url: asset.sourceUrl,
-        bbox_json: asset.bboxJson,
-        anchors_json: asset.anchorsJson,
-        style_tags_csv: asset.styleTagsCsv,
-        placement_constraints_json: asset.placementConstraintsJson,
-        active: true,
-      },
-    });
-  } catch (error) {
-    if (!isConflict(error)) {
-      throw error;
-    }
-  }
-}
-
 async function runBootstrapStep(stepName: string, operation: () => Promise<void>): Promise<void> {
   try {
     await operation();
-  } catch (error) {
-    if (isResourceLimitError(error)) {
-      console.warn(`[appwrite-bootstrap] '${stepName}' atlandi: kaynak limiti asildi.`);
-      return;
-    }
-    throw error;
-  }
-}
-
-async function ensureBucket(storage: Storage): Promise<void> {
-  const desiredPermissions = [
-    Permission.read(Role.any()),
-    Permission.create(Role.users()),
-    Permission.update(Role.users()),
-    Permission.delete(Role.users()),
-  ];
-  const desiredMaxFileSize = 35 * 1024 * 1024;
-  const desiredExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
-
-  try {
-    const existing = await storage.getBucket({ bucketId: APPWRITE_BUCKET_GALLERY_ID });
-
-    const existingExtensions = Array.isArray(existing.allowedFileExtensions)
-      ? existing.allowedFileExtensions.map((value) => String(value).toLowerCase())
-      : [];
-    const missingExtension = desiredExtensions.some((ext) => !existingExtensions.includes(ext));
-    const needsUpdate =
-      (typeof existing.maximumFileSize === 'number' ? existing.maximumFileSize : 0) < desiredMaxFileSize
-      || missingExtension
-      || existing.enabled !== true
-      || existing.fileSecurity !== false;
-
-    if (!needsUpdate) {
-      return;
-    }
-
-    await storage.updateBucket({
-      bucketId: APPWRITE_BUCKET_GALLERY_ID,
-      name: existing.name || 'Gallery',
-      permissions: Array.isArray(existing.$permissions) && existing.$permissions.length > 0
-        ? existing.$permissions
-        : desiredPermissions,
-      fileSecurity: false,
-      enabled: true,
-      maximumFileSize: desiredMaxFileSize,
-      allowedFileExtensions: desiredExtensions,
-      compression: Compression.Gzip,
-      encryption: true,
-      antivirus: true,
-    });
-
-    return;
-  } catch (error) {
-    if (!isNotFound(error)) throw error;
-    try {
-      await storage.createBucket({
-        bucketId: APPWRITE_BUCKET_GALLERY_ID,
-        name: 'Gallery',
-        permissions: desiredPermissions,
-        fileSecurity: false,
-        enabled: true,
-        maximumFileSize: desiredMaxFileSize,
-        allowedFileExtensions: desiredExtensions,
-        compression: Compression.Gzip,
-        encryption: true,
-        antivirus: true,
-      });
-    } catch (createError) {
-      if (!isConflict(createError)) throw createError;
-    }
-  }
-}
-
-async function setupProfilesTable(tables: TablesDB): Promise<void> {
-  await ensureTable(tables, APPWRITE_TABLE_PROFILES_ID, 'Profiles');
-
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'email', 255, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'preferred_language', 8, false, 'tr');
-  await ensureBooleanColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'is_premium', true, false);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'rapido_pens', true, 15, 0, 1_000_000);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'rapido_fraction_cents', true, 0, 0, 99);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'progression_score', true, 0, 0, 1_000_000);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'wall_of_death_count', true, 0, 0, 1_000_000);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'earned_badges', 10_000, true, '[]');
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'stripe_customer_id', 255, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'stripe_subscription_id', 255, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'subscription_status', 32, false);
-  await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'subscription_current_period_start', false);
-  await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'subscription_current_period_end', false);
-  await ensureBooleanColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'subscription_cancel_at_period_end', true, false);
-  await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'premium_started_at', false);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'premium_price_cents', false, undefined, 0, 100_000_000);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'premium_currency', 8, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'premium_interval', 16, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'premium_promo_code', 64, false);
-  await ensureBooleanColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verified', true, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_email', 255, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_code', 16, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_email', 255, false);
-  await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_expires', false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referral_code', 16, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referred_by', 16, false);
-  await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referral_rewarded_at', false);
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_PROFILES_ID,
-    'profiles_subscription_idx',
-    TablesDBIndexType.Key,
-    ['stripe_subscription_id'],
-    [OrderBy.Asc],
-  );
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_PROFILES_ID,
-    'profiles_referral_code_idx',
-    TablesDBIndexType.Unique,
-    ['referral_code'],
-    [OrderBy.Asc],
-  );
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_PROFILES_ID,
-    'profiles_referred_by_idx',
-    TablesDBIndexType.Key,
-    ['referred_by'],
-    [OrderBy.Asc],
-  );
-}
-
-async function setupGalleryTable(tables: TablesDB): Promise<void> {
-  await ensureTable(tables, APPWRITE_TABLE_GALLERY_ID, 'Gallery Submissions');
-
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'user_id', 64, true);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'title', 255, true);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'jury_quote', 8_000, true);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'gallery_type', 32, true);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'status', 32, true, 'pending');
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'analysis_kind', 64, false);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'preview_width', false, undefined, 1, 10000);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'preview_height', false, undefined, 1, 10000);
-  await ensureIntegerColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'aspect_ratio_milli', false, undefined, 100, 4000);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'source_mime', 64, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'moderation_reason', 500, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'public_url', 2_048, false);
-  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'storage_path', 255, false);
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_GALLERY_ID,
-    'gallery_status_idx',
-    TablesDBIndexType.Key,
-    ['status'],
-    [OrderBy.Asc],
-  );
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_GALLERY_ID,
-    'gallery_type_idx',
-    TablesDBIndexType.Key,
-    ['gallery_type'],
-    [OrderBy.Asc],
-  );
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_GALLERY_ID,
-    'gallery_user_idx',
-    TablesDBIndexType.Key,
-    ['user_id'],
-    [OrderBy.Asc],
-  );
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_GALLERY_ID,
-    'gallery_user_status_idx',
-    TablesDBIndexType.Key,
-    ['user_id', 'status'],
-    [OrderBy.Asc, OrderBy.Asc],
-  );
-}
-
-async function setupStripeEventsTable(tables: TablesDB): Promise<void> {
-  await ensureTable(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'Stripe Events');
-
-  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'event_id', 128, true);
-  await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'processed_at', true);
-
-  await ensureIndex(
-    tables,
-    APPWRITE_TABLE_STRIPE_EVENTS_ID,
-    'stripe_event_unique',
-    TablesDBIndexType.Unique,
-    ['event_id'],
     [OrderBy.Asc],
   );
 }
@@ -1127,6 +873,7 @@ async function setupArchBuilderFurniturePlacementsTable(tables: TablesDB): Promi
   );
 }
 
+<<<<<<< HEAD
 async function setupPeerReviewOpeningsTable(tables: TablesDB): Promise<void> {
   await ensureTable(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'Peer Review Openings');
 
@@ -1302,6 +1049,8 @@ async function setupConfessionsTable(tables: TablesDB): Promise<void> {
   );
 }
 
+=======
+>>>>>>> beac247 (feat(archbuilder): close Release B flow)
 async function ensureCoreResourcesOnce(): Promise<void> {
   const now = Date.now();
   if (coreEnsuredAt > 0 && now - coreEnsuredAt < ENSURE_TTL_MS) {
@@ -1326,12 +1075,6 @@ async function ensureCoreResourcesOnce(): Promise<void> {
   await runBootstrapStep('promo_codes', async () => setupPromoCodesTable(tables));
   await runBootstrapStep('promo_redemptions', async () => setupPromoRedemptionsTable(tables));
   await runBootstrapStep('feature_flags', async () => setupFeatureFlagsTable(tables));
-  await runBootstrapStep('archbuilder_projects', async () => setupArchBuilderProjectsTable(tables));
-  await runBootstrapStep('archbuilder_sessions', async () => setupArchBuilderSessionsTable(tables));
-  await runBootstrapStep('archbuilder_step_outputs', async () => setupArchBuilderStepOutputsTable(tables));
-  await runBootstrapStep('archbuilder_exports', async () => setupArchBuilderExportsTable(tables));
-  await runBootstrapStep('archbuilder_furniture_assets', async () => setupArchBuilderFurnitureAssetsTable(tables));
-  await runBootstrapStep('archbuilder_furniture_placements', async () => setupArchBuilderFurniturePlacementsTable(tables));
   await runBootstrapStep('references_library', async () => setupReferencesTable(tables));
   await runBootstrapStep('peer_review_openings', async () => setupPeerReviewOpeningsTable(tables));
   await runBootstrapStep('peer_reviews', async () => setupPeerReviewsTable(tables));
