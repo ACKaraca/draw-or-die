@@ -16,6 +16,7 @@ import type { GalleryType } from '@/types';
 import { logServerError } from '@/lib/logger';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
+import { invalidateProfileStatsCache } from '@/lib/profile-stats-cache';
 
 const MAX_PAGE_SIZE = 100;
 const MAX_STORAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -360,30 +361,61 @@ export async function POST(request: NextRequest) {
     const aspectRatioMilli = Math.round(aspectRatio * 1000);
 
     if (!title || !juryQuote || (galleryType !== 'HALL_OF_FAME' && galleryType !== 'WALL_OF_DEATH' && galleryType !== 'COMMUNITY')) {
-      return NextResponse.json({ error: 'Geçersiz galeri verisi.' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: 'Geçersiz galeri verisi.',
+          code: 'INVALID_GALLERY_PAYLOAD',
+        },
+        { status: 400 },
+      );
     }
 
     if (galleryType === 'COMMUNITY' && !imageBase64) {
-      return NextResponse.json({ error: 'Community paylasimi icin pafta veya gorsel zorunlu.' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: 'Community paylasimi icin pafta veya gorsel zorunlu.',
+          code: 'COMMUNITY_IMAGE_REQUIRED',
+        },
+        { status: 400 },
+      );
     }
 
     let storagePath = '';
     let publicUrl = '';
     let moderationReason = '';
+    let moderationPendingReview = false;
 
     if (imageBase64) {
       if (!ALLOWED_GALLERY_MIME_TYPES.has(mimeType)) {
-        return NextResponse.json({ error: 'Geçersiz görsel formatı. Sadece JPG/PNG/WEBP kabul edilir.' }, { status: 415 });
+        return NextResponse.json(
+          {
+            error: 'Geçersiz görsel formatı. Sadece JPG/PNG/WEBP kabul edilir.',
+            code: 'UNSUPPORTED_IMAGE_TYPE',
+          },
+          { status: 415 },
+        );
       }
 
       const base64Part = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
       if (!base64Part) {
-        return NextResponse.json({ error: 'Görsel verisi bozuk.' }, { status: 400 });
+        return NextResponse.json(
+          {
+            error: 'Görsel verisi bozuk.',
+            code: 'INVALID_IMAGE_PAYLOAD',
+          },
+          { status: 400 },
+        );
       }
 
       const buffer = Buffer.from(base64Part, 'base64');
       if (!buffer.length) {
-        return NextResponse.json({ error: 'Görsel verisi çözümlenemedi.' }, { status: 400 });
+        return NextResponse.json(
+          {
+            error: 'Görsel verisi çözümlenemedi.',
+            code: 'INVALID_IMAGE_PAYLOAD',
+          },
+          { status: 400 },
+        );
       }
 
       if (buffer.byteLength > MAX_STORAGE_UPLOAD_BYTES) {
@@ -438,8 +470,9 @@ export async function POST(request: NextRequest) {
             );
           }
         } catch (error) {
-          await cleanupUploadedGalleryFile();
-          throw error;
+          logServerError('api.gallery.moderation', error);
+          moderationPendingReview = true;
+          moderationReason = 'Moderation service unavailable. Submission queued for manual review.';
         }
       }
     }
@@ -454,7 +487,9 @@ export async function POST(request: NextRequest) {
         title,
         jury_quote: juryQuote,
         gallery_type: galleryType,
-        status: galleryType === 'COMMUNITY' ? 'approved' : (autoApproved ? 'approved' : 'pending'),
+        status: galleryType === 'COMMUNITY'
+          ? (moderationPendingReview ? 'pending' : 'approved')
+          : (autoApproved ? 'approved' : 'pending'),
         analysis_kind: analysisKind,
         aspect_ratio_milli: aspectRatioMilli,
         source_mime: mimeType,
@@ -466,14 +501,24 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    invalidateProfileStatsCache(user.id);
+
     return NextResponse.json({
       item: toGalleryItem(created, user.id),
       submissionId: created.$id,
+      moderationPendingReview,
+      ...(moderationPendingReview ? { code: 'COMMUNITY_PENDING_REVIEW' } : {}),
     });
   } catch (error) {
     await cleanupUploadedGalleryFile();
     logServerError('api.gallery.POST', error);
-    return NextResponse.json({ error: 'Galeriye ekleme başarısız.' }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: 'Galeriye ekleme başarısız.',
+        code: 'GALLERY_WRITE_FAILED',
+      },
+      { status: 500 },
+    );
   }
 }
 
@@ -522,6 +567,8 @@ export async function PATCH(request: NextRequest) {
         status: nextStatus,
       },
     });
+
+    invalidateProfileStatsCache(user.id);
 
     return NextResponse.json({
       item: toGalleryItem(updated, user.id),
