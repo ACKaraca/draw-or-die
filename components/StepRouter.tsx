@@ -25,6 +25,7 @@ import { HistoryStep } from '@/components/HistoryStep';
 import { PremiumUpgradeStep } from '@/components/PremiumUpgradeStep';
 import { ProfileStep } from '@/components/ProfileStep';
 import { AccountDetailsStep } from '@/components/AccountDetailsStep';
+import { ArchBuilderStep } from '@/components/ArchBuilderStep';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import type { SupportedLanguage } from '@/lib/i18n';
 
@@ -166,6 +167,12 @@ export function StepRouter({
           }}
           preferredLanguage={preferredLanguage}
           multiJuryPromoActive={multiJuryPromoActive}
+        />
+      )}
+
+      {step === 'archbuilder' && (
+        <ArchBuilderStep
+          onAuthRequired={onAuthRequired}
         />
       )}
 
