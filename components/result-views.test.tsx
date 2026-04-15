@@ -176,6 +176,27 @@ describe('result views', () => {
     expect(handlePreserveAnalysis).toHaveBeenCalledTimes(1);
   });
 
+  it('renders interactive image previews in result variants for image sources', () => {
+    const first = render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+        })}
+      />,
+    );
+    expect(screen.getByTestId('interactive-image-preview')).toBeInTheDocument();
+    first.unmount();
+
+    const second = render(<MultiResultStep {...baseMultiProps()} />);
+    expect(screen.getByTestId('interactive-image-preview')).toBeInTheDocument();
+    second.unmount();
+
+    const third = render(<PremiumResultStep {...basePremiumProps()} />);
+    expect(screen.getByTestId('interactive-image-preview')).toBeInTheDocument();
+    third.unmount();
+  });
+
   it('exports the premium result and toggles flaw details', async () => {
     const clickSpy = jest.spyOn(HTMLElement.prototype, 'click').mockImplementation(() => {});
     const premiumProps = basePremiumProps();
@@ -185,7 +206,7 @@ describe('result views', () => {
 
     render(<PremiumResultStep {...premiumProps} />);
 
-    fireEvent.click(screen.getByTitle("Roast'u İndir"));
+    fireEvent.click(screen.getByTitle(/roast|download/i));
 
     await waitFor(() => expect(mockedHtml2canvas).toHaveBeenCalled());
     expect(clickSpy).toHaveBeenCalled();

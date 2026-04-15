@@ -4,6 +4,7 @@ import { ArrowLeft, RefreshCw, Layers, Hammer, Frown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { MultiPersonaData } from '@/types';
 import { SimplePdfPreview } from './SimplePdfPreview';
+import { InteractiveImagePreview } from './InteractiveImagePreview';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
 
@@ -70,10 +71,11 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                         mimeType === 'application/pdf' ? (
                             <SimplePdfPreview src={previewUrl} className="h-full w-full" showControls={false} />
                         ) : (
-                            <img
+                            <InteractiveImagePreview
                                 src={previewUrl}
                                 alt={pickLocalized(language, 'Analiz edilmiş proje', 'Analyzed Project')}
-                                className="w-full h-full object-contain bg-black/50"
+                                className="h-full w-full"
+                                showControls={false}
                             />
                         )
                     )}

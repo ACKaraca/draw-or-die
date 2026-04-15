@@ -7,6 +7,7 @@ import html2canvas from 'html2canvas';
 import { useRef, useState, useEffect } from 'react';
 import { ChatDefense } from './ChatDefense';
 import { SimplePdfPreview } from './SimplePdfPreview';
+import { InteractiveImagePreview } from './InteractiveImagePreview';
 import { FormData, DefenseMessage, GalleryPlacementType } from '@/types';
 import { RAPIDO_COSTS } from '@/lib/pricing';
 
@@ -183,7 +184,12 @@ export function ResultStep({
                             mimeType === 'application/pdf' ? (
                                 <SimplePdfPreview src={previewUrl} className="h-full w-full" />
                             ) : (
-                                <img src={previewUrl} alt={pickLocalized(language, 'Yüklenen pafta', 'Uploaded board')} className="w-full h-full object-contain" />
+                                <InteractiveImagePreview
+                                    src={previewUrl}
+                                    alt={pickLocalized(language, 'Yüklenen pafta', 'Uploaded board')}
+                                    className="h-full w-full"
+                                    showControls={false}
+                                />
                             )
                         )
                     )}
