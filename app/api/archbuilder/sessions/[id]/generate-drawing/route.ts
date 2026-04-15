@@ -181,8 +181,8 @@ export async function POST(request: NextRequest) {
         rowId: existingDrawing.$id,
         data: {
           output_json: JSON.stringify(drawing),
-          is_approved: true,
-          approved_at: new Date().toISOString(),
+          is_approved: false,
+          approved_at: null,
         },
       });
     } else {
@@ -198,8 +198,8 @@ export async function POST(request: NextRequest) {
           output_json: JSON.stringify(drawing),
           clarifications_json: '[]',
           confidence_score: 74,
-          is_approved: true,
-          approved_at: new Date().toISOString(),
+          is_approved: false,
+          approved_at: null,
         },
       });
     }

@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
       tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
       queries: [
         Query.equal('session_id', loaded.session.$id),
-        Query.limit(200),
+        Query.limit(500),
       ],
     });
 
