@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, Space_Grotesk, JetBrains_Mono } from 'next/font/google';
+import { cookies } from 'next/headers';
 import { Suspense } from 'react';
 import './globals.css';
 import { AuthProvider } from '@/hooks/useAuth';
@@ -9,6 +10,11 @@ import { GoogleAnalytics } from '@/components/GoogleAnalytics';
 import { CookieConsentBanner } from '@/components/CookieConsentBanner';
 import { RuntimeTextLocalizer } from '@/components/RuntimeTextLocalizer';
 import { ReferralCaptureInner } from '@/components/ReferralCapture';
+import {
+  COOKIE_CONSENT_STORAGE_KEY,
+  normalizeCookieConsentStatus,
+  type CookieConsentStatus,
+} from '@/lib/cookie-consent';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -53,7 +59,15 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+async function resolveInitialConsentStatus(): Promise<CookieConsentStatus> {
+  const cookieStore = await cookies();
+  const raw = cookieStore.get(COOKIE_CONSENT_STORAGE_KEY)?.value ?? null;
+  return normalizeCookieConsentStatus(raw);
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const initialConsentStatus = await resolveInitialConsentStatus();
+
   return (
     <html lang="tr" className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen flex flex-col" suppressHydrationWarning>
@@ -70,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SiteFooter />
           </RuntimeTextLocalizer>
         </AuthProvider>
-        <CookieConsentBanner />
+        <CookieConsentBanner initialConsentStatus={initialConsentStatus} />
       </body>
     </html>
   );

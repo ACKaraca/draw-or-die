@@ -39,6 +39,26 @@ describe('CookieConsentBanner', () => {
     expect(screen.getByRole('button', { name: /^reddet$/i })).toBeInTheDocument();
   });
 
+  it('honors server-seeded accepted state and stays hidden', async () => {
+    mockedGetCookieConsentStatus.mockReturnValue('unset');
+
+    render(<CookieConsentBanner initialConsentStatus="accepted" />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^kabul et$/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps banner hidden when server state is unset but client consent is already persisted', async () => {
+    mockedGetCookieConsentStatus.mockReturnValue('accepted');
+
+    render(<CookieConsentBanner initialConsentStatus="unset" />);
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /^kabul et$/i })).not.toBeInTheDocument();
+    });
+  });
+
   it('does not render when consent is already accepted', async () => {
     mockedGetCookieConsentStatus.mockReturnValue('accepted');
     render(<CookieConsentBanner />);
@@ -96,6 +116,17 @@ describe('CookieConsentBanner', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /kapat/i })).not.toBeInTheDocument();
     });
+  });
+
+  it('renders with isolated pointer interaction classes', async () => {
+    const { container } = render(<CookieConsentBanner />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^kabul et$/i })).toBeInTheDocument();
+    });
+
+    expect(container.firstElementChild).toHaveClass('pointer-events-auto');
+    expect(container.firstElementChild).toHaveClass('isolate');
   });
 
   it('still hides the banner when analytics bridge throws', async () => {

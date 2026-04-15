@@ -1,7 +1,7 @@
 import Script from 'next/script';
+import { COOKIE_CONSENT_STORAGE_KEY } from '@/lib/cookie-consent';
 
 const DEFAULT_GA_DESTINATION_IDS = ['GT-5TCMV7L2', 'G-1159TDRHXC', 'G-53LBVDCHC6'] as const;
-const COOKIE_CONSENT_STORAGE_KEY = 'draw_or_die_cookie_consent_v1';
 
 function parseIds(rawValue?: string): string[] {
   if (!rawValue) {
@@ -47,6 +47,24 @@ export function GoogleAnalytics() {
         {`
           window.dataLayer = window.dataLayer || [];
           window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
+          var cookieConsentKey = '${COOKIE_CONSENT_STORAGE_KEY}';
+          var readConsentFromCookie = function() {
+            try {
+              var source = document.cookie || '';
+              if (!source) return null;
+              var prefix = encodeURIComponent(cookieConsentKey) + '=';
+              var parts = source.split(';');
+              for (var i = 0; i < parts.length; i += 1) {
+                var item = parts[i].trim();
+                if (item.indexOf(prefix) !== 0) continue;
+                var rawValue = item.slice(prefix.length);
+                return decodeURIComponent(rawValue || '');
+              }
+            } catch (error) {
+              return null;
+            }
+            return null;
+          };
           window.gtag('consent', 'default', {
             analytics_storage: 'denied',
             ad_storage: 'denied',
@@ -54,19 +72,28 @@ export function GoogleAnalytics() {
             ad_personalization: 'denied',
             wait_for_update: 500
           });
+          var persistedConsent = null;
           try {
-            var storedConsent = window.localStorage.getItem('${COOKIE_CONSENT_STORAGE_KEY}');
-            if (storedConsent === 'accepted' || storedConsent === 'rejected') {
-              var consentValue = storedConsent === 'accepted' ? 'granted' : 'denied';
-              window.gtag('consent', 'update', {
-                analytics_storage: consentValue,
-                ad_storage: consentValue,
-                ad_user_data: consentValue,
-                ad_personalization: consentValue
-              });
-            }
+            persistedConsent = window.localStorage.getItem(cookieConsentKey);
           } catch (error) {
-            // Privacy modes may block localStorage. Keep default denied in that case.
+            // Privacy modes may block localStorage.
+          }
+          if (persistedConsent !== 'accepted' && persistedConsent !== 'rejected') {
+            persistedConsent = readConsentFromCookie();
+          }
+          if (persistedConsent === 'accepted' || persistedConsent === 'rejected') {
+            var consentValue = persistedConsent === 'accepted' ? 'granted' : 'denied';
+            window.gtag('consent', 'update', {
+              analytics_storage: consentValue,
+              ad_storage: consentValue,
+              ad_user_data: consentValue,
+              ad_personalization: consentValue
+            });
+            try {
+              window.localStorage.setItem(cookieConsentKey, persistedConsent);
+            } catch (error) {
+              // No-op.
+            }
           }
           window.gtag('js', new Date());
           ${configCommands}
