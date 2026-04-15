@@ -45,7 +45,7 @@ export default function Home() {
   const [multiJuryPromoActive, setMultiJuryPromoActive] = useState(false);
 
   // ---- Auth & rapido economy -----------------------------------------------
-  const { user, profile, setProfile, refreshProfile } = useAuth();
+  const { user, profile, setProfile, refreshProfile, getJWT } = useAuth();
 
   const isPremiumUser = profile?.is_premium ?? false;
   const isAnonymous = user ? user.identities?.[0]?.provider === 'anonymous' : false; // P0.3: Guest mode
@@ -260,6 +260,7 @@ export default function Home() {
     profile,
     isPremiumUser,
     rapidoPens,
+    getJWT,
     refreshProfile,
     setProfile,
     preferredLanguage,
