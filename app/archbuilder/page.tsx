@@ -1,144 +1,147 @@
 'use client';
 
 import Link from 'next/link';
-import { motion } from 'framer-motion';
-import { ArrowRight, CheckCircle2, Compass, FileDown, LayoutGrid, Ruler } from 'lucide-react';
-import { useLanguage } from '@/components/RuntimeTextLocalizer';
-import { pickLocalized } from '@/lib/i18n';
+import { useEffect, useMemo, useState } from 'react';
+import { captureUTMFromCurrentUrl, trackConversionEvent } from '@/lib/growth-tracking';
+import { normalizeLanguage, pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
-const PLANNING_STEPS = ['site', 'constraints', 'envelope', 'program', 'stacking', 'adjacency'] as const;
+const ARCHBUILDER_URL =
+	'https://archbuilder.app/?utm_source=drawordie&utm_medium=referral&utm_campaign=archbuilder_bridge';
 
-const FEATURE_CARDS = [
+const usageSteps = [
 	{
-		icon: Compass,
-		titleTr: 'Niyet -> planlama -> çizim',
-		titleEn: 'Intent -> planning -> drawing',
-		bodyTr:
-			'ArchBuilder, proje niyetini adım adım planlama çıktısına dönüştürür ve onaylanan adımlardan çizim üretir.',
-		bodyEn:
-			'ArchBuilder turns project intent into structured planning outputs and generates drawings from approved steps.',
+		id: '01',
+		tr: 'Kisa bir proje briefi yaz ve arsayi tanimla.',
+		en: 'Write a short project brief and define your site context.',
 	},
 	{
-		icon: LayoutGrid,
-		titleTr: 'Deterministik doğrulama',
-		titleEn: 'Deterministic validation',
-		bodyTr:
-			'Program alan toplamı, tekrar eden mekan kontrolü ve kat dağılımı gibi doğrulamalar otomatik uygulanır.',
-		bodyEn:
-			'Automatic checks cover program area consistency, duplicate spaces, and floor allocation consistency.',
+		id: '02',
+		tr: 'AI taslagi olustursun, sonra 2D/3D duzenleme ile hizli iyilestir.',
+		en: 'Generate an AI draft, then improve it quickly in 2D/3D editing.',
 	},
 	{
-		icon: Ruler,
-		titleTr: 'Mobilya yerleşimi + çakışma skoru',
-		titleEn: 'Furniture placement + collision scoring',
-		bodyTr:
-			'MVP varlıklarıyla temel yerleşim yapılır; yerleşim çıktıları export katmanına taşınır.',
-		bodyEn:
-			'MVP assets support basic placement, and placement outputs are synced into exports.',
+		id: '03',
+		tr: 'Proje hazir oldugunda DXF/PDF ciktilarini al ve paylas.',
+		en: 'When ready, export DXF/PDF outputs and share with your team.',
 	},
-	{
-		icon: FileDown,
-		titleTr: 'DXF odaklı export',
-		titleEn: 'DXF-first exports',
-		bodyTr:
-			'Çıkış formatları DXF ve PNG önizleme odaklıdır; IFC üretimi özellik bayrağı ile kontrollüdür.',
-		bodyEn:
-			'Exports focus on DXF and PNG previews, while IFC is controlled behind feature flags.',
-	},
-] as const;
+];
+
+function getCopy(language: SupportedLanguage) {
+	return {
+		badge: pickLocalized(language, 'YENI AKIS', 'NEW FLOW'),
+		title: pickLocalized(language, 'DrawOrDie x ArchBuilder', 'DrawOrDie x ArchBuilder'),
+		subtitle: pickLocalized(
+			language,
+			'Mimari projeyi yalnizca analiz etmek yerine, dogrudan tasarlamak ve export etmek ister misin?',
+			'Want to do more than critique? Design and export your architectural project directly.',
+		),
+		primaryCta: pickLocalized(language, 'ArchBuilder.app e Git', 'Go To ArchBuilder.app'),
+		secondaryCta: pickLocalized(language, 'DrawOrDie Ana Ekrana Don', 'Back To DrawOrDie Home'),
+		usageTitle: pickLocalized(language, 'Nasil Kullanilir?', 'How It Works'),
+		usageNote: pickLocalized(
+			language,
+			'Bu akis DrawOrDie kullanicilarini hizli sekilde ArchBuilder uygulamasina gecirir.',
+			'This path moves DrawOrDie users into ArchBuilder with a fast handoff.',
+		),
+		featuresTitle: pickLocalized(language, 'Neden ArchBuilder?', 'Why ArchBuilder?'),
+		featureA: pickLocalized(language, 'Prompttan proje baslatma', 'Prompt-first project creation'),
+		featureB: pickLocalized(language, '2D/3D ortak duzenleme', 'Unified 2D/3D editing'),
+		featureC: pickLocalized(language, 'DXF/PDF cikti hatti', 'DXF/PDF export pipeline'),
+	};
+}
 
 export default function ArchBuilderPage() {
-	const language = useLanguage();
+	const [language, setLanguage] = useState<SupportedLanguage>('tr');
+
+	useEffect(() => {
+		const nextLanguage = normalizeLanguage(
+			typeof navigator !== 'undefined' ? navigator.language : 'tr',
+			'tr',
+		);
+		setLanguage(nextLanguage);
+		captureUTMFromCurrentUrl();
+
+		void trackConversionEvent('archbuilder_bridge_viewed', {
+			source: '/archbuilder',
+			destination: 'https://archbuilder.app',
+			language: nextLanguage,
+		});
+	}, []);
+
+	const copy = useMemo(() => getCopy(language), [language]);
+
+	const handlePrimaryClick = () => {
+		void trackConversionEvent('archbuilder_bridge_clicked', {
+			source: '/archbuilder',
+			destination: 'https://archbuilder.app',
+			language,
+		});
+	};
 
 	return (
-		<div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-			<div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(245,158,11,0.14),transparent_40%),radial-gradient(circle_at_80%_10%,rgba(59,130,246,0.14),transparent_35%),radial-gradient(circle_at_50%_100%,rgba(34,197,94,0.08),transparent_45%)]" />
+		<main className="relative min-h-screen overflow-hidden bg-[#05080F] px-6 py-10 text-slate-100 md:px-10">
+			<div className="pointer-events-none absolute inset-0 opacity-30" aria-hidden>
+				<div className="absolute -top-24 left-1/2 h-[420px] w-[420px] -translate-x-1/2 rounded-full bg-neon-red/25 blur-[130px]" />
+				<div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-cyan-400/15 blur-[120px]" />
+			</div>
 
-			<main className="relative mx-auto flex w-full max-w-6xl flex-col gap-12 px-4 pb-20 pt-28 sm:px-6 lg:px-8">
-				<section className="rounded-3xl border border-white/10 bg-white/[0.04] p-6 backdrop-blur-sm sm:p-10">
-					<motion.div
-						initial={{ opacity: 0, y: 16 }}
-						animate={{ opacity: 1, y: 0 }}
-						transition={{ duration: 0.45, ease: 'easeOut' }}
-						className="max-w-3xl"
-					>
-						<p className="mb-4 inline-flex rounded-full border border-amber-300/30 bg-amber-400/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] text-amber-200">
-							{pickLocalized(language, 'ArchBuilder Tanıtım Ekranı', 'ArchBuilder Intro Screen')}
-						</p>
-						<h1 className="font-display text-3xl uppercase tracking-wide text-white sm:text-5xl">
-							{pickLocalized(
-								language,
-								'Mimari planlama akışını tek bir omurgada birleştiren yeni modül',
-								'A new module unifying architectural planning in one flow',
-							)}
-						</h1>
-						<p className="mt-5 text-sm leading-relaxed text-slate-300 sm:text-base">
-							{pickLocalized(
-								language,
-								'Bu sayfa ArchBuilder projesini tanıtır. Sistem; proje niyeti toplama, adım bazlı planlama, onay checkpointleri, çizim üretimi, mobilya yerleşimi ve export üretimini aynı süreçte birleştirir.',
-								'This page introduces the ArchBuilder project. The system combines project intent capture, step-based planning, approval checkpoints, drawing generation, furniture placement, and exports in a single flow.',
-							)}
-						</p>
-
-						<div className="mt-8 flex flex-wrap gap-3">
-							<Link
-								href="/"
-								className="inline-flex items-center gap-2 border border-amber-300/50 bg-amber-300/10 px-5 py-3 font-mono text-xs uppercase tracking-widest text-amber-100 transition-colors hover:bg-amber-300/20"
-							>
-								{pickLocalized(language, 'Ana sayfaya dön', 'Back to home')}
-								<ArrowRight size={14} />
-							</Link>
-							<span className="inline-flex items-center gap-2 border border-white/25 px-5 py-3 font-mono text-xs uppercase tracking-widest text-slate-200">
-								{pickLocalized(language, 'MVP: 6 adım + export akışı', 'MVP: 6 steps + export flow')}
-							</span>
-						</div>
-					</motion.div>
-				</section>
-
-				<section className="grid gap-4 sm:grid-cols-2">
-					{FEATURE_CARDS.map((card, index) => (
-						<motion.article
-							key={card.titleEn}
-							initial={{ opacity: 0, y: 14 }}
-							animate={{ opacity: 1, y: 0 }}
-							transition={{ duration: 0.32, ease: 'easeOut', delay: 0.05 * index }}
-							className="rounded-2xl border border-white/10 bg-black/30 p-5"
-						>
-							<card.icon className="mb-4 h-6 w-6 text-amber-300" strokeWidth={1.5} />
-							<h2 className="font-display text-lg uppercase tracking-wide text-white">
-								{pickLocalized(language, card.titleTr, card.titleEn)}
-							</h2>
-							<p className="mt-2 text-sm leading-relaxed text-slate-300">
-								{pickLocalized(language, card.bodyTr, card.bodyEn)}
-							</p>
-						</motion.article>
-					))}
-				</section>
-
-				<section className="rounded-2xl border border-white/10 bg-slate-900/70 p-6 sm:p-8">
-					<h2 className="font-display text-xl uppercase tracking-wide text-white sm:text-2xl">
-						{pickLocalized(language, 'MVP planlama adımları', 'MVP planning steps')}
-					</h2>
-					<p className="mt-3 text-sm leading-relaxed text-slate-300">
-						{pickLocalized(
-							language,
-							'Her adım ayrı üretilir, kaydedilir ve onaylanmadan sonraki aşamaya geçilmez.',
-							'Each step is generated, persisted, and gated by approval before moving forward.',
-						)}
-					</p>
-					<div className="mt-5 flex flex-wrap gap-2">
-						{PLANNING_STEPS.map((step) => (
-							<span
-								key={step}
-								className="inline-flex items-center gap-2 rounded-full border border-emerald-400/35 bg-emerald-400/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.15em] text-emerald-200"
-							>
-								<CheckCircle2 size={12} />
-								{step}
-							</span>
-						))}
+			<section className="relative mx-auto max-w-6xl">
+				<div className="rounded-3xl border border-white/10 bg-[#0B1220]/85 p-6 shadow-2xl backdrop-blur-xl md:p-10">
+					<div className="mb-8 inline-flex items-center rounded-full border border-neon-red/60 bg-neon-red/15 px-3 py-1 text-[11px] font-mono font-bold tracking-[0.24em] text-neon-red">
+						{copy.badge}
 					</div>
-				</section>
-			</main>
-		</div>
+
+					<h1 className="font-display text-4xl font-black uppercase tracking-wide text-white md:text-6xl">
+						{copy.title}
+					</h1>
+					<p className="mt-4 max-w-3xl text-base text-slate-300 md:text-lg">{copy.subtitle}</p>
+
+					<div className="mt-8 flex flex-col gap-3 sm:flex-row">
+						<a
+							href={ARCHBUILDER_URL}
+							target="_blank"
+							rel="noopener noreferrer"
+							onClick={handlePrimaryClick}
+							className="inline-flex items-center justify-center rounded-xl border border-neon-red bg-neon-red px-6 py-3 font-mono text-sm font-bold uppercase tracking-[0.16em] text-white shadow-[0_0_28px_rgba(255,0,51,0.5)] transition hover:-translate-y-0.5 hover:bg-[#ff1f53]"
+						>
+							{copy.primaryCta}
+						</a>
+						<Link
+							href="/"
+							className="inline-flex items-center justify-center rounded-xl border border-white/20 bg-white/5 px-6 py-3 font-mono text-sm font-bold uppercase tracking-[0.16em] text-slate-100 transition hover:border-white/35 hover:bg-white/10"
+						>
+							{copy.secondaryCta}
+						</Link>
+					</div>
+				</div>
+
+				<div className="mt-7 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+					<article className="rounded-3xl border border-white/10 bg-[#0A1120]/80 p-6 md:p-8">
+						<h2 className="font-display text-2xl font-bold uppercase tracking-wide text-white">{copy.usageTitle}</h2>
+						<p className="mt-2 text-sm text-slate-300">{copy.usageNote}</p>
+
+						<div className="mt-6 space-y-4">
+							{usageSteps.map((step) => (
+								<div key={step.id} className="flex items-start gap-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+									<span className="rounded-md border border-neon-red/60 bg-neon-red/20 px-2 py-1 font-mono text-xs font-bold tracking-[0.2em] text-neon-red">
+										{step.id}
+									</span>
+									<p className="text-sm text-slate-200">{pickLocalized(language, step.tr, step.en)}</p>
+								</div>
+							))}
+						</div>
+					</article>
+
+					<aside className="rounded-3xl border border-white/10 bg-[#0A1120]/80 p-6 md:p-8">
+						<h3 className="font-display text-xl font-bold uppercase tracking-wide text-white">{copy.featuresTitle}</h3>
+						<div className="mt-4 space-y-3 font-mono text-sm">
+							<p className="rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-3 text-cyan-100">{copy.featureA}</p>
+							<p className="rounded-xl border border-yellow-300/35 bg-yellow-300/10 px-4 py-3 text-yellow-100">{copy.featureB}</p>
+							<p className="rounded-xl border border-emerald-400/35 bg-emerald-400/10 px-4 py-3 text-emerald-100">{copy.featureC}</p>
+						</div>
+					</aside>
+				</div>
+			</section>
+		</main>
 	);
 }

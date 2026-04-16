@@ -49,7 +49,7 @@ The `StepRouter` component sits inside `app/page.tsx` and manages the view based
 
 ### A. Stripe Checkout Session (`POST /api/checkout`)
 Initiates a payment flow.
-- **Auth**: Must have a valid Supabase Server Session.
+- **Auth**: Must have a valid Appwrite server-validated session.
 - **Payload**: `{ "mode": "premium_monthly" | "premium_yearly" | "rapido_pack", "quantity"?: number }`
 - **Response**: `{ "url": "https://checkout.stripe.com/..." }`
 
@@ -117,7 +117,7 @@ The central user record, linked 1-to-1 with Appwrite Auth.
 Records of user projects submitted to the public gallery.
 - `id` (uuid, PK)
 - `user_id` (uuid, FK to profiles)
-- `image_path` (text): Supabase Storage path.
+- `image_path` (text): Appwrite Storage file path or id.
 - `public_url` (text): Resolved URL.
 - `critique_data` (jsonb): The AI JSON output.
 - `gallery_type` (text): `HALL_OF_FAME` | `WALL_OF_DEATH`.
@@ -154,12 +154,12 @@ All AI interactions enforce structured JSON outputs from the LLM. The system dyn
 The economy hinges on "Rapido" pens as the unit of exchange.
 
 - **Pricing Engine**: lib/pricing.ts defines operation costs globally (e.g., Single Jury = 4, Multi Jury = 10, AI Mentor = 1).
-- **Deduction Authority**: The client *never* deducts its own Rapido balance. The Supabase Edge Function reads the database balance, verifies it exceeds the cost, performs the AI call, and deducts the balance in a secure server-side transaction.
+- **Deduction Authority**: The client *never* deducts its own Rapido balance. Server-side API routes read the database balance, verify it exceeds the cost, perform the AI call, and deduct the balance in a secure server-side transaction.
 - **Purchasing**:
   - Client calls `/api/checkout` with a mode (`premium_monthly`, `rapido_pack`).
   - Stripe Checkout is presented.
   - Upon successful payment, Stripe fires a webhook to `/api/webhook/stripe`.
-  - The webhook safely updates `profiles.rapido_pens` or `profiles.is_premium`. The user refreshes or relies on Supabase realtime to see updated balances.
+  - The webhook safely updates `profiles.rapido_pens` or `profiles.is_premium`. The user refreshes or relies on Appwrite-backed profile reads/revalidation to see updated balances.
 
 ---
 

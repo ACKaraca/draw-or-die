@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Crown, PenTool, TrendingUp, Sparkles, LogOut, LogIn, UserCircle2, Menu, X, Wallet, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -29,6 +30,7 @@ export function Header({
             return {
                 displayFallbackName: 'Architect',
                 navStudioDesk: 'Studio Desk',
+                navArchBuilder: 'ArchBuilder',
                 navCommunity: 'Community',
                 navAiMentor: 'AI Mentor',
                 navHallOfFame: 'Hall of Fame',
@@ -53,6 +55,7 @@ export function Header({
         return {
             displayFallbackName: 'Mimar',
             navStudioDesk: 'Studio Desk',
+            navArchBuilder: 'ArchBuilder',
             navCommunity: 'Community',
             navAiMentor: 'AI Mentor',
             navHallOfFame: 'Hall of Fame',
@@ -129,6 +132,7 @@ export function Header({
 
                     <nav className="hidden xl:flex items-center gap-5 font-mono text-xs uppercase tracking-widest text-slate-400">
                         <button onClick={() => goTo('upload')} className="hover:text-white transition-colors">{copy.navStudioDesk}</button>
+                        <Link href="/archbuilder" className="hover:text-white transition-colors text-amber-300">{copy.navArchBuilder}</Link>
                         <button onClick={() => goToGallery('COMMUNITY')} className="hover:text-white transition-colors text-cyan-300">{copy.navCommunity}</button>
                         <button onClick={() => goTo('ai-mentor')} className="hover:text-white transition-colors text-yellow-400 font-bold flex items-center gap-1"><Sparkles size={12} /> {copy.navAiMentor}</button>
                         <button onClick={() => goToGallery('HALL_OF_FAME')} className="hover:text-white transition-colors text-emerald-400">{copy.navHallOfFame}</button>
@@ -215,6 +219,7 @@ export function Header({
 
                     <div className="grid grid-cols-2 gap-2 text-xs font-mono uppercase tracking-wider">
                         <button onClick={() => { goTo('upload'); setIsMobileMenuOpen(false); }} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-slate-200 hover:bg-white/10">{copy.navStudioDesk}</button>
+                        <Link href="/archbuilder" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-200 hover:bg-amber-500/20 text-center">{copy.navArchBuilder}</Link>
                         <button onClick={() => goToGallery('COMMUNITY')} className="rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-cyan-200 hover:bg-cyan-500/20">{copy.navCommunity}</button>
                         <button onClick={() => goTo('ai-mentor')} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-yellow-300 hover:bg-white/10">{copy.navAiMentor}</button>
                         <button onClick={() => goTo('profile')} className="rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-slate-100 hover:bg-white/10">{copy.profile}</button>
