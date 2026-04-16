@@ -182,7 +182,6 @@ export async function POST(request: NextRequest) {
         data: {
           output_json: JSON.stringify(drawing),
           is_approved: false,
-          approved_at: null,
         },
       });
     } else {
@@ -199,7 +198,6 @@ export async function POST(request: NextRequest) {
           clarifications_json: '[]',
           confidence_score: 74,
           is_approved: false,
-          approved_at: null,
         },
       });
     }
