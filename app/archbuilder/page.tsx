@@ -88,12 +88,9 @@ export default function ArchBuilderPage() {
 								{pickLocalized(language, 'Ana sayfaya dön', 'Back to home')}
 								<ArrowRight size={14} />
 							</Link>
-							<a
-								href="/docs/ARCHBUILDER_MVP.md"
-								className="inline-flex items-center gap-2 border border-white/25 px-5 py-3 font-mono text-xs uppercase tracking-widest text-slate-200 transition-colors hover:border-white/40 hover:text-white"
-							>
-								{pickLocalized(language, 'MVP dokümantasyonu', 'MVP documentation')}
-							</a>
+							<span className="inline-flex items-center gap-2 border border-white/25 px-5 py-3 font-mono text-xs uppercase tracking-widest text-slate-200">
+								{pickLocalized(language, 'MVP: 6 adım + export akışı', 'MVP: 6 steps + export flow')}
+							</span>
 						</div>
 					</motion.div>
 				</section>
