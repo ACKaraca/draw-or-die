@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ShieldAlert, ArrowRight, ChevronDown, Sparkles, Layers, Cpu } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -16,6 +17,7 @@ interface HeroStepProps {
 const HERO_FALLBACK_IMAGE_SRC = '/icon';
 
 export function HeroStep({ setStep }: HeroStepProps) {
+  const router = useRouter();
   const language = useLanguage();
   const [failedVisualIds, setFailedVisualIds] = useState<Record<string, boolean>>({});
 
@@ -72,7 +74,7 @@ export function HeroStep({ setStep }: HeroStepProps) {
           </button>
           <button
             type="button"
-            onClick={() => setStep('archbuilder')}
+            onClick={() => router.push('/archbuilder')}
             className="inline-flex items-center justify-center gap-2 border border-amber-400/50 bg-amber-500/10 px-6 py-4 font-mono text-xs uppercase tracking-widest text-amber-100 hover:bg-amber-500/20 transition-colors"
           >
             {pickLocalized(language, 'ArchBuilder dene', 'Try ArchBuilder')}

@@ -12,6 +12,12 @@ jest.mock('react-markdown', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: jest.fn(),
+  }),
+}));
+
 const mockedUseAuth = jest.requireMock('@/hooks/useAuth').useAuth as jest.Mock;
 
 describe('presentation components', () => {
