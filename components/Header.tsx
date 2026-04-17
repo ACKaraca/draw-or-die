@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Crown, PenTool, TrendingUp, Sparkles, LogOut, LogIn, UserCircle2, Menu, X, Wallet, ChevronDown } from 'lucide-react';
+import Link from 'next/link';
+import { Crown, PenTool, TrendingUp, Sparkles, LogOut, LogIn, UserCircle2, Menu, X, Wallet, ChevronDown, BookMarked } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import type { StepType } from '@/types';
@@ -34,6 +35,10 @@ export function Header({
                 navAiMentor: 'AI Mentor',
                 navHallOfFame: 'Hall of Fame',
                 navWallOfDeath: 'Wall of Death',
+                navReferences: 'References',
+                navPortfolio: 'Portfolio',
+                navPeerReview: 'Peer Review',
+                navConfessions: 'Confessions',
                 profileMenuTitle: 'User menu',
                 profile: 'Profile',
                 history: 'Analysis History',
@@ -59,6 +64,10 @@ export function Header({
             navAiMentor: 'AI Mentor',
             navHallOfFame: 'Hall of Fame',
             navWallOfDeath: 'Wall of Death',
+            navReferences: 'Referanslar',
+            navPortfolio: 'Portfolyo',
+            navPeerReview: 'Akran Jürisi',
+            navConfessions: 'İtiraflar',
             profileMenuTitle: 'Kullanici menusu',
             profile: 'Profil',
             history: 'Analiz Gecmisi',
@@ -136,6 +145,10 @@ export function Header({
                         <button onClick={() => goTo('ai-mentor')} className="hover:text-white transition-colors text-yellow-400 font-bold flex items-center gap-1"><Sparkles size={12} /> {copy.navAiMentor}</button>
                         <button onClick={() => goToGallery('HALL_OF_FAME')} className="hover:text-white transition-colors text-emerald-400">{copy.navHallOfFame}</button>
                         <button onClick={() => goToGallery('WALL_OF_DEATH')} className="hover:text-white transition-colors text-red-500">{copy.navWallOfDeath}</button>
+                        <Link href="/references" onClick={() => { setIsMobileMenuOpen(false); setIsProfileMenuOpen(false); }} className="hover:text-white transition-colors text-amber-300 flex items-center gap-1"><BookMarked size={12} /> {copy.navReferences}</Link>
+                        <Link href="/portfolio" onClick={() => { setIsMobileMenuOpen(false); setIsProfileMenuOpen(false); }} className="hover:text-white transition-colors text-emerald-300">{copy.navPortfolio}</Link>
+                        <Link href="/peer-review" onClick={() => { setIsMobileMenuOpen(false); setIsProfileMenuOpen(false); }} className="hover:text-white transition-colors text-blue-300">{copy.navPeerReview}</Link>
+                        <Link href="/confessions" onClick={() => { setIsMobileMenuOpen(false); setIsProfileMenuOpen(false); }} className="hover:text-white transition-colors text-purple-300">{copy.navConfessions}</Link>
                     </nav>
                 </div>
 
@@ -227,6 +240,10 @@ export function Header({
                         <button onClick={() => goTo('premium-upgrade')} className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-yellow-300 hover:bg-yellow-500/20">{copy.premiumShort}</button>
                         <button onClick={() => goToGallery('HALL_OF_FAME')} className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-emerald-200 hover:bg-emerald-500/20">{copy.navHallOfFame}</button>
                         <button onClick={() => goToGallery('WALL_OF_DEATH')} className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-red-200 hover:bg-red-500/20">{copy.navWallOfDeath}</button>
+                        <Link href="/references" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-amber-200 hover:bg-amber-400/20 text-center">{copy.navReferences}</Link>
+                        <Link href="/portfolio" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-3 py-2 text-emerald-200 hover:bg-emerald-400/20 text-center">{copy.navPortfolio}</Link>
+                        <Link href="/peer-review" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg border border-blue-400/40 bg-blue-400/10 px-3 py-2 text-blue-200 hover:bg-blue-400/20 text-center">{copy.navPeerReview}</Link>
+                        <Link href="/confessions" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg border border-purple-400/40 bg-purple-400/10 px-3 py-2 text-purple-200 hover:bg-purple-400/20 text-center">{copy.navConfessions}</Link>
                     </div>
                 </div>
             )}

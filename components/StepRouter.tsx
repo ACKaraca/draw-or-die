@@ -211,6 +211,7 @@ export function StepRouter({
           onUpgradeClick={() => setStep('premium-upgrade')}
           handlePreserveAnalysis={handlePreserveAnalysis}
           handleShareToCommunity={handleShareToCommunity}
+          handleAutoConcept={handleAutoConcept}
         />
       )}
 

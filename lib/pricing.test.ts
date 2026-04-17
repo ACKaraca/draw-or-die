@@ -19,7 +19,7 @@ describe('pricing', () => {
       REVISION_DIFFERENT: 2,
       MULTI_JURY: 10,
       MULTI_JURY_REVISION: 2,
-      AUTO_CONCEPT: 5,
+      AUTO_CONCEPT: 2,
       MATERIAL_BOARD: 3,
       DEFENSE: 4,
       AI_MENTOR: 1,

@@ -5,11 +5,18 @@ export const RAPIDO_COSTS = {
     REVISION_DIFFERENT: 2,   // Revizyon (farklı proje tespit edildi)
     MULTI_JURY: 10,          // Çoklu jüri, pafta başına (Premium)
     MULTI_JURY_REVISION: 2,  // Çoklu jüri revizyon (Premium)
-    AUTO_CONCEPT: 5,         // Otomatik konsept üretimi
+    AUTO_CONCEPT: 2,         // Otomatik konsept metni (havalı/felsefi jargonlu)
     MATERIAL_BOARD: 3,       // Malzeme analizi (Premium)
     DEFENSE: 4,              // Jüri savunması (Premium)
     AI_MENTOR: 1,            // AI Mentor mesaj başına (Premium)
     PREMIUM_RESCUE: 6,       // Premium kurtarma analizi (3x artirildi)
+    PEER_REVIEW_OPEN: 2,     // Öğrenci jürisine aç (projeni akranlara sun)
+    PORTFOLIO_PAGE: 4,       // AI portfolyo sayfası düzeni
+} as const;
+
+// Rapido rewards (earned, not spent)
+export const RAPIDO_REWARDS = {
+    PEER_REVIEW_COMMENT: 0.25, // Bir akran projesine yorum bırakınca kazanılan rapido
 } as const;
 
 // Hidden AI mentor billing (token -> rapido). Billable tokens = prompt + completion per round.

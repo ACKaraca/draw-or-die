@@ -31,6 +31,12 @@ import {
   APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID,
   APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID,
   APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
+  APPWRITE_TABLE_REFERENCES_ID,
+  APPWRITE_TABLE_PEER_REVIEWS_ID,
+  APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID,
+  APPWRITE_TABLE_PORTFOLIOS_ID,
+  APPWRITE_TABLE_PORTFOLIO_PAGES_ID,
+  APPWRITE_TABLE_CONFESSIONS_ID,
   createAdminClient,
 } from '@/lib/appwrite/server';
 import { getAppwriteErrorDetails, isAppwriteConflict, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
@@ -778,6 +784,42 @@ async function setupFeedbackTable(tables: TablesDB): Promise<void> {
   );
 }
 
+async function setupReferencesTable(tables: TablesDB): Promise<void> {
+  await ensureTable(tables, APPWRITE_TABLE_REFERENCES_ID, 'References Library');
+
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'slug', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'title', 200, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'architect', 200, true);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'year', false, undefined, 0, 3000);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'location', 200, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'typology', 120, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'summary', 2000, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'analysis_md', 60_000, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'cover_image_url', 1000, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'plan_image_urls', 8000, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'section_image_urls', 8000, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'tags_json', 2000, false);
+  await ensureBooleanColumn(tables, APPWRITE_TABLE_REFERENCES_ID, 'is_published', true, false);
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_REFERENCES_ID,
+    'references_slug_idx',
+    TablesDBIndexType.Unique,
+    ['slug'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_REFERENCES_ID,
+    'references_published_idx',
+    TablesDBIndexType.Key,
+    ['is_published'],
+    [OrderBy.Desc],
+  );
+}
+
 async function setupFeatureFlagsTable(tables: TablesDB): Promise<void> {
   await ensureTable(tables, APPWRITE_TABLE_FEATURE_FLAGS_ID, 'Feature Flags');
 
@@ -1085,6 +1127,181 @@ async function setupArchBuilderFurniturePlacementsTable(tables: TablesDB): Promi
   );
 }
 
+async function setupPeerReviewOpeningsTable(tables: TablesDB): Promise<void> {
+  await ensureTable(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'Peer Review Openings');
+
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'submission_id', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'owner_user_id', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'opened_at', 40, true);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'review_count', true, 0, 0, 10000);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'max_reviews', true, 20, 1, 200);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID, 'status', 20, true, 'open');
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID,
+    'peer_review_openings_submission_idx',
+    TablesDBIndexType.Key,
+    ['submission_id'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID,
+    'peer_review_openings_status_idx',
+    TablesDBIndexType.Key,
+    ['status'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID,
+    'peer_review_openings_owner_idx',
+    TablesDBIndexType.Key,
+    ['owner_user_id'],
+    [OrderBy.Asc],
+  );
+}
+
+async function setupPeerReviewsTable(tables: TablesDB): Promise<void> {
+  await ensureTable(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'Peer Reviews');
+
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'opening_id', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'submission_id', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'reviewer_user_id', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'reviewer_display', 80, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'body', 1000, true);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'rating', false, undefined, 1, 5);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PEER_REVIEWS_ID, 'created_at', 40, true);
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PEER_REVIEWS_ID,
+    'peer_reviews_opening_idx',
+    TablesDBIndexType.Key,
+    ['opening_id'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PEER_REVIEWS_ID,
+    'peer_reviews_reviewer_idx',
+    TablesDBIndexType.Key,
+    ['reviewer_user_id'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PEER_REVIEWS_ID,
+    'peer_reviews_submission_idx',
+    TablesDBIndexType.Key,
+    ['submission_id'],
+    [OrderBy.Asc],
+  );
+}
+
+async function setupPortfoliosTable(tables: TablesDB): Promise<void> {
+  await ensureTable(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'Portfolios');
+
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'user_id', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'title', 200, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'subtitle', 300, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'cover_url', 1000, false);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'page_count', true, 0, 0, 100);
+  await ensureBooleanColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'is_public', true, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'share_slug', 120, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIOS_ID, 'last_published_at', 40, false);
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PORTFOLIOS_ID,
+    'portfolios_user_idx',
+    TablesDBIndexType.Key,
+    ['user_id'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PORTFOLIOS_ID,
+    'portfolios_share_slug_idx',
+    TablesDBIndexType.Unique,
+    ['share_slug'],
+    [OrderBy.Asc],
+  );
+}
+
+async function setupPortfolioPagesTable(tables: TablesDB): Promise<void> {
+  await ensureTable(tables, APPWRITE_TABLE_PORTFOLIO_PAGES_ID, 'Portfolio Pages');
+
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIO_PAGES_ID, 'portfolio_id', 120, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIO_PAGES_ID, 'user_id', 120, true);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_PORTFOLIO_PAGES_ID, 'page_index', true, 0, 0, 99);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIO_PAGES_ID, 'plan_json', 20000, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PORTFOLIO_PAGES_ID, 'layout_json', 20000, true);
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PORTFOLIO_PAGES_ID,
+    'portfolio_pages_portfolio_idx',
+    TablesDBIndexType.Key,
+    ['portfolio_id'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_PORTFOLIO_PAGES_ID,
+    'portfolio_pages_user_idx',
+    TablesDBIndexType.Key,
+    ['user_id'],
+    [OrderBy.Asc],
+  );
+}
+
+async function setupConfessionsTable(tables: TablesDB): Promise<void> {
+  await ensureTable(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'Studio Confessions');
+
+  await ensureStringColumn(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'user_id', 120, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'anon_key', 40, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'text', 2000, true);
+  await ensureStringColumn(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'image_url', 1000, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'status', 20, true, 'pending');
+  await ensureStringColumn(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'moderation_reason', 500, false);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_CONFESSIONS_ID, 'likes', true, 0, 0, 999999);
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_CONFESSIONS_ID,
+    'confessions_status_idx',
+    TablesDBIndexType.Key,
+    ['status'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_CONFESSIONS_ID,
+    'confessions_anon_key_idx',
+    TablesDBIndexType.Key,
+    ['anon_key'],
+    [OrderBy.Asc],
+  );
+
+  await ensureIndex(
+    tables,
+    APPWRITE_TABLE_CONFESSIONS_ID,
+    'confessions_user_id_idx',
+    TablesDBIndexType.Key,
+    ['user_id'],
+    [OrderBy.Asc],
+  );
+}
+
 async function ensureCoreResourcesOnce(): Promise<void> {
   const now = Date.now();
   if (coreEnsuredAt > 0 && now - coreEnsuredAt < ENSURE_TTL_MS) {
@@ -1115,6 +1332,12 @@ async function ensureCoreResourcesOnce(): Promise<void> {
   await runBootstrapStep('archbuilder_exports', async () => setupArchBuilderExportsTable(tables));
   await runBootstrapStep('archbuilder_furniture_assets', async () => setupArchBuilderFurnitureAssetsTable(tables));
   await runBootstrapStep('archbuilder_furniture_placements', async () => setupArchBuilderFurniturePlacementsTable(tables));
+  await runBootstrapStep('references_library', async () => setupReferencesTable(tables));
+  await runBootstrapStep('peer_review_openings', async () => setupPeerReviewOpeningsTable(tables));
+  await runBootstrapStep('peer_reviews', async () => setupPeerReviewsTable(tables));
+  await runBootstrapStep('portfolios', async () => setupPortfoliosTable(tables));
+  await runBootstrapStep('portfolio_pages', async () => setupPortfolioPagesTable(tables));
+  await runBootstrapStep('confessions', async () => setupConfessionsTable(tables));
   await runBootstrapStep('gallery_bucket', async () => ensureBucket(storage));
 
   coreEnsuredAt = Date.now();
