@@ -1,12 +1,9 @@
 import {
-  getAdminTables,
+  getOrCreateProfile,
   getFeatureFlag,
   findProfileByReferralCode,
   updateProfileById,
   recordBillingEvent,
-  APPWRITE_DATABASE_ID,
-  APPWRITE_TABLE_PROFILES_ID,
-  type UserProfileRow,
 } from '@/lib/appwrite/server';
 
 const REFERRAL_FLAG_KEY = 'referral_system';
@@ -62,23 +59,18 @@ export async function linkReferralToUser(
   }
 
   // Check user's current profile
-  const tables = getAdminTables();
-  let userRow: UserProfileRow;
+  let userProfile;
   try {
-    userRow = await tables.getRow<UserProfileRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_PROFILES_ID,
-      rowId: userId,
-    });
+    userProfile = await getOrCreateProfile({ id: userId, email: null, name: null });
   } catch {
     return { success: false, error: 'Profil bulunamadı.' };
   }
 
-  if (userRow.referred_by) {
+  if (userProfile.referred_by) {
     return { success: false, error: 'Zaten bir referral kodu bağlı.' };
   }
 
-  if (userRow.referral_rewarded_at) {
+  if (userProfile.referral_rewarded_at) {
     return { success: false, error: 'Referral ödülü zaten verildi.' };
   }
 
@@ -94,33 +86,27 @@ export async function applyReferralReward(
     return { success: true, rewarded: false };
   }
 
-  const tables = getAdminTables();
-
-  let userRow: UserProfileRow;
+  let userProfile;
   try {
-    userRow = await tables.getRow<UserProfileRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_PROFILES_ID,
-      rowId: userId,
-    });
+    userProfile = await getOrCreateProfile({ id: userId, email: null, name: null });
   } catch {
     return { success: false, rewarded: false, error: 'Profil bulunamadı.' };
   }
 
   // Already rewarded
-  if (userRow.referral_rewarded_at) {
+  if (userProfile.referral_rewarded_at) {
     return { success: true, rewarded: false };
   }
 
   // No referral linked
-  if (!userRow.referred_by) {
+  if (!userProfile.referred_by) {
     return { success: true, rewarded: false };
   }
 
   // Find referrer
   let referrer;
   try {
-    referrer = await findProfileByReferralCode(userRow.referred_by);
+    referrer = await findProfileByReferralCode(userProfile.referred_by);
   } catch {
     return { success: false, rewarded: false, error: 'Referrer bulunamadı.' };
   }
@@ -135,7 +121,7 @@ export async function applyReferralReward(
   const now = new Date().toISOString();
 
   // Award to new user
-  const newUserRapidoAfter = (Number.isFinite(userRow.rapido_pens) ? Number(userRow.rapido_pens) : 0) + rapido;
+  const newUserRapidoAfter = (Number.isFinite(userProfile.rapido_pens) ? Number(userProfile.rapido_pens) : 0) + rapido;
   await updateProfileById(userId, {
     rapido_pens: newUserRapidoAfter,
     referral_rewarded_at: now,
@@ -156,7 +142,7 @@ export async function applyReferralReward(
       currency: 'try',
       rapidoDelta: rapido,
       rapidoBalanceAfter: newUserRapidoAfter,
-      metadata: { referral_code: userRow.referred_by, referrer_id: referrer.id },
+      metadata: { referral_code: userProfile.referred_by, referrer_id: referrer.id },
     }),
     recordBillingEvent({
       userId: referrer.id,
@@ -165,7 +151,7 @@ export async function applyReferralReward(
       currency: 'try',
       rapidoDelta: rapido,
       rapidoBalanceAfter: referrerRapidoAfter,
-      metadata: { referred_user_id: userId, referral_code: userRow.referred_by },
+      metadata: { referred_user_id: userId, referral_code: userProfile.referred_by },
     }),
   ]);
 

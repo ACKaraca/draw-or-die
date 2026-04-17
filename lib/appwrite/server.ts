@@ -117,17 +117,7 @@ export const APPWRITE_TABLE_STRIPE_EVENTS_ID = process.env.APPWRITE_TABLE_STRIPE
 export const APPWRITE_TABLE_BILLING_EVENTS_ID = process.env.APPWRITE_TABLE_BILLING_EVENTS_ID ?? 'billing_events';
 export const APPWRITE_TABLE_ANALYSIS_HISTORY_ID = process.env.APPWRITE_TABLE_ANALYSIS_HISTORY_ID ?? 'analysis_history';
 export const APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID = process.env.APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID ?? 'analysis_file_cache';
-export const APPWRITE_TABLE_MEMORY_SNIPPETS_ID = process.env.APPWRITE_TABLE_MEMORY_SNIPPETS_ID ?? 'memory_snippets';
-export const APPWRITE_TABLE_MENTOR_CHATS_ID = process.env.APPWRITE_TABLE_MENTOR_CHATS_ID ?? 'mentor_chats';
-export const APPWRITE_TABLE_MENTOR_MESSAGES_ID = process.env.APPWRITE_TABLE_MENTOR_MESSAGES_ID ?? 'mentor_messages';
-export const APPWRITE_TABLE_FEEDBACK_ID = process.env.APPWRITE_TABLE_FEEDBACK_ID ?? 'feedback_entries';
-export const APPWRITE_TABLE_PROMO_CODES_ID = process.env.APPWRITE_TABLE_PROMO_CODES_ID ?? 'promo_codes';
-export const APPWRITE_TABLE_PROMO_REDEMPTIONS_ID = process.env.APPWRITE_TABLE_PROMO_REDEMPTIONS_ID ?? 'promo_redemptions';
-export const APPWRITE_TABLE_FEATURE_FLAGS_ID = process.env.APPWRITE_TABLE_FEATURE_FLAGS_ID ?? 'feature_flags';
 export const APPWRITE_TABLE_REFERENCES_ID = process.env.APPWRITE_TABLE_REFERENCES_ID ?? 'references_library';
-export const APPWRITE_TABLE_PEER_REVIEWS_ID = process.env.APPWRITE_TABLE_PEER_REVIEWS_ID ?? 'peer_reviews';
-export const APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID = process.env.APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID ?? 'peer_review_openings';
-export const APPWRITE_TABLE_PORTFOLIOS_ID = process.env.APPWRITE_TABLE_PORTFOLIOS_ID ?? 'portfolios';
 export const APPWRITE_TABLE_PORTFOLIO_PAGES_ID = process.env.APPWRITE_TABLE_PORTFOLIO_PAGES_ID ?? 'portfolio_pages';
 export const APPWRITE_TABLE_CONFESSIONS_ID = process.env.APPWRITE_TABLE_CONFESSIONS_ID ?? 'studio_confessions';
 
@@ -214,6 +204,7 @@ export async function getAuthenticatedUserFromRequest(request: NextRequest | Req
 }
 
 export type UserProfileRow = Models.Row & {
+  user_id?: string;
   email?: string;
   preferred_language?: string;
   is_premium?: boolean;
@@ -396,7 +387,6 @@ export type ArchBuilderFurnitureAssetRow = Models.Row & {
   active: boolean;
 };
 
-<<<<<<< HEAD
 export type ReferenceRow = Models.Row & {
   slug: string;
   title: string;
@@ -461,8 +451,6 @@ export type ConfessionRow = Models.Row & {
   likes: number;
 };
 
-=======
->>>>>>> beac247 (feat(archbuilder): close Release B flow)
 export type NormalizedUserProfile = {
   id: string;
   email: string | null;
@@ -523,8 +511,11 @@ function safeParseBadges(raw: unknown): unknown[] {
 
 export function normalizeProfileRow(row: UserProfileRow): NormalizedUserProfile {
   const hasEmail = Boolean(row.email && row.email.trim());
+  const userId = typeof row.user_id === 'string' && row.user_id.trim()
+    ? row.user_id
+    : row.$id;
   return {
-    id: row.$id,
+    id: userId,
     email: row.email ?? null,
     preferred_language: normalizeLanguage(row.preferred_language, 'tr'),
     is_premium: Boolean(row.is_premium),
@@ -558,18 +549,75 @@ export function normalizeProfileRow(row: UserProfileRow): NormalizedUserProfile 
   };
 }
 
+function isValidAppwriteRowIdCandidate(value: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$/.test(value);
+}
+
+async function findProfileRowByUserId(
+  tables: TablesDB,
+  userId: string,
+): Promise<UserProfileRow | null> {
+  const rows = await tables.listRows<UserProfileRow>({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_TABLE_PROFILES_ID,
+    queries: [
+      Query.equal('user_id', userId),
+      Query.limit(1),
+    ],
+  });
+
+  return rows.rows[0] ?? null;
+}
+
+async function findProfileRowByUserIdWithLegacyFallback(
+  tables: TablesDB,
+  userId: string,
+): Promise<UserProfileRow | null> {
+  const byUserId = await findProfileRowByUserId(tables, userId);
+  if (byUserId) {
+    return byUserId;
+  }
+
+  if (!isValidAppwriteRowIdCandidate(userId)) {
+    return null;
+  }
+
+  try {
+    const legacyRow = await tables.getRow<UserProfileRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROFILES_ID,
+      rowId: userId,
+    });
+
+    if (legacyRow.user_id !== userId) {
+      try {
+        return await tables.updateRow<UserProfileRow>({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_PROFILES_ID,
+          rowId: legacyRow.$id,
+          data: { user_id: userId },
+        });
+      } catch {
+        // Best-effort migration; continue with the legacy row.
+      }
+    }
+
+    return legacyRow;
+  } catch (error) {
+    if (isAppwriteNotFound(error)) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<NormalizedUserProfile> {
   const tables = getAdminTables();
 
-  try {
-    const row = await tables.getRow<UserProfileRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_PROFILES_ID,
-      rowId: user.id,
-    });
-
-    if (typeof row.referral_code === 'string' && row.referral_code.trim()) {
-      return normalizeProfileRow(row);
+  const existingRow = await findProfileRowByUserIdWithLegacyFallback(tables, user.id);
+  if (existingRow) {
+    if (typeof existingRow.referral_code === 'string' && existingRow.referral_code.trim()) {
+      return normalizeProfileRow(existingRow);
     }
 
     for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -578,7 +626,7 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
         const updated = await tables.updateRow<UserProfileRow>({
           databaseId: APPWRITE_DATABASE_ID,
           tableId: APPWRITE_TABLE_PROFILES_ID,
-          rowId: user.id,
+          rowId: existingRow.$id,
           data: { referral_code: nextCode },
         });
         return normalizeProfileRow(updated);
@@ -589,15 +637,9 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
       }
     }
 
-    const refreshed = await tables.getRow<UserProfileRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_PROFILES_ID,
-      rowId: user.id,
-    });
-    return normalizeProfileRow(refreshed);
-  } catch (error: any) {
-    if (!isAppwriteNotFound(error)) {
-      throw error;
+    const refreshed = await findProfileRowByUserIdWithLegacyFallback(tables, user.id);
+    if (refreshed) {
+      return normalizeProfileRow(refreshed);
     }
   }
 
@@ -633,8 +675,9 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
     const created = await tables.createRow<UserProfileRow>({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_PROFILES_ID,
-      rowId: user.id,
+      rowId: ID.unique(),
       data: {
+        user_id: user.id,
         email: user.email ?? '',
         preferred_language: 'tr',
         is_premium: false,
@@ -669,11 +712,10 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
       throw error;
     }
 
-    const existing = await tables.getRow<UserProfileRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_PROFILES_ID,
-      rowId: user.id,
-    });
+    const existing = await findProfileRowByUserIdWithLegacyFallback(tables, user.id);
+    if (!existing) {
+      throw error;
+    }
 
     return normalizeProfileRow(existing);
   }
@@ -681,10 +723,15 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
 
 export async function updateProfileById(userId: string, data: Record<string, unknown>) {
   const tables = getAdminTables();
+  const profileRow = await findProfileRowByUserIdWithLegacyFallback(tables, userId);
+  if (!profileRow) {
+    throw new Error(`Profile not found for user: ${userId}`);
+  }
+
   return tables.updateRow({
     databaseId: APPWRITE_DATABASE_ID,
     tableId: APPWRITE_TABLE_PROFILES_ID,
-    rowId: userId,
+    rowId: profileRow.$id,
     data,
   });
 }

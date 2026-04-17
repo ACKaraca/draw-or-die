@@ -23,7 +23,6 @@ const TOP_ALIGNED_STEPS: ReadonlySet<StepType> = new Set([
   'profile',
   'account-details',
   'ai-mentor',
-  'archbuilder',
   'premium-upgrade',
   'rapido-shop',
 ]);
