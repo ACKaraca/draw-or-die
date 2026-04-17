@@ -13,7 +13,7 @@ import {
   updateProfileById,
 } from '@/lib/appwrite/server';
 import { RAPIDO_REWARDS } from '@/lib/pricing';
-import { toRapidoCents, splitRapidoCents, toRapidoDisplay, rapidoUnitsToCents } from '@/lib/rapido-cents';
+import { toRapidoCents, splitRapidoCents, rapidoUnitsToCents } from '@/lib/rapido-cents';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
@@ -190,6 +190,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
         {
           error: pickLocalized(lang, 'Bu değerlendirme artık açık değil.', 'This peer review is no longer open.'),
           code: 'OPENING_CLOSED',
+        },
+        { status: 409 },
+      );
+    }
+
+    if (openingRow.review_count >= openingRow.max_reviews) {
+      return NextResponse.json(
+        {
+          error: pickLocalized(lang, 'Bu proje maksimum yorum sayısına ulaştı.', 'This submission has reached its maximum review count.'),
+          code: 'MAX_REVIEWS_REACHED',
         },
         { status: 409 },
       );

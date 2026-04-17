@@ -5,6 +5,7 @@ import {
   getAdminTables,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
+import { checkRateLimit } from '@/lib/rate-limit';
 import { logServerError } from '@/lib/logger';
 import type { ConfessionRow } from '@/lib/appwrite/server';
 
@@ -26,6 +27,15 @@ export async function POST(
 
     if (!anonKey) {
       return NextResponse.json({ error: 'anonKey is required.', code: 'MISSING_ANON_KEY' }, { status: 400 });
+    }
+
+    const likeLimiter = await checkRateLimit(`confessions-like:${confessionId}:${anonKey}`, {
+      maxRequests: 1,
+      windowMs: 365 * 24 * 60 * 60 * 1000,
+    });
+
+    if (!likeLimiter.allowed) {
+      return NextResponse.json({ error: 'Already liked.', code: 'ALREADY_LIKED' }, { status: 409 });
     }
 
     await ensureCoreAppwriteResources();

@@ -16,7 +16,7 @@ import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
 import { RAPIDO_COSTS } from '@/lib/pricing';
-import { toRapidoCents, splitRapidoCents } from '@/lib/rapido-cents';
+import { rapidoUnitsToCents, toRapidoCents, splitRapidoCents } from '@/lib/rapido-cents';
 
 interface LayoutElement {
   id: string;
@@ -218,7 +218,7 @@ export async function POST(
         : portfolio.page_count;
 
     // Check rapido balance
-    const costCents = RAPIDO_COSTS.PORTFOLIO_PAGE * 100; // 4 rapido = 400 cents
+    const costCents = rapidoUnitsToCents(RAPIDO_COSTS.PORTFOLIO_PAGE);
     const currentBalanceCents = toRapidoCents(profile.rapido_pens, profile.rapido_fraction_cents);
 
     if (currentBalanceCents < costCents) {

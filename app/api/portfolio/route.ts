@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ID, Query } from 'node-appwrite';
+import type { Models } from 'node-appwrite';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import {
   APPWRITE_DATABASE_ID,
@@ -80,17 +81,19 @@ export async function POST(request: NextRequest) {
       typeof subtitle === 'string' && subtitle.trim().length > 0 ? subtitle.trim() : undefined;
 
     const tables = getAdminTables();
+    const createPayload: Omit<PortfolioRow, keyof Models.Row> = {
+      user_id: user.id,
+      title: trimmedTitle,
+      subtitle: trimmedSubtitle ?? '',
+      page_count: 0,
+      is_public: false,
+    };
+
     const row = await tables.createRow<PortfolioRow>({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_PORTFOLIOS_ID,
       rowId: ID.unique(),
-      data: {
-        user_id: user.id,
-        title: trimmedTitle,
-        subtitle: trimmedSubtitle ?? '',
-        page_count: 0,
-        is_public: false,
-      } as any,
+      data: createPayload,
     });
 
     return NextResponse.json({ portfolio: toPortfolioPayload(row) }, { status: 201 });

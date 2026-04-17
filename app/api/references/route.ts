@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     }
 
     const profile = await getOrCreateProfile(user);
-    if (!profile.is_premium) {
+    if (!profile.is_premium && !isAdminEmail(user.email)) {
       return NextResponse.json(
         {
           error: pickLocalized(lang, 'Referans Kütüphanesi Premium üyelere özeldir.', 'Reference Library is Premium-only.'),
@@ -142,7 +142,21 @@ export async function POST(request: NextRequest) {
     }
 
     const providedSlug = typeof body.slug === 'string' && body.slug.trim() ? slugify(body.slug) : slugify(`${architect}-${title}`);
-    const slug = providedSlug || `ref-${Date.now()}`;
+    let slug = providedSlug || `ref-${Date.now()}`;
+
+    const tables = getAdminTables();
+    const slugCollision = await tables.listRows<ReferenceRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_REFERENCES_ID,
+      queries: [
+        Query.equal('slug', slug),
+        Query.limit(1),
+      ],
+    });
+
+    if (slugCollision.rows.length > 0) {
+      slug = `${slug}-${Date.now()}`;
+    }
 
     const toStringArrayJson = (val: unknown): string | undefined => {
       if (!Array.isArray(val)) return undefined;
@@ -166,7 +180,6 @@ export async function POST(request: NextRequest) {
       is_published: body.isPublished !== false,
     };
 
-    const tables = getAdminTables();
     const row = await tables.createRow<ReferenceRow>({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_REFERENCES_ID,
