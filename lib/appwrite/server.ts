@@ -117,7 +117,17 @@ export const APPWRITE_TABLE_STRIPE_EVENTS_ID = process.env.APPWRITE_TABLE_STRIPE
 export const APPWRITE_TABLE_BILLING_EVENTS_ID = process.env.APPWRITE_TABLE_BILLING_EVENTS_ID ?? 'billing_events';
 export const APPWRITE_TABLE_ANALYSIS_HISTORY_ID = process.env.APPWRITE_TABLE_ANALYSIS_HISTORY_ID ?? 'analysis_history';
 export const APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID = process.env.APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID ?? 'analysis_file_cache';
+export const APPWRITE_TABLE_MEMORY_SNIPPETS_ID = process.env.APPWRITE_TABLE_MEMORY_SNIPPETS_ID ?? 'memory_snippets';
+export const APPWRITE_TABLE_MENTOR_CHATS_ID = process.env.APPWRITE_TABLE_MENTOR_CHATS_ID ?? 'mentor_chats';
+export const APPWRITE_TABLE_MENTOR_MESSAGES_ID = process.env.APPWRITE_TABLE_MENTOR_MESSAGES_ID ?? 'mentor_messages';
+export const APPWRITE_TABLE_FEEDBACK_ID = process.env.APPWRITE_TABLE_FEEDBACK_ID ?? 'feedback_entries';
+export const APPWRITE_TABLE_PROMO_CODES_ID = process.env.APPWRITE_TABLE_PROMO_CODES_ID ?? 'promo_codes';
+export const APPWRITE_TABLE_PROMO_REDEMPTIONS_ID = process.env.APPWRITE_TABLE_PROMO_REDEMPTIONS_ID ?? 'promo_redemptions';
+export const APPWRITE_TABLE_FEATURE_FLAGS_ID = process.env.APPWRITE_TABLE_FEATURE_FLAGS_ID ?? 'feature_flags';
 export const APPWRITE_TABLE_REFERENCES_ID = process.env.APPWRITE_TABLE_REFERENCES_ID ?? 'references_library';
+export const APPWRITE_TABLE_PEER_REVIEWS_ID = process.env.APPWRITE_TABLE_PEER_REVIEWS_ID ?? 'peer_reviews';
+export const APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID = process.env.APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID ?? 'peer_review_openings';
+export const APPWRITE_TABLE_PORTFOLIOS_ID = process.env.APPWRITE_TABLE_PORTFOLIOS_ID ?? 'portfolios';
 export const APPWRITE_TABLE_PORTFOLIO_PAGES_ID = process.env.APPWRITE_TABLE_PORTFOLIO_PAGES_ID ?? 'portfolio_pages';
 export const APPWRITE_TABLE_CONFESSIONS_ID = process.env.APPWRITE_TABLE_CONFESSIONS_ID ?? 'studio_confessions';
 
