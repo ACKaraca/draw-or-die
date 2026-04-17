@@ -14,7 +14,24 @@ export function getLanguageFromCookieHeader(
   fallback: SupportedLanguage = 'tr',
 ): SupportedLanguage {
   if (!cookieHeader) return fallback;
-  const match = /(?:^|;\s*)dod_preferred_language=([^;]+)/i.exec(cookieHeader);
-  if (!match?.[1]) return fallback;
-  return normalizeLanguage(decodeURIComponent(match[1].trim()), fallback);
+
+  const parts = cookieHeader.split(';');
+  for (const part of parts) {
+    const [rawKey, ...rawRest] = part.split('=');
+    if (!rawKey) continue;
+
+    const key = rawKey.trim();
+    if (key.toLowerCase() === 'dod_preferred_language') {
+      const rawValue = rawRest.join('=').trim();
+      if (!rawValue) continue;
+
+      try {
+        return normalizeLanguage(decodeURIComponent(rawValue), fallback);
+      } catch {
+        return normalizeLanguage(rawValue, fallback);
+      }
+    }
+  }
+
+  return fallback;
 }
