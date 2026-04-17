@@ -25,6 +25,7 @@ import { HistoryStep } from '@/components/HistoryStep';
 import { PremiumUpgradeStep } from '@/components/PremiumUpgradeStep';
 import { ProfileStep } from '@/components/ProfileStep';
 import { AccountDetailsStep } from '@/components/AccountDetailsStep';
+import { ArchBuilderStep } from '@/components/ArchBuilderStep';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import type { SupportedLanguage } from '@/lib/i18n';
 
@@ -169,6 +170,12 @@ export function StepRouter({
         />
       )}
 
+      {step === 'archbuilder' && (
+        <ArchBuilderStep
+          onAuthRequired={onAuthRequired}
+        />
+      )}
+
       {step === 'analyzing' && <AnalyzingStep />}
       {step === 'multi-analyzing' && <MultiAnalyzingStep />}
       {step === 'premium-analyzing' && <PremiumAnalyzingStep />}
@@ -204,6 +211,7 @@ export function StepRouter({
           onUpgradeClick={() => setStep('premium-upgrade')}
           handlePreserveAnalysis={handlePreserveAnalysis}
           handleShareToCommunity={handleShareToCommunity}
+          handleAutoConcept={handleAutoConcept}
         />
       )}
 

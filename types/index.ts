@@ -1,4 +1,4 @@
-export type StepType = 'hero' | 'upload' | 'analyzing' | 'premium-analyzing' | 'result' | 'premium' | 'gallery' | 'multi-analyzing' | 'multi-result' | 'ai-mentor' | 'history' | 'profile' | 'premium-upgrade' | 'rapido-shop' | 'account-details';
+export type StepType = 'hero' | 'upload' | 'analyzing' | 'premium-analyzing' | 'result' | 'premium' | 'gallery' | 'multi-analyzing' | 'multi-result' | 'ai-mentor' | 'history' | 'profile' | 'premium-upgrade' | 'rapido-shop' | 'account-details' | 'archbuilder';
 export type GalleryType = 'HALL_OF_FAME' | 'WALL_OF_DEATH' | 'COMMUNITY';
 export type GalleryPlacementType = GalleryType | 'NONE';
 export type AnalysisLengthOption = 'SHORT' | 'MEDIUM' | 'LONG' | 'WORD_TARGET';

@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ShieldAlert, ArrowRight, ChevronDown, Sparkles, Layers, Cpu } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -16,6 +17,7 @@ interface HeroStepProps {
 const HERO_FALLBACK_IMAGE_SRC = '/icon';
 
 export function HeroStep({ setStep }: HeroStepProps) {
+  const router = useRouter();
   const language = useLanguage();
   const [failedVisualIds, setFailedVisualIds] = useState<Record<string, boolean>>({});
 
@@ -58,17 +60,26 @@ export function HeroStep({ setStep }: HeroStepProps) {
             'Draw or Die helps architecture students get structured critique—multi-persona jury, PDF-aware review, and an AI Mentor for your studio desk. Upload work, receive clear feedback, and sharpen your defense.',
           )}
         </p>
-        <button
-          type="button"
-          onClick={() => setStep('upload')}
-          className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white bg-neon-red hover:bg-[#cc0029] transition-colors rounded-none overflow-hidden"
-        >
-          <span className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black" />
-          <span className="relative flex items-center gap-2 font-mono uppercase tracking-wider">
-            {pickLocalized(language, 'Studio Desk’e geç', 'Open Studio Desk')}{' '}
-            <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-          </span>
-        </button>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setStep('upload')}
+            className="group relative inline-flex items-center justify-center px-8 py-4 font-bold text-white bg-neon-red hover:bg-[#cc0029] transition-colors rounded-none overflow-hidden"
+          >
+            <span className="absolute inset-0 w-full h-full -mt-1 rounded-lg opacity-30 bg-gradient-to-b from-transparent via-transparent to-black" />
+            <span className="relative flex items-center gap-2 font-mono uppercase tracking-wider">
+              {pickLocalized(language, 'Studio Desk’e geç', 'Open Studio Desk')}{' '}
+              <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/archbuilder')}
+            className="inline-flex items-center justify-center gap-2 border border-amber-400/50 bg-amber-500/10 px-6 py-4 font-mono text-xs uppercase tracking-widest text-amber-100 hover:bg-amber-500/20 transition-colors"
+          >
+            {pickLocalized(language, 'ArchBuilder dene', 'Try ArchBuilder')}
+          </button>
+        </div>
 
         <div className="mt-14 flex flex-col items-center gap-2">
           <span className="text-[10px] font-mono uppercase tracking-[0.35em] text-slate-500">

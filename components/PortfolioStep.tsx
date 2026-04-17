@@ -1,118 +1,70 @@
-import { useRef } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Download, Crown, AlertTriangle, FileText, ArrowRight } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import { GalleryItem } from '@/types';
+import { ArrowRight, Layers, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
 
-interface PortfolioStepProps {
-    isPremiumUser: boolean;
-    galleryItems: GalleryItem[];
-}
-
-export function PortfolioStep({ isPremiumUser, galleryItems }: PortfolioStepProps) {
-    const exportRef = useRef<HTMLDivElement>(null);
+export function PortfolioStep() {
     const language = useLanguage();
-
-    // For demo purposes, we construct a portfolio out of HALL_OF_FAME items
-    const portfolioItems = galleryItems.filter(item => item.type === 'HALL_OF_FAME').slice(0, 4);
-
-    const handleExport = async () => {
-        if (exportRef.current) {
-            try {
-                const canvas = await html2canvas(exportRef.current, { backgroundColor: '#F8FAFC', scale: 2 });
-                const dataUrl = canvas.toDataURL('image/png');
-                const link = document.createElement('a');
-                link.download = 'my-architecture-portfolio.png';
-                link.href = dataUrl;
-                link.click();
-            } catch (err) {
-                console.error("Export failed", err);
-                alert(pickLocalized(language, 'Portfolyo dışa aktarılamadı.', 'Could not export portfolio.'));
-            }
-        }
-    };
-
-    if (!isPremiumUser) {
-        return (
-            <div className="w-full max-w-4xl flex flex-col items-center justify-center p-12 bg-black/50 border border-white/10 rounded-xl">
-                <AlertTriangle size={48} className="text-yellow-500 mb-4" />
-                <h2 className="text-2xl font-display font-bold text-white mb-2 uppercase tracking-wide">{pickLocalized(language, 'AI Portfolyo (Premium Özel)', 'AI portfolio (Premium only)')}</h2>
-                <p className="text-slate-400 text-center mb-6">{pickLocalized(language, 'Tasarımlarınızı tek tıkla profesyonel bir portfolyoya dönüştürmek için Premium üye olmalısınız.', 'You must be a Premium member to turn your designs into a professional portfolio with one click.')}</p>
-                <div className="px-6 py-3 bg-white/5 border border-white/10 rounded text-slate-300 font-mono text-sm">{pickLocalized(language, 'Header’dan Premium modunu aktifleştirerek deneyebilirsiniz.', 'You can try it by enabling Premium mode from the header.')}</div>
-            </div>
-        );
-    }
 
     return (
         <motion.div
-            key="portfolio"
-            initial={{ opacity: 0, scale: 0.95 }}
+            key="portfolio-step"
+            initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-6xl flex flex-col gap-6"
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+            className="w-full max-w-xl mx-auto"
         >
-            <div className="flex justify-between items-center bg-[#111827] p-6 rounded-xl border border-white/10 shadow-2xl">
-                <div>
-                    <h2 className="font-display text-2xl font-bold uppercase tracking-wide flex items-center gap-2 text-white">
-                        <FileText className="text-emerald-500" /> {pickLocalized(language, 'AI Portfolyo Oluşturucu', 'AI portfolio builder')}
+            <div className="flex flex-col gap-6 p-8 bg-[#111827] border border-white/10 rounded-2xl shadow-2xl">
+                {/* Icon + label */}
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-amber-400/10 border border-amber-400/20">
+                        <Layers size={24} className="text-amber-400" />
+                    </div>
+                    <span className="font-mono text-xs uppercase tracking-widest text-amber-400">
+                        {pickLocalized(language, 'Portfolyo Modülü', 'Portfolio Module')}
+                    </span>
+                </div>
+
+                {/* Heading */}
+                <div className="flex flex-col gap-2">
+                    <h2 className="font-display text-2xl uppercase tracking-wider font-bold text-white">
+                        {pickLocalized(language, 'Portfolyo Oluşturucu', 'Portfolio Builder')}
                     </h2>
-                    <p className="text-sm text-slate-400 font-mono mt-1">{pickLocalized(language, 'Sistemdeki yüksek puanlı projelerinden statik portfolyo oluşturuldu.', 'A static portfolio was generated from your high-scoring projects.')}</p>
+                    <p className="text-sm text-slate-400 leading-relaxed">
+                        {pickLocalized(
+                            language,
+                            'Projelerinizi seçin, AI destekli düzen oluşturun ve A4 formatında profesyonel mimari portfolyo hazırlayın.',
+                            'Select your projects, generate AI-assisted layouts, and create professional architectural portfolios in A4 format.',
+                        )}
+                    </p>
                 </div>
-                <button
-                    onClick={handleExport}
-                    className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-3 rounded uppercase font-bold text-sm tracking-wider transition-colors"
-                >
-                    <Download size={18} /> {pickLocalized(language, 'PNG İndir', 'Download PNG')}
-                </button>
-            </div>
 
-            {/* A4 Proportion Canvas Wrapper for Export */}
-            <div className="overflow-x-auto custom-scrollbar pb-8">
-                <div
-                    ref={exportRef}
-                    className="bg-slate-50 w-[800px] md:w-[1000px] min-h-[1414px] mx-auto shadow-2xl relative text-slate-900 p-16 flex flex-col"
-                >
-                    {/* Header */}
-                    <div className="border-b-4 border-slate-900 pb-8 mb-12 flex justify-between items-end">
-                        <div>
-                            <h1 className="text-5xl font-black uppercase tracking-tighter text-slate-900 leading-none mb-2">Selected<br />Works</h1>
-                            <p className="text-slate-500 font-mono uppercase tracking-widest text-sm">2024 — Architecture Portfolio</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="font-bold text-xl uppercase">{pickLocalized(language, 'Sen (Misafir)', 'You (Guest)')}</p>
-                            <p className="text-slate-500 font-mono text-sm">student@architecture.edu</p>
-                        </div>
-                    </div>
-
-                    {/* Grid Layout */}
-                    <div className="flex-1 grid grid-cols-2 gap-12 auto-rows-max">
-                        {portfolioItems.map((item, idx) => (
-                            <div key={item.id} className={`flex flex-col gap-4 ${idx % 3 === 0 ? 'col-span-2' : 'col-span-1'}`}>
-                                <div className={`w-full overflow-hidden bg-slate-200 ${idx % 3 === 0 ? 'aspect-[21/9]' : 'aspect-square'}`}>
-                                    <img src={item.img} alt={item.title} className="w-full h-full object-cover grayscale opacity-90 hover:grayscale-0 hover:opacity-100 transition-all duration-700" />
-                                </div>
-                                <div className="flex gap-4 items-start">
-                                    <h3 className="text-xl font-bold uppercase tracking-tight w-1/3">{item.title}</h3>
-                                    <div className="w-2/3">
-                                        <p className="text-sm text-slate-600 font-serif leading-relaxed line-clamp-3">
-                                            {item.jury}
-                                        </p>
-                                        <div className="flex items-center gap-1 mt-3 font-mono text-xs text-slate-400">
-                                            <span>{pickLocalized(language, 'Daha Fazla Oku', 'Read more')}</span> <ArrowRight size={12} />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Footer */}
-                    <div className="mt-auto pt-16 border-t border-slate-300 flex justify-between text-xs font-mono text-slate-400">
-                        <span>{pickLocalized(language, 'Draw or Die AI tarafından oluşturuldu', 'Generated by Draw or Die AI')}</span>
-                        <span>{pickLocalized(language, 'Sayfa 1 / 1', 'Page 1 / 1')}</span>
+                {/* Cost info */}
+                <div className="flex items-center gap-3 px-4 py-3 bg-black/40 border border-white/10 rounded-xl">
+                    <Sparkles size={16} className="text-amber-400 shrink-0" />
+                    <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-xs uppercase tracking-widest text-slate-300">
+                            {pickLocalized(language, 'Sayfa başına 4 rapido', 'Page generation costs 4 rapido')}
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-500">
+                            {pickLocalized(
+                                language,
+                                'Her sayfada görsel URL\'leri + tema seçimi ile AI düzen üretimi.',
+                                'Each page uses image URLs + theme selection to generate an AI layout.',
+                            )}
+                        </span>
                     </div>
                 </div>
+
+                {/* CTA */}
+                <Link
+                    href="/portfolio"
+                    className="flex items-center justify-center gap-2 w-full py-3.5 bg-amber-500 hover:bg-amber-400 rounded-xl text-black font-mono text-xs uppercase tracking-widest font-bold transition-colors"
+                >
+                    {pickLocalized(language, 'Portfolyo Oluşturucu\'ya Git', 'Open Portfolio Builder')}
+                    <ArrowRight size={15} />
+                </Link>
             </div>
         </motion.div>
     );

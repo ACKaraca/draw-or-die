@@ -124,6 +124,28 @@ export const APPWRITE_TABLE_FEEDBACK_ID = process.env.APPWRITE_TABLE_FEEDBACK_ID
 export const APPWRITE_TABLE_PROMO_CODES_ID = process.env.APPWRITE_TABLE_PROMO_CODES_ID ?? 'promo_codes';
 export const APPWRITE_TABLE_PROMO_REDEMPTIONS_ID = process.env.APPWRITE_TABLE_PROMO_REDEMPTIONS_ID ?? 'promo_redemptions';
 export const APPWRITE_TABLE_FEATURE_FLAGS_ID = process.env.APPWRITE_TABLE_FEATURE_FLAGS_ID ?? 'feature_flags';
+export const APPWRITE_TABLE_ARCHBUILDER_PROJECTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_PROJECTS_ID ?? 'archbuilder_projects';
+export const APPWRITE_TABLE_ARCHBUILDER_SESSIONS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_SESSIONS_ID ?? 'archbuilder_sessions';
+export const APPWRITE_TABLE_ARCHBUILDER_STEP_OUTPUTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_STEP_OUTPUTS_ID ?? 'archbuilder_step_outputs';
+export const APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID ?? 'archbuilder_exports';
+export const APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_FURNITURE_ASSETS_ID ?? 'archbuilder_furniture_assets';
+export const APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID = process.env.APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID ?? 'archbuilder_furniture_placements';
+export const APPWRITE_TABLE_REFERENCES_ID = process.env.APPWRITE_TABLE_REFERENCES_ID ?? 'references_library';
+export const APPWRITE_TABLE_PEER_REVIEWS_ID = process.env.APPWRITE_TABLE_PEER_REVIEWS_ID ?? 'peer_reviews';
+export const APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID = process.env.APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID ?? 'peer_review_openings';
+export const APPWRITE_TABLE_PORTFOLIOS_ID = process.env.APPWRITE_TABLE_PORTFOLIOS_ID ?? 'portfolios';
+export const APPWRITE_TABLE_PORTFOLIO_PAGES_ID = process.env.APPWRITE_TABLE_PORTFOLIO_PAGES_ID ?? 'portfolio_pages';
+export const APPWRITE_TABLE_CONFESSIONS_ID = process.env.APPWRITE_TABLE_CONFESSIONS_ID ?? 'studio_confessions';
+
+export function getAdminEmails(): string[] {
+  const raw = process.env.ADMIN_EMAILS ?? '';
+  return raw.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+}
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return getAdminEmails().includes(email.trim().toLowerCase());
+}
 export const APPWRITE_BUCKET_GALLERY_ID = process.env.APPWRITE_BUCKET_GALLERY_ID ?? 'gallery';
 
 const EARLY_REGISTRATION_BONUS_LIMIT = 100;
@@ -319,6 +341,140 @@ export type FeatureFlagRow = Models.Row & {
   flag_key: string;
   enabled: boolean;
   value_json?: string;
+};
+
+export type ArchBuilderProjectRow = Models.Row & {
+  user_id: string;
+  title: string;
+  project_type: string;
+  location: string;
+  target_area_m2: number;
+  intent_json: string;
+  constraints_json: string;
+  status: string;
+  latest_session_id?: string;
+};
+
+export type ArchBuilderSessionRow = Models.Row & {
+  project_id: string;
+  user_id: string;
+  current_step: string;
+  approvals_json: string;
+  assumptions_json: string;
+  confidence_score: number;
+  status: string;
+};
+
+export type ArchBuilderStepOutputRow = Models.Row & {
+  project_id: string;
+  session_id: string;
+  user_id: string;
+  step_key: string;
+  output_json: string;
+  clarifications_json?: string;
+  confidence_score?: number;
+  is_approved: boolean;
+  approved_at?: string;
+};
+
+export type ArchBuilderExportRow = Models.Row & {
+  project_id: string;
+  session_id: string;
+  user_id: string;
+  export_format: string;
+  status: string;
+  artifact_url?: string;
+  preview_url?: string;
+  payload_json: string;
+  error_code?: string;
+  include_furniture: boolean;
+};
+
+export type ArchBuilderFurnitureAssetRow = Models.Row & {
+  asset_key: string;
+  category: string;
+  source_file_type: string;
+  source_url?: string;
+  bbox_json: string;
+  anchors_json: string;
+  style_tags_csv?: string;
+  placement_constraints_json: string;
+  active: boolean;
+};
+
+export type ReferenceRow = Models.Row & {
+  slug: string;
+  title: string;
+  architect: string;
+  year?: number;
+  location?: string;
+  typology?: string;
+  summary: string;
+  analysis_md: string;
+  cover_image_url?: string;
+  plan_image_urls?: string;
+  section_image_urls?: string;
+  tags_json?: string;
+  is_published: boolean;
+};
+
+export type PeerReviewOpeningRow = Models.Row & {
+  submission_id: string;
+  owner_user_id: string;
+  opened_at: string;
+  review_count: number;
+  max_reviews: number;
+  status: 'open' | 'closed';
+};
+
+export type PeerReviewRow = Models.Row & {
+  opening_id: string;
+  submission_id: string;
+  reviewer_user_id: string;
+  reviewer_display: string;
+  body: string;
+  rating?: number;
+  created_at: string;
+};
+
+export type PortfolioRow = Models.Row & {
+  user_id: string;
+  title: string;
+  subtitle?: string;
+  cover_url?: string;
+  page_count: number;
+  is_public: boolean;
+  share_slug?: string;
+  last_published_at?: string;
+};
+
+export type PortfolioPageRow = Models.Row & {
+  portfolio_id: string;
+  user_id: string;
+  page_index: number;
+  plan_json: string;
+  layout_json: string;
+};
+
+export type ConfessionRow = Models.Row & {
+  user_id?: string;
+  anon_key: string;
+  text: string;
+  image_url?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  moderation_reason?: string;
+  likes: number;
+};
+
+export type ArchBuilderFurniturePlacementRow = Models.Row & {
+  project_id: string;
+  session_id: string;
+  user_id: string;
+  asset_key: string;
+  room_id?: string;
+  quantity: number;
+  placement_json: string;
+  collision_score: number;
 };
 
 export type NormalizedUserProfile = {

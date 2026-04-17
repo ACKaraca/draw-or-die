@@ -136,6 +136,42 @@ interface UiState {
   setShowGuestUpgradePrompt: (v: boolean) => void;
 }
 
+interface ArchBuilderState {
+  archBuilderProject: ArchBuilderProjectSummary | null;
+  archBuilderSession: ArchBuilderSessionSummary | null;
+  archBuilderCurrentStep: string | null;
+  archBuilderOutputs: Record<string, ArchBuilderStepOutputState>;
+  archBuilderExports: ArchBuilderExportSummary[];
+  archBuilderBusy: boolean;
+  archBuilderError: string | null;
+  archBuilderHydrated: boolean;
+  setArchBuilderProject: (v: ArchBuilderProjectSummary | null) => void;
+  setArchBuilderSession: (
+    v:
+      | ArchBuilderSessionSummary
+      | null
+      | ((prev: ArchBuilderSessionSummary | null) => ArchBuilderSessionSummary | null)
+  ) => void;
+  setArchBuilderCurrentStep: (v: string | null) => void;
+  setArchBuilderStepOutput: (stepKey: string, v: ArchBuilderStepOutputState) => void;
+  setArchBuilderOutputs: (
+    v:
+      | Record<string, ArchBuilderStepOutputState>
+      | ((
+          prev: Record<string, ArchBuilderStepOutputState>,
+        ) => Record<string, ArchBuilderStepOutputState>)
+  ) => void;
+  setArchBuilderExports: (
+    v:
+      | ArchBuilderExportSummary[]
+      | ((prev: ArchBuilderExportSummary[]) => ArchBuilderExportSummary[])
+  ) => void;
+  setArchBuilderBusy: (v: boolean) => void;
+  setArchBuilderError: (v: string | null) => void;
+  hydrateArchBuilderState: () => void;
+  resetArchBuilder: () => void;
+}
+
 // ---------------------------------------------------------------------------
 // Compound action slices (cross-domain convenience actions)
 // ---------------------------------------------------------------------------
@@ -161,6 +197,7 @@ export type DrawOrDieStore = StepState &
   ResultState &
   DefenseState &
   GalleryState &
+  ArchBuilderState &
   UiState &
   CompoundActions;
 
@@ -169,6 +206,250 @@ export interface AdditionalUpload {
   mimeType: string;
   base64: string;
   sizeBytes: number;
+}
+
+export interface ArchBuilderProjectSummary {
+  id: string;
+  title: string;
+  projectType: string;
+  location: string;
+  targetAreaM2: number;
+}
+
+export interface ArchBuilderSessionSummary {
+  id: string;
+  projectId: string;
+  currentStep: string;
+  status: string;
+  confidenceScore?: number;
+}
+
+export interface ArchBuilderExportSummary {
+  id: string;
+  format: string;
+  status: string;
+  artifactUrl: string | null;
+  previewUrl: string | null;
+  includeFurniture?: boolean;
+  createdAt?: string;
+}
+
+export interface ArchBuilderStepOutputState {
+  output: Record<string, unknown> | null;
+  clarifications: string[];
+  requiresApproval: boolean;
+  confidenceScore: number | null;
+}
+
+const ARCHBUILDER_STATE_STORAGE_KEY = 'drawOrDieArchBuilderState_v1';
+
+interface PersistedArchBuilderState {
+  project: ArchBuilderProjectSummary | null;
+  session: ArchBuilderSessionSummary | null;
+  currentStep: string | null;
+  outputs: Record<string, ArchBuilderStepOutputState>;
+  exports: ArchBuilderExportSummary[];
+  error: string | null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function parseArchBuilderProject(value: unknown): ArchBuilderProjectSummary | null {
+  const parsed = asRecord(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const id = typeof parsed.id === 'string' ? parsed.id : '';
+  const title = typeof parsed.title === 'string' ? parsed.title : '';
+  const projectType = typeof parsed.projectType === 'string' ? parsed.projectType : '';
+  const location = typeof parsed.location === 'string' ? parsed.location : '';
+  const targetAreaM2 = typeof parsed.targetAreaM2 === 'number' && Number.isFinite(parsed.targetAreaM2)
+    ? parsed.targetAreaM2
+    : null;
+
+  if (!id || !title || !projectType || !location || targetAreaM2 === null) {
+    return null;
+  }
+
+  return {
+    id,
+    title,
+    projectType,
+    location,
+    targetAreaM2,
+  };
+}
+
+function parseArchBuilderSession(value: unknown): ArchBuilderSessionSummary | null {
+  const parsed = asRecord(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const id = typeof parsed.id === 'string' ? parsed.id : '';
+  const projectId = typeof parsed.projectId === 'string' ? parsed.projectId : '';
+  const currentStep = typeof parsed.currentStep === 'string' ? parsed.currentStep : '';
+  const status = typeof parsed.status === 'string' ? parsed.status : '';
+
+  if (!id || !projectId || !currentStep || !status) {
+    return null;
+  }
+
+  const confidenceScore =
+    typeof parsed.confidenceScore === 'number' && Number.isFinite(parsed.confidenceScore)
+      ? parsed.confidenceScore
+      : undefined;
+
+  return {
+    id,
+    projectId,
+    currentStep,
+    status,
+    confidenceScore,
+  };
+}
+
+function parseArchBuilderOutput(value: unknown): ArchBuilderStepOutputState | null {
+  const parsed = asRecord(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const output = asRecord(parsed.output);
+  const clarifications = Array.isArray(parsed.clarifications)
+    ? parsed.clarifications.map((item) => String(item))
+    : [];
+  const requiresApproval = Boolean(parsed.requiresApproval);
+  const confidenceScore =
+    typeof parsed.confidenceScore === 'number' && Number.isFinite(parsed.confidenceScore)
+      ? parsed.confidenceScore
+      : null;
+
+  return {
+    output,
+    clarifications,
+    requiresApproval,
+    confidenceScore,
+  };
+}
+
+function parseArchBuilderExport(value: unknown): ArchBuilderExportSummary | null {
+  const parsed = asRecord(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const id = typeof parsed.id === 'string' ? parsed.id : '';
+  const format = typeof parsed.format === 'string' ? parsed.format : '';
+  const status = typeof parsed.status === 'string' ? parsed.status : '';
+
+  if (!id || !format || !status) {
+    return null;
+  }
+
+  return {
+    id,
+    format,
+    status,
+    artifactUrl: typeof parsed.artifactUrl === 'string' ? parsed.artifactUrl : null,
+    previewUrl: typeof parsed.previewUrl === 'string' ? parsed.previewUrl : null,
+    includeFurniture:
+      typeof parsed.includeFurniture === 'boolean'
+        ? parsed.includeFurniture
+        : undefined,
+    createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : undefined,
+  };
+}
+
+function readArchBuilderPersistedState(): PersistedArchBuilderState | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(ARCHBUILDER_STATE_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = asRecord(JSON.parse(raw));
+    if (!parsed) {
+      return null;
+    }
+
+    const outputMap: Record<string, ArchBuilderStepOutputState> = {};
+    const outputsRaw = asRecord(parsed.outputs);
+    if (outputsRaw) {
+      for (const [stepKey, output] of Object.entries(outputsRaw)) {
+        const parsedOutput = parseArchBuilderOutput(output);
+        if (parsedOutput) {
+          outputMap[stepKey] = parsedOutput;
+        }
+      }
+    }
+
+    const exportItems: ArchBuilderExportSummary[] = [];
+    if (Array.isArray(parsed.exports)) {
+      for (const item of parsed.exports) {
+        const parsedExport = parseArchBuilderExport(item);
+        if (parsedExport) {
+          exportItems.push(parsedExport);
+        }
+      }
+    }
+
+    const currentStep =
+      typeof parsed.currentStep === 'string' && parsed.currentStep.trim().length > 0
+        ? parsed.currentStep
+        : null;
+
+    const error =
+      typeof parsed.error === 'string' && parsed.error.trim().length > 0
+        ? parsed.error
+        : null;
+
+    return {
+      project: parseArchBuilderProject(parsed.project),
+      session: parseArchBuilderSession(parsed.session),
+      currentStep,
+      outputs: outputMap,
+      exports: exportItems,
+      error,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeArchBuilderPersistedState(state: PersistedArchBuilderState): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(ARCHBUILDER_STATE_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore persistence errors in restrictive browser modes.
+  }
+}
+
+function clearArchBuilderPersistedState(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(ARCHBUILDER_STATE_STORAGE_KEY);
+  } catch {
+    // Ignore cleanup errors.
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -194,7 +475,20 @@ const DEFAULT_FORM_DATA: FormData = {
 // Store implementation
 // ---------------------------------------------------------------------------
 
-export const useDrawOrDieStore = create<DrawOrDieStore>((set, get) => ({
+export const useDrawOrDieStore = create<DrawOrDieStore>((set, get) => {
+  const persistArchBuilderStateFromStore = () => {
+    const state = get();
+    writeArchBuilderPersistedState({
+      project: state.archBuilderProject,
+      session: state.archBuilderSession,
+      currentStep: state.archBuilderCurrentStep,
+      outputs: state.archBuilderOutputs,
+      exports: state.archBuilderExports,
+      error: state.archBuilderError,
+    });
+  };
+
+  return {
   // ---- Step ----------------------------------------------------------------
   step: 'hero',
   setStep: (step) => set({ step }),
@@ -289,6 +583,86 @@ export const useDrawOrDieStore = create<DrawOrDieStore>((set, get) => ({
   setGuestDrawingCount: (guestDrawingCount) => set({ guestDrawingCount }),
   setShowGuestUpgradePrompt: (showGuestUpgradePrompt) => set({ showGuestUpgradePrompt }),
 
+  // ---- ArchBuilder ---------------------------------------------------------
+  archBuilderProject: null,
+  archBuilderSession: null,
+  archBuilderCurrentStep: null,
+  archBuilderOutputs: {},
+  archBuilderExports: [],
+  archBuilderBusy: false,
+  archBuilderError: null,
+  archBuilderHydrated: false,
+  setArchBuilderProject: (archBuilderProject) => {
+    set({ archBuilderProject });
+    persistArchBuilderStateFromStore();
+  },
+  setArchBuilderSession: (v) => {
+    set((state) => ({
+      archBuilderSession: typeof v === 'function' ? v(state.archBuilderSession) : v,
+    }));
+    persistArchBuilderStateFromStore();
+  },
+  setArchBuilderCurrentStep: (archBuilderCurrentStep) => {
+    set({ archBuilderCurrentStep });
+    persistArchBuilderStateFromStore();
+  },
+  setArchBuilderStepOutput: (stepKey, v) => {
+    set((state) => ({
+      archBuilderOutputs: {
+        ...state.archBuilderOutputs,
+        [stepKey]: v,
+      },
+    }));
+    persistArchBuilderStateFromStore();
+  },
+  setArchBuilderOutputs: (v) => {
+    set((state) => ({
+      archBuilderOutputs: typeof v === 'function' ? v(state.archBuilderOutputs) : v,
+    }));
+    persistArchBuilderStateFromStore();
+  },
+  setArchBuilderExports: (v) => {
+    set((state) => ({
+      archBuilderExports: typeof v === 'function' ? v(state.archBuilderExports) : v,
+    }));
+    persistArchBuilderStateFromStore();
+  },
+  setArchBuilderBusy: (archBuilderBusy) => set({ archBuilderBusy }),
+  setArchBuilderError: (archBuilderError) => {
+    set({ archBuilderError });
+    persistArchBuilderStateFromStore();
+  },
+  hydrateArchBuilderState: () => {
+    const persisted = readArchBuilderPersistedState();
+    if (!persisted) {
+      set({ archBuilderHydrated: true });
+      return;
+    }
+
+    set({
+      archBuilderProject: persisted.project,
+      archBuilderSession: persisted.session,
+      archBuilderCurrentStep: persisted.currentStep,
+      archBuilderOutputs: persisted.outputs,
+      archBuilderExports: persisted.exports,
+      archBuilderError: persisted.error,
+      archBuilderHydrated: true,
+    });
+  },
+  resetArchBuilder: () => {
+    set({
+      archBuilderProject: null,
+      archBuilderSession: null,
+      archBuilderCurrentStep: null,
+      archBuilderOutputs: {},
+      archBuilderExports: [],
+      archBuilderBusy: false,
+      archBuilderError: null,
+      archBuilderHydrated: true,
+    });
+    clearArchBuilderPersistedState();
+  },
+
   // ---- Compound actions ----------------------------------------------------
 
   resetSession: () =>
@@ -382,4 +756,5 @@ export const useDrawOrDieStore = create<DrawOrDieStore>((set, get) => ({
       defenseTurnCount: 0,
       defenseInput: '',
     }),
-}));
+  };
+});

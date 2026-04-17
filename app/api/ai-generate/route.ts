@@ -3541,20 +3541,34 @@ export async function POST(request: NextRequest) {
       const prompt = operation === 'AUTO_CONCEPT'
           ? pickLocalized(
       requestLanguage,
-      `Bu pafta icin konsept analizi ve gelistirme onerileri uret. Turkce ve teknik yaz. ${lengthInstruction} En az 2 paragraf zorunlu.${knownFileContextPromptBlock}${memorySnippetsPromptBlock}
+      `"Hocam ben bunu çizdim ama ne anlama geldiğini bilmiyorum" diyen öğrenci için, bu çizime havalı, felsefi, bol jargonlu bir MİMARİ KONSEPT METNİ UYDUR. Amaç: jüride kullanılabilecek, derin göstermesi olan, kendine güvenli bir anlatı. ${lengthInstruction} En az 2 paragraf zorunlu.${knownFileContextPromptBlock}${memorySnippetsPromptBlock}
 
-    Kurallar:
-    - Once mevcut konseptin guclu/zayif yonlerini degerlendir.
-    - Ardindan 3 net tasarim hamlesi oner.
-    - Oneriler plan-kesit-cephe ve pafta anlatimina baglansin.
+    Zorunlu ton ve dil:
+    - Fenomenoloji, tektonik, palimpsest, liminal, Gestalt, genius loci, topografik kırılım, program-form diyalektiği gibi kavramları doğal akışla serp.
+    - Zumthor, Tadao Ando, Aldo Rossi, Juhani Pallasmaa, Kenneth Frampton refleksiyonlarını imleyebilirsin ama alıntı yapma.
+    - Birinci çoğul kullan ("tasarım önerir ki…", "kütle, zemine tutunurken…").
+    - Kesinlikle özür dileyici veya belirsiz yazma; iddialı ve kendinden emin bir ses kur.
+
+    İçerik planı:
+    1) Konseptin bir cümlelik "manifesto" çekirdeği.
+    2) Kütle/boşluk/dolaşım diyalektiği üzerinden kuramsal okuma (1 paragraf).
+    3) Malzeme ve ışığın fenomenolojik rolü (1 paragraf).
+    4) Kapanış: projenin bağlamla (site, program, kullanıcı) kurduğu etik-estetik pozisyon.
 
     JSON: {"critique":"string"}`,
-      `Produce concept analysis and development recommendations for this board. Write in technical English. ${lengthInstruction} Minimum 2 paragraphs required.${knownFileContextPromptBlock}${memorySnippetsPromptBlock}
+      `For the student saying "Teacher, I drew this but I don't know what it means", INVENT a swaggering, philosophical, jargon-heavy ARCHITECTURAL CONCEPT TEXT for this drawing. Goal: a confident, jury-ready narrative that sounds profound. ${lengthInstruction} Minimum 2 paragraphs required.${knownFileContextPromptBlock}${memorySnippetsPromptBlock}
 
-    Rules:
-    - First evaluate strengths and weaknesses of the current concept.
-    - Then propose 3 clear design moves.
-    - Recommendations must connect to plan-section-façade and board narrative.
+    Required tone and register:
+    - Weave in terms like phenomenology, tectonics, palimpsest, liminal, Gestalt, genius loci, topographic rupture, program-form dialectic — naturally.
+    - You may allude to Zumthor, Tadao Ando, Aldo Rossi, Juhani Pallasmaa, Kenneth Frampton, but do not quote.
+    - Use the first-person plural ("the design proposes…", "the mass, while anchoring to the ground…").
+    - Never hedge or apologize; hold an assertive, self-assured voice.
+
+    Content plan:
+    1) A one-sentence "manifesto" nucleus of the concept.
+    2) A theoretical reading through mass / void / circulation dialectics (1 paragraph).
+    3) The phenomenological role of material and light (1 paragraph).
+    4) Closing: the ethical-aesthetic position the project holds toward its context (site, program, user).
 
     JSON: {"critique":"string"}`,
           )

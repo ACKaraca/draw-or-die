@@ -1,7 +1,7 @@
 import { useLanguage } from "@/components/RuntimeTextLocalizer";
 import { pickLocalized } from "@/lib/i18n";
 import { motion } from 'framer-motion';
-import { Crown, AlertTriangle, RefreshCw, TrendingUp } from 'lucide-react';
+import { Crown, AlertTriangle, RefreshCw, TrendingUp, Lightbulb } from 'lucide-react';
 import Markdown from 'react-markdown';
 import html2canvas from 'html2canvas';
 import { useRef, useState, useEffect } from 'react';
@@ -42,6 +42,7 @@ interface ResultStepProps {
     onUpgradeClick: () => void;
     handlePreserveAnalysis?: () => void;
     handleShareToCommunity?: () => void;
+    handleAutoConcept?: () => void;
 }
 
 export function ResultStep({
@@ -53,6 +54,7 @@ export function ResultStep({
     isAnonymous, guestDrawingCount, showGuestUpgradePrompt, setShowGuestUpgradePrompt, setGuestDrawingCount, onUpgradeClick,
     handlePreserveAnalysis,
     handleShareToCommunity,
+    handleAutoConcept,
 }: ResultStepProps) {
     const language = useLanguage();
     const exportRef = useRef<HTMLDivElement>(null);
@@ -222,6 +224,15 @@ export function ResultStep({
                     >
                         {pickLocalized(language, "Community'de Paylaş", 'Share on Community')}
                     </button>
+                    {handleAutoConcept && (
+                        <button
+                            onClick={handleAutoConcept}
+                            className="flex-1 flex items-center justify-center gap-2 py-3 border border-sky-400/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-100 transition-colors text-sm font-mono uppercase"
+                            title={pickLocalized(language, 'Havalı felsefi konsept metni uydur', 'Spin up a philosophical concept text')}
+                        >
+                            <Lightbulb size={16} /> {pickLocalized(language, 'Konsept Metni Yaz', 'Write concept text')} ({RAPIDO_COSTS.AUTO_CONCEPT} Rapido)
+                        </button>
+                    )}
                     <button
                         onClick={handleNewProject}
                         className="flex-1 flex items-center justify-center gap-2 py-3 border border-white/20 hover:bg-white/5 transition-colors text-sm font-mono uppercase"
