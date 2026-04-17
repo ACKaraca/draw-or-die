@@ -150,31 +150,35 @@ export async function POST(request: NextRequest) {
       ],
     });
 
-    for (const row of existing.rows) {
-      await tables.deleteRow({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
-        rowId: row.$id,
-      });
-    }
+    await Promise.all(
+      existing.rows.map((row) =>
+        tables.deleteRow({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
+          rowId: row.$id,
+        }),
+      ),
+    );
 
-    for (const placement of placements) {
-      await tables.createRow<ArchBuilderFurniturePlacementRow>({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
-        rowId: ID.unique(),
-        data: {
-          project_id: loaded.project.$id,
-          session_id: loaded.session.$id,
-          user_id: user.id,
-          asset_key: placement.assetKey,
-          room_id: placement.roomId,
-          quantity: 1,
-          placement_json: JSON.stringify(placement),
-          collision_score: placement.collisionScore,
-        },
-      });
-    }
+    await Promise.all(
+      placements.map((placement) =>
+        tables.createRow<ArchBuilderFurniturePlacementRow>({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
+          rowId: ID.unique(),
+          data: {
+            project_id: loaded.project.$id,
+            session_id: loaded.session.$id,
+            user_id: user.id,
+            asset_key: placement.assetKey,
+            room_id: placement.roomId,
+            quantity: 1,
+            placement_json: JSON.stringify(placement),
+            collision_score: placement.collisionScore,
+          },
+        }),
+      ),
+    );
 
     const furnitureStep = await getArchBuilderStepOutput({
       sessionId,
@@ -221,42 +225,42 @@ export async function POST(request: NextRequest) {
       ],
     });
 
-    let exportsUpdated = 0;
-    for (const exportRow of existingExports.rows) {
-      const payload = asRecord(safeJsonParse<unknown>(exportRow.payload_json, {}));
+    const exportsUpdated = existingExports.rows.length;
+    await Promise.all(
+      existingExports.rows.map(async (exportRow) => {
+        const payload = asRecord(safeJsonParse<unknown>(exportRow.payload_json, {}));
 
-      const nextPayload: Record<string, unknown> = {
-        ...payload,
-        drawing: parsedDrawing.data,
-        furniture: placements,
-        includeFurniture: true,
-      };
-
-      if (exportRow.export_format === 'DXF') {
-        nextPayload.content = buildDxfFromDrawing(parsedDrawing.data, placements);
-      } else if (exportRow.export_format === 'PNG') {
-        nextPayload.svgDataUrl = buildSvgPreviewDataUrl(parsedDrawing.data, placements);
-      } else if (exportRow.export_format === 'IFC') {
-        nextPayload.ifcJson = {
-          ...asRecord(payload.ifcJson),
+        const nextPayload: Record<string, unknown> = {
+          ...payload,
+          drawing: parsedDrawing.data,
           furniture: placements,
           includeFurniture: true,
         };
-      }
 
-      await tables.updateRow({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID,
-        rowId: exportRow.$id,
-        data: {
-          include_furniture: true,
-          payload_json: JSON.stringify(nextPayload),
-          status: 'completed',
-        },
-      });
+        if (exportRow.export_format === 'DXF') {
+          nextPayload.content = buildDxfFromDrawing(parsedDrawing.data, placements);
+        } else if (exportRow.export_format === 'PNG') {
+          nextPayload.svgDataUrl = buildSvgPreviewDataUrl(parsedDrawing.data, placements);
+        } else if (exportRow.export_format === 'IFC') {
+          nextPayload.ifcJson = {
+            ...asRecord(payload.ifcJson),
+            furniture: placements,
+            includeFurniture: true,
+          };
+        }
 
-      exportsUpdated += 1;
-    }
+        await tables.updateRow({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_ARCHBUILDER_EXPORTS_ID,
+          rowId: exportRow.$id,
+          data: {
+            include_furniture: true,
+            payload_json: JSON.stringify(nextPayload),
+            status: 'completed',
+          },
+        });
+      }),
+    );
 
     return NextResponse.json({
       placements,
