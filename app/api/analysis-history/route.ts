@@ -162,7 +162,7 @@ export async function GET(request: NextRequest) {
       tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
       queries: [
         Query.equal('user_id', user.id),
-        Query.orderDesc('$createdAt'),
+        Query.orderDesc('createdAt'),
         Query.limit(limit),
         Query.offset(offset),
       ],

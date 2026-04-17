@@ -91,7 +91,7 @@ export async function GET(
       tableId: APPWRITE_TABLE_MENTOR_MESSAGES_ID,
       queries: [
         Query.equal('chat_id', chatId),
-        Query.orderAsc('$createdAt'),
+        Query.orderAsc('createdAt'),
         Query.limit(limit),
       ],
       total: true,

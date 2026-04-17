@@ -75,7 +75,6 @@ export async function GET(request: NextRequest) {
         tableId: APPWRITE_TABLE_BILLING_EVENTS_ID,
         queries: [
           Query.equal('user_id', user.id),
-          Query.orderDesc('$createdAt'),
           Query.limit(BILLING_SUMMARY_SCAN_LIMIT),
         ],
       }),

@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
       tableId: APPWRITE_TABLE_MENTOR_CHATS_ID,
       queries: [
         Query.equal('user_id', user.id),
-        Query.orderDesc('$updatedAt'),
+        Query.orderDesc('updatedAt'),
         Query.limit(limit),
         Query.offset(offset),
       ],
