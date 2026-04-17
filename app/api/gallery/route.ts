@@ -254,7 +254,7 @@ export async function GET(request: NextRequest) {
     const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
 
     const queries = [
-      Query.orderDesc('$createdAt'),
+      Query.orderDesc('createdAt'),
       Query.limit(limit),
       Query.offset(offset),
     ];
