@@ -16,7 +16,7 @@ import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
 import { RAPIDO_COSTS } from '@/lib/pricing';
-import { rapidoUnitsToCents, toRapidoCents, splitRapidoCents } from '@/lib/rapido-cents';
+import { rapidoUnitsToCents, toRapidoCents, splitRapidoCents, toRapidoDisplay } from '@/lib/rapido-cents';
 
 interface LayoutElement {
   id: string;
@@ -41,6 +41,18 @@ interface PageLayout {
   background: string;
   elements: LayoutElement[];
 }
+
+type PortfolioPageCreateData = {
+  portfolio_id: string;
+  user_id: string;
+  page_index: number;
+  plan_json: string;
+  layout_json: string;
+};
+
+type PortfolioUpdateData = {
+  page_count: number;
+};
 
 function defaultLayout(imageUrls: string[], theme: string): PageLayout {
   const bg = theme === 'dark' ? '#0a0a0a' : theme === 'warm' ? '#fdf6e3' : '#f8f8f8';
@@ -238,28 +250,31 @@ export async function POST(
     // Generate AI layout
     const layout = await generateAiLayout(imageUrls as string[], resolvedTheme);
     const layoutJson = JSON.stringify(layout);
+    const pageData: PortfolioPageCreateData = {
+      portfolio_id: portfolioId,
+      user_id: user.id,
+      page_index: resolvedPageIndex,
+      plan_json: layoutJson,
+      layout_json: layoutJson,
+    };
+    const portfolioUpdateData: PortfolioUpdateData = {
+      page_count: portfolio.page_count + 1,
+    };
 
     // Create page row
     const pageRow = await tables.createRow<PortfolioPageRow>({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_PORTFOLIO_PAGES_ID,
       rowId: ID.unique(),
-      data: {
-        portfolio_id: portfolioId,
-        user_id: user.id,
-        page_index: resolvedPageIndex,
-        plan_json: layoutJson,
-        layout_json: layoutJson,
-      } as any,
+      data: pageData,
     });
 
     // Increment page_count on portfolio
-    const newPageCount = portfolio.page_count + 1;
     await tables.updateRow<PortfolioRow>({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_PORTFOLIOS_ID,
       rowId: portfolioId,
-      data: { page_count: newPageCount } as any,
+      data: portfolioUpdateData,
     });
 
     // Deduct rapido
@@ -273,7 +288,7 @@ export async function POST(
     return NextResponse.json(
       {
         page: toPagePayload(pageRow),
-        rapido_remaining: rapidoPens + rapidoFractionCents / 100,
+        rapido_remaining: toRapidoDisplay(newBalanceCents),
       },
       { status: 201 },
     );

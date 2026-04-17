@@ -18,6 +18,16 @@ import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
 
+type PeerReviewCreateData = {
+  opening_id: string;
+  submission_id: string;
+  reviewer_user_id: string;
+  reviewer_display: string;
+  body: string;
+  created_at: string;
+  rating?: number;
+};
+
 type RouteContext = { params: Promise<{ openingId: string }> };
 
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -249,7 +259,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const reviewerDisplay = `Mimar #${user.id.slice(-4)}`;
     const createdAt = new Date().toISOString();
 
-    const reviewData: Record<string, unknown> = {
+    const reviewData: PeerReviewCreateData = {
       opening_id: openingId,
       submission_id: openingRow.submission_id,
       reviewer_user_id: user.id,
@@ -267,8 +277,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_PEER_REVIEWS_ID,
       rowId: ID.unique(),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      data: reviewData as any,
+      data: reviewData,
     }) as PeerReviewRow;
 
     // Increment review_count on the opening

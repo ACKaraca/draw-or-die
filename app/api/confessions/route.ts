@@ -13,6 +13,15 @@ import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
 import type { ConfessionRow } from '@/lib/appwrite/server';
 
+type ConfessionCreateData = {
+  anon_key: string;
+  text: string;
+  status: 'approved' | 'rejected';
+  likes: number;
+  image_url?: string;
+  moderation_reason?: string;
+};
+
 // Max decoded base64 bytes for a 2 MB image
 const MAX_IMAGE_BYTES = 2_796_202;
 // Rate limit: max confessions per anon key in 24 hours
@@ -22,7 +31,6 @@ const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
 // Attempt to load sharp for image resizing; fall back gracefully if unavailable.
 async function tryResizeImage(buffer: Buffer): Promise<{ buffer: Buffer; mimeType: string }> {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const sharp = (await import('sharp')).default;
     const resized = await sharp(buffer)
       .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
@@ -77,7 +85,6 @@ Confession text: <text>${text.substring(0, 500)}</text>`,
     const raw = json.choices?.[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(
       raw
-        .replace(/^```(?:json)?\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim(),
     ) as { approved?: boolean; reason?: string };
@@ -207,21 +214,21 @@ export async function POST(request: NextRequest) {
     const moderation = await moderateConfession(text, resizedBase64ForModeration);
 
     const status: 'approved' | 'rejected' = moderation.approved ? 'approved' : 'rejected';
+    const createData: ConfessionCreateData = {
+      anon_key: anonKey,
+      text,
+      status,
+      likes: 0,
+      ...(imageUrl ? { image_url: imageUrl } : {}),
+      ...(!moderation.approved && moderation.reason ? { moderation_reason: moderation.reason } : {}),
+    };
 
     // Create row regardless of moderation outcome
     const created = await tables.createRow<ConfessionRow>({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_CONFESSIONS_ID,
       rowId: ID.unique(),
-      data: {
-        anon_key: anonKey,
-        text,
-        status,
-        likes: 0,
-        ...(imageUrl ? { image_url: imageUrl } : {}),
-        ...(!moderation.approved && moderation.reason ? { moderation_reason: moderation.reason } : {}),
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
+      data: createData,
     });
 
     if (!moderation.approved) {
