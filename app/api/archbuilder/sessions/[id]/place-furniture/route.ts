@@ -36,6 +36,8 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+const APPWRITE_ROW_BATCH_SIZE = 50;
+
 export async function POST(request: NextRequest) {
   const lang = getRequestLanguage(request);
 
@@ -150,35 +152,39 @@ export async function POST(request: NextRequest) {
       ],
     });
 
-    await Promise.all(
-      existing.rows.map((row) =>
-        tables.deleteRow({
-          databaseId: APPWRITE_DATABASE_ID,
-          tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
-          rowId: row.$id,
-        }),
-      ),
-    );
+    for (let i = 0; i < existing.rows.length; i += APPWRITE_ROW_BATCH_SIZE) {
+      await Promise.all(
+        existing.rows.slice(i, i + APPWRITE_ROW_BATCH_SIZE).map((row) =>
+          tables.deleteRow({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
+            rowId: row.$id,
+          }),
+        ),
+      );
+    }
 
-    await Promise.all(
-      placements.map((placement) =>
-        tables.createRow<ArchBuilderFurniturePlacementRow>({
-          databaseId: APPWRITE_DATABASE_ID,
-          tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
-          rowId: ID.unique(),
-          data: {
-            project_id: loaded.project.$id,
-            session_id: loaded.session.$id,
-            user_id: user.id,
-            asset_key: placement.assetKey,
-            room_id: placement.roomId,
-            quantity: 1,
-            placement_json: JSON.stringify(placement),
-            collision_score: placement.collisionScore,
-          },
-        }),
-      ),
-    );
+    for (let i = 0; i < placements.length; i += APPWRITE_ROW_BATCH_SIZE) {
+      await Promise.all(
+        placements.slice(i, i + APPWRITE_ROW_BATCH_SIZE).map((placement) =>
+          tables.createRow<ArchBuilderFurniturePlacementRow>({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: APPWRITE_TABLE_ARCHBUILDER_FURNITURE_PLACEMENTS_ID,
+            rowId: ID.unique(),
+            data: {
+              project_id: loaded.project.$id,
+              session_id: loaded.session.$id,
+              user_id: user.id,
+              asset_key: placement.assetKey,
+              room_id: placement.roomId,
+              quantity: 1,
+              placement_json: JSON.stringify(placement),
+              collision_score: placement.collisionScore,
+            },
+          }),
+        ),
+      );
+    }
 
     const furnitureStep = await getArchBuilderStepOutput({
       sessionId,
@@ -226,6 +232,9 @@ export async function POST(request: NextRequest) {
     });
 
     const exportsUpdated = existingExports.rows.length;
+    const dxfContent = buildDxfFromDrawing(parsedDrawing.data, placements);
+    const svgDataUrl = buildSvgPreviewDataUrl(parsedDrawing.data, placements);
+
     await Promise.all(
       existingExports.rows.map(async (exportRow) => {
         const payload = asRecord(safeJsonParse<unknown>(exportRow.payload_json, {}));
@@ -238,9 +247,9 @@ export async function POST(request: NextRequest) {
         };
 
         if (exportRow.export_format === 'DXF') {
-          nextPayload.content = buildDxfFromDrawing(parsedDrawing.data, placements);
+          nextPayload.content = dxfContent;
         } else if (exportRow.export_format === 'PNG') {
-          nextPayload.svgDataUrl = buildSvgPreviewDataUrl(parsedDrawing.data, placements);
+          nextPayload.svgDataUrl = svgDataUrl;
         } else if (exportRow.export_format === 'IFC') {
           nextPayload.ifcJson = {
             ...asRecord(payload.ifcJson),
