@@ -1366,7 +1366,7 @@ export function useAnalysis({
             isPremium: isPremiumUser,
           });
 
-          store.setLatestAnalysisKind(isRevisionMode ? 'REVISION_SAME' : 'SINGLE_JURY');
+          store.setLatestAnalysisKind('REVISION_SAME');
 
           if (!isPremiumUser && placement !== 'NONE') {
             store.setGalleryConsent(true);
@@ -1549,15 +1549,6 @@ export function useAnalysis({
 
       if (aiResponse) {
         const multiData = parseMultiJuryResult(aiResponse.result, uiLanguage);
-        const scores = multiData.personas.map((entry) => Number(entry.score) || 0);
-        const averagedScore = scores.length > 0
-          ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
-          : null;
-        const structuredHistory = {
-          mode: 'MULTI_JURY',
-          projectTitle: multiData.projectTitle || formData.topic || t('İsimsiz Proje', 'Untitled project'),
-          personas: multiData.personas,
-        };
 
         store.setMultiData(multiData);
         await refreshProfile();
@@ -1684,19 +1675,6 @@ export function useAnalysis({
           }));
         }
         if (data.flaws.length > 0 || data.practicalSolutions.length > 0) {
-          const historyCritique = normalizeCritiqueText(
-            data.summary || [
-              data.flaws.length > 0
-                ? `Tespit edilen sorunlar:\n${data.flaws.map((entry, idx) => `${idx + 1}. ${entry.reason}`).join('\n')}`
-                : '',
-              data.practicalSolutions.length > 0
-                ? `Pratik cozumler:\n${data.practicalSolutions.map((entry, idx) => `${idx + 1}. ${entry}`).join('\n')}`
-                : '',
-            ]
-              .filter(Boolean)
-              .join('\n\n')
-          );
-
           store.setPremiumData(data);
           store.setLatestAnalysisKind('PREMIUM_RESCUE');
           store.setStep('premium');

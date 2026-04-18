@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, RefreshCw, Layers, Hammer, Frown } from 'lucide-react';
+import { RefreshCw, Layers, Hammer, Frown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { MultiPersonaData } from '@/types';
 import { SimplePdfPreview } from './SimplePdfPreview';

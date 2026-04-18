@@ -1,6 +1,9 @@
 import type { NextRequest } from 'next/server';
 import { normalizeLanguage, resolveLanguageFromAcceptLanguage, type SupportedLanguage } from '@/lib/i18n';
 
+/** Cookie name for persisted UI language (must stay in sync with client `document.cookie` writers). */
+export const DOD_PREFERRED_LANGUAGE_COOKIE = 'dod_preferred_language';
+
 /**
  * Resolves UI/API message language for a request (defaults to Turkish).
  */
@@ -15,24 +18,26 @@ export function getLanguageFromCookieHeader(
 ): SupportedLanguage {
   if (!cookieHeader) return fallback;
 
-  const parts = cookieHeader.split(';');
-  for (const part of parts) {
-    const equalIndex = part.indexOf('=');
-    if (equalIndex === -1) continue;
-
-    const key = part.slice(0, equalIndex).trim();
-    if (!key) continue;
-
-    if (key.toLowerCase() === 'dod_preferred_language') {
-      const rawValue = part.slice(equalIndex + 1).trim();
-      if (!rawValue) continue;
-
-      try {
-        return normalizeLanguage(decodeURIComponent(rawValue), fallback);
-      } catch {
-        return normalizeLanguage(rawValue, fallback);
+  let start = 0;
+  while (start <= cookieHeader.length) {
+    const sep = cookieHeader.indexOf(';', start);
+    const segmentEnd = sep === -1 ? cookieHeader.length : sep;
+    const segment = cookieHeader.slice(start, segmentEnd);
+    const eq = segment.indexOf('=');
+    if (eq !== -1) {
+      const key = segment.slice(0, eq).trim();
+      if (key.toLowerCase() === DOD_PREFERRED_LANGUAGE_COOKIE) {
+        const rawValue = segment.slice(eq + 1).trim();
+        if (!rawValue) return fallback;
+        try {
+          return normalizeLanguage(decodeURIComponent(rawValue), fallback);
+        } catch {
+          return normalizeLanguage(rawValue, fallback);
+        }
       }
     }
+    if (sep === -1) break;
+    start = sep + 1;
   }
 
   return fallback;

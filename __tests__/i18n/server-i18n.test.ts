@@ -1,4 +1,4 @@
-import { getLanguageFromCookieHeader } from '@/lib/server-i18n';
+import { DOD_PREFERRED_LANGUAGE_COOKIE, getLanguageFromCookieHeader } from '@/lib/server-i18n';
 
 describe('getLanguageFromCookieHeader', () => {
   it('returns fallback when cookieHeader is null', () => {
@@ -10,27 +10,37 @@ describe('getLanguageFromCookieHeader', () => {
   });
 
   it('extracts language from cookie header', () => {
-    expect(getLanguageFromCookieHeader('dod_preferred_language=en', 'tr')).toBe('en');
-    expect(getLanguageFromCookieHeader('other=val; dod_preferred_language=de; more=val', 'tr')).toBe('de');
+    expect(getLanguageFromCookieHeader(`${DOD_PREFERRED_LANGUAGE_COOKIE}=en`, 'tr')).toBe('en');
+    expect(
+      getLanguageFromCookieHeader(`other=val; ${DOD_PREFERRED_LANGUAGE_COOKIE}=de; more=val`, 'tr'),
+    ).toBe('de');
   });
 
-  it('handles encoded values', () => {
-    expect(getLanguageFromCookieHeader('dod_preferred_language=it', 'tr')).toBe('it');
+  it('handles percent-encoded language values', () => {
+    expect(
+      getLanguageFromCookieHeader(`${DOD_PREFERRED_LANGUAGE_COOKIE}=%69%74`, 'tr'),
+    ).toBe('it');
+  });
+
+  it('falls back to raw value when percent-encoding is malformed', () => {
+    expect(
+      getLanguageFromCookieHeader(`${DOD_PREFERRED_LANGUAGE_COOKIE}=%zz`, 'tr'),
+    ).toBe('tr');
   });
 
   it('returns fallback for unknown languages', () => {
-    expect(getLanguageFromCookieHeader('dod_preferred_language=fr', 'tr')).toBe('tr');
+    expect(getLanguageFromCookieHeader(`${DOD_PREFERRED_LANGUAGE_COOKIE}=fr`, 'tr')).toBe('tr');
   });
 
-  it('handles long input strings efficiently (ReDoS check)', () => {
-    const longString = 'a' + ' '.repeat(50000) + 'b';
-    const header = `dod_preferred_language=${longString}`;
+  it('handles long input strings efficiently (ReDoS guard)', () => {
+    const longString = `a${' '.repeat(50000)}b`;
+    const header = `${DOD_PREFERRED_LANGUAGE_COOKIE}=${longString}`;
 
-    const start = Date.now();
+    const start = performance.now();
     const result = getLanguageFromCookieHeader(header, 'tr');
-    const end = Date.now();
+    const elapsed = performance.now() - start;
 
     expect(result).toBe('tr');
-    expect(end - start).toBeLessThan(100);
+    expect(elapsed).toBeLessThan(100);
   });
 });

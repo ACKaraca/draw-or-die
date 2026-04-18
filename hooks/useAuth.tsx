@@ -154,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (jwtInflightRef.current) {
-            return jwtInflightRef.current
+            return await jwtInflightRef.current
         }
 
         const tokenPromise = (async () => {

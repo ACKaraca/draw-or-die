@@ -64,7 +64,6 @@ export default function Home() {
     checkoutMessage,
     setCheckoutMessage,
     toasts,
-    removeToast,
     addToast,
     setCurrentGallery,
     setStep,
