@@ -17,12 +17,14 @@ export function getLanguageFromCookieHeader(
 
   const parts = cookieHeader.split(';');
   for (const part of parts) {
-    const [rawKey, ...rawRest] = part.split('=');
-    if (!rawKey) continue;
+    const equalIndex = part.indexOf('=');
+    if (equalIndex === -1) continue;
 
-    const key = rawKey.trim();
+    const key = part.slice(0, equalIndex).trim();
+    if (!key) continue;
+
     if (key.toLowerCase() === 'dod_preferred_language') {
-      const rawValue = rawRest.join('=').trim();
+      const rawValue = part.slice(equalIndex + 1).trim();
       if (!rawValue) continue;
 
       try {

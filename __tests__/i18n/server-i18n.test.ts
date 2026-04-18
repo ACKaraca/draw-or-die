@@ -22,14 +22,15 @@ describe('getLanguageFromCookieHeader', () => {
     expect(getLanguageFromCookieHeader('dod_preferred_language=fr', 'tr')).toBe('tr');
   });
 
-  it('is vulnerable to ReDoS (demonstration)', () => {
+  it('handles long input strings efficiently (ReDoS check)', () => {
     const longString = 'a' + ' '.repeat(50000) + 'b';
     const header = `dod_preferred_language=${longString}`;
 
     const start = Date.now();
-    getLanguageFromCookieHeader(header, 'tr');
+    const result = getLanguageFromCookieHeader(header, 'tr');
     const end = Date.now();
 
-    console.log(`Execution time: ${end - start}ms`);
+    expect(result).toBe('tr');
+    expect(end - start).toBeLessThan(100);
   });
 });
