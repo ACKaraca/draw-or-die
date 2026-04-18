@@ -1,5 +1,8 @@
 name: "DrawOrDie CodeQL config"
 
+queries:
+  - uses: security-and-quality
+
 paths-ignore:
   - scripts
   - test-ai.mjs
@@ -8,3 +11,6 @@ paths-ignore:
   - __tests__
   - jest.setup.js
   - jest.config.ts
+  - .claude
+  - .next
+  - coverage
