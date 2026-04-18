@@ -1,57 +1,28 @@
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
-/** Collapses three or more consecutive newline characters to exactly two */
-function collapseTriplePlusNewlines(text: string): string {
-  let out = '';
-  let newlineRun = 0;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === '\n') {
-      newlineRun++;
-      continue;
-    }
-    if (newlineRun > 0) {
-      out += newlineRun >= 3 ? '\n\n' : '\n'.repeat(newlineRun);
-      newlineRun = 0;
-    }
-    out += c;
-  }
-  if (newlineRun > 0) {
-    out += newlineRun >= 3 ? '\n\n' : '\n'.repeat(newlineRun);
-  }
-  return out;
-}
+/**
+ * Collapses runs of empty / whitespace-only lines to at most one blank line between text lines
+ * (linear time; avoids polynomial regex on user-controlled critique text).
+ */
+function normalizeParagraphSpacing(text: string): string {
+  const segments = text.split('\n');
+  const out: string[] = [];
+  let blankRun = 0;
 
-/** Turns whitespace-only lines between two newlines into a single paragraph break (\n\n) */
-function normalizeBlankLinesBetweenNewlines(text: string): string {
-  let out = '';
-  let i = 0;
-  while (i < text.length) {
-    const ch = text[i];
-    if (ch !== '\n') {
-      out += ch;
-      i++;
-      continue;
-    }
-
-    let j = i + 1;
-    while (j < text.length && text[j] !== '\n') {
-      if (!/[ \t]/.test(text[j])) {
-        break;
+  for (const seg of segments) {
+    const blank = seg.trim() === '';
+    if (blank) {
+      blankRun++;
+      if (blankRun === 1 && out.length > 0) {
+        out.push('');
       }
-      j++;
+    } else {
+      blankRun = 0;
+      out.push(seg);
     }
-
-    if (j < text.length && text[j] === '\n') {
-      out += '\n\n';
-      i = j + 1;
-      continue;
-    }
-
-    out += '\n';
-    i++;
   }
-  return out;
+
+  return out.join('\n');
 }
 
 function stripFence(value: string): string {
@@ -109,8 +80,7 @@ export function normalizeCritiqueText(value: unknown): string {
     if (unwrapped) text = unwrapped;
   }
 
-  const spaced = normalizeBlankLinesBetweenNewlines(text);
-  return collapseTriplePlusNewlines(spaced).trim();
+  return normalizeParagraphSpacing(text).trim();
 }
 
 export function ensureAtLeastTwoParagraphs(value: string, language: SupportedLanguage = 'tr'): string {

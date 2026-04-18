@@ -81,7 +81,7 @@ describe('critique helpers', () => {
       expect(paragraphs[1]).toBe('S4. S5.');
     });
 
-    it('does not split a paragraph with only 3 sentences', () => {
+    it('falls back to filler text for paragraphs with fewer than 4 sentences', () => {
       const input = 'S1. S2. S3.';
       const output = ensureAtLeastTwoParagraphs(input, 'en');
       const paragraphs = output.split('\n\n');
