@@ -229,19 +229,23 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
             const edgeErr = await tryExtractEdgeError(error);
             if (edgeErr) throw formatStructuredAIError(edgeErr, lang);
 
-            const errMsg = typeof error === 'object' && error !== null && 'message' in error
-                ? (error as { message?: string }).message
-                : String(error);
-            if (errMsg?.includes('PREMIUM_REQUIRED')) throw new Error('PREMIUM_REQUIRED');
-            if (errMsg?.includes('INSUFFICIENT_RAPIDO')) throw new Error(errMsg);
-            if (errMsg?.includes('RATE_LIMITED')) throw new Error(errMsg);
+            const rawMsg =
+                typeof error === 'object' && error !== null && 'message' in error
+                    ? (error as { message?: unknown }).message
+                    : error;
+            const errMsg = typeof rawMsg === 'string' ? rawMsg : String(rawMsg ?? '');
+            if (errMsg.includes('PREMIUM_REQUIRED')) throw new Error('PREMIUM_REQUIRED');
+            if (errMsg.includes('INSUFFICIENT_RAPIDO')) throw new Error(errMsg);
+            if (errMsg.includes('RATE_LIMITED')) throw new Error(errMsg);
             throw new Error(errMsg || pickLocalized(lang, 'API hatası', 'API error'));
         }
 
         const res = data as Record<string, unknown>;
         if (res && 'error' in res && res.error) {
-            if (res.code === 'PREMIUM_REQUIRED') throw new Error('PREMIUM_REQUIRED');
-            if (res.code === 'INSUFFICIENT_RAPIDO') {
+            const code = res.code;
+            const codeStr = typeof code === 'string' || typeof code === 'number' ? String(code) : '';
+            if (codeStr === 'PREMIUM_REQUIRED') throw new Error('PREMIUM_REQUIRED');
+            if (codeStr === 'INSUFFICIENT_RAPIDO') {
                 throw new Error(`INSUFFICIENT_RAPIDO:${res.required}:${res.available}`);
             }
             throw new Error(String(res.error));

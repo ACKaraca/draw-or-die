@@ -126,7 +126,6 @@ export function StepRouter({
     setGuestDrawingCount,
     setShowGuestUpgradePrompt,
     // compound actions
-    goHome,
     startNewProject,
     startRevision,
   } = useDrawOrDieStore();

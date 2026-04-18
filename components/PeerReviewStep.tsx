@@ -502,7 +502,7 @@ export function PeerReviewStep({
   const [openings, setOpenings] = useState<OpeningItem[]>([]);
   const [openingsLoading, setOpeningsLoading] = useState(false);
   const [openingsError, setOpeningsError] = useState<string | null>(null);
-  const [reviewed, setReviewed] = useState<Set<string>>(new Set());
+  const [, setReviewed] = useState<Set<string>>(new Set());
 
   // Toast queue
   const [toasts, setToasts] = useState<RapidoToast[]>([]);

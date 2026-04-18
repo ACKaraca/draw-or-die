@@ -1,11 +1,72 @@
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
+/** Collapses three or more consecutive newline characters to exactly two */
+function collapseTriplePlusNewlines(text: string): string {
+  let out = '';
+  let newlineRun = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '\n') {
+      newlineRun++;
+      continue;
+    }
+    if (newlineRun > 0) {
+      out += newlineRun >= 3 ? '\n\n' : '\n'.repeat(newlineRun);
+      newlineRun = 0;
+    }
+    out += c;
+  }
+  if (newlineRun > 0) {
+    out += newlineRun >= 3 ? '\n\n' : '\n'.repeat(newlineRun);
+  }
+  return out;
+}
+
+/** Turns whitespace-only lines between two newlines into a single paragraph break (\n\n) */
+function normalizeBlankLinesBetweenNewlines(text: string): string {
+  let out = '';
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch !== '\n') {
+      out += ch;
+      i++;
+      continue;
+    }
+
+    let j = i + 1;
+    while (j < text.length && text[j] !== '\n') {
+      if (!/[ \t]/.test(text[j])) {
+        break;
+      }
+      j++;
+    }
+
+    if (j < text.length && text[j] === '\n') {
+      out += '\n\n';
+      i = j + 1;
+      continue;
+    }
+
+    out += '\n';
+    i++;
+  }
+  return out;
+}
+
 function stripFence(value: string): string {
-  return value
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/i, '')
-    .trim();
+  let s = value.trim();
+  const lower = s.toLowerCase();
+  if (lower.startsWith('```json')) {
+    s = s.slice('```json'.length).trimStart();
+  } else if (s.startsWith('```')) {
+    s = s.slice(3).trimStart();
+  }
+  s = s.trimEnd();
+  if (s.endsWith('```')) {
+    s = s.slice(0, -3).trimEnd();
+  }
+  return s.trim();
 }
 
 function decodeJsonStringCandidate(value: string): string {
@@ -46,7 +107,8 @@ export function normalizeCritiqueText(value: unknown): string {
     if (unwrapped) text = unwrapped;
   }
 
-  return text.replace(/\n{3,}/g, '\n\n').trim();
+  const spaced = normalizeBlankLinesBetweenNewlines(text);
+  return collapseTriplePlusNewlines(spaced).trim();
 }
 
 export function ensureAtLeastTwoParagraphs(value: string, language: SupportedLanguage = 'tr'): string {

@@ -279,7 +279,7 @@ export function ResultStep({
                     </div>
 
                     {/* Gallery Consent */}
-                    {isPremiumUser && galleryConsent === null && galleryPlacement !== 'NONE' && (
+                    {isPremiumUser && galleryPlacement !== 'NONE' && (
                         <div className={`mt-8 border rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${galleryPlacement === 'HALL_OF_FAME' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-neon-red/10 border-neon-red/30'}`}>
                             <div>
                                 <h3 className={`font-display font-bold text-xl flex items-center gap-2 mb-1 ${galleryPlacement === 'HALL_OF_FAME' ? 'text-emerald-500' : 'text-neon-red'}`}>

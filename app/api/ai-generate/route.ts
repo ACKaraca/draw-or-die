@@ -2604,7 +2604,7 @@ export async function POST(request: NextRequest) {
     const analysisLength = resolveAnalysisLength(payload, typedProfile, user);
     const lengthInstruction = getLengthInstruction(analysisLength, requestLanguage);
 
-    let result = '{}';
+    let result!: string;
     let finalCostCents = requiredBaseCostCents;
     let gameStateResult: GameStatePayload | null = null;
     let cacheSummaryForUpsert = '';
@@ -2612,11 +2612,6 @@ export async function POST(request: NextRequest) {
 
     const fileBase64 = typeof imageBase64 === 'string' ? imageBase64 : undefined;
     const fileMimeType = typeof imageMimeType === 'string' ? imageMimeType : undefined;
-    const promptAdditionalFiles: PromptFileInput[] = additionalFiles.map((entry) => ({
-      base64: entry.base64,
-      mimeType: entry.mimeType,
-    }));
-
     const requestFilesWithHashes: HashedPromptFile[] = [
       ...(fileBase64 && fileMimeType
         ? [{

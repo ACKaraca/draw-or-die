@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Trophy, Medal, Star, Building2, ShieldAlert, Badge as BadgeIcon } from 'lucide-react';
+import { Trophy, Medal, Star, Building2, ShieldAlert } from 'lucide-react';
 import { LeaderboardUser, Badge } from '@/types';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
