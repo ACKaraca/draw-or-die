@@ -1,4 +1,4 @@
-import {
+﻿import {
   ID,
   Compression,
   OrderBy,
@@ -877,6 +877,7 @@ async function setupReferencesTable(tables: TablesDB): Promise<void> {
     [OrderBy.Asc],
   );
 }
+
 
 async function ensureCoreResourcesOnce(): Promise<void> {
   const now = Date.now();
