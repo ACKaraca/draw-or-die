@@ -12,6 +12,7 @@ describe('critique helpers', () => {
     it('strips markdown fences', () => {
       expect(normalizeCritiqueText('```json\n{"critique": "hello"}\n```')).toBe('hello');
       expect(normalizeCritiqueText('```\nhello\n```')).toBe('hello');
+      expect(normalizeCritiqueText('```json\n{"critique": "hello"}\n```\n ')).toBe('hello');
     });
 
     it('decodes JSON candidate', () => {
@@ -27,6 +28,8 @@ describe('critique helpers', () => {
       // Escaped newlines
       expect(normalizeCritiqueText('line1\\nline2')).toBe('line1\nline2');
       expect(normalizeCritiqueText('line1\\r\\nline2')).toBe('line1\nline2');
+      // Actual CRLF and excessive newlines
+      expect(normalizeCritiqueText('line1\r\n\r\n\r\nline2')).toBe('line1\n\nline2');
       // Non-breaking spaces
       expect(normalizeCritiqueText('hello\u00a0world')).toBe('hello world');
       // Trim
@@ -45,6 +48,7 @@ describe('critique helpers', () => {
     it('collapses excessive newlines', () => {
       expect(normalizeCritiqueText('line1\n\n\nline2')).toBe('line1\n\nline2');
       expect(normalizeCritiqueText('line1\n\n\n\nline2')).toBe('line1\n\nline2');
+      expect(normalizeCritiqueText('line1\n  \n \nline2')).toBe('line1\n\nline2');
     });
   });
 
@@ -75,6 +79,15 @@ describe('critique helpers', () => {
       // middle = ceil(5/2) = 3
       expect(paragraphs[0]).toBe('S1. S2. S3.');
       expect(paragraphs[1]).toBe('S4. S5.');
+    });
+
+    it('does not split a paragraph with only 3 sentences', () => {
+      const input = 'S1. S2. S3.';
+      const output = ensureAtLeastTwoParagraphs(input, 'en');
+      const paragraphs = output.split('\n\n');
+      expect(paragraphs.length).toBe(2);
+      expect(paragraphs[0]).toBe('S1. S2. S3.');
+      expect(paragraphs[1]).toContain('Next step');
     });
 
     it('appends filler text for short single paragraph in TR', () => {

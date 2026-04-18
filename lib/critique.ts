@@ -4,7 +4,7 @@ function stripFence(value: string): string {
   return value
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
-    .replace(/```$/i, '')
+    .replace(/\s*```\s*$/i, '')
     .trim();
 }
 
@@ -36,6 +36,8 @@ export function normalizeCritiqueText(value: unknown): string {
   let text = decodeJsonStringCandidate(value)
     .replace(/\\r\\n/g, '\n')
     .replace(/\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
     .replace(/\u00a0/g, ' ')
     .trim();
 
@@ -46,7 +48,7 @@ export function normalizeCritiqueText(value: unknown): string {
     if (unwrapped) text = unwrapped;
   }
 
-  return text.replace(/\n{3,}/g, '\n\n').trim();
+  return text.replace(/\n(?:\s*\n){2,}/g, '\n\n').trim();
 }
 
 export function ensureAtLeastTwoParagraphs(value: string, language: SupportedLanguage = 'tr'): string {
