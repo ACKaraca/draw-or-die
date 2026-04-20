@@ -278,7 +278,7 @@ export default function Home() {
   const shellJustify = TOP_ALIGNED_STEPS.has(step) ? 'justify-start' : 'justify-center';
 
   return (
-    <div className={`min-h-screen w-full flex flex-col items-center ${shellJustify} pt-24 p-4`}>
+    <div className={`min-h-screen w-full flex flex-col items-center ${shellJustify} pt-[64px] p-4`}>
       <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
 
       {/* Stripe checkout banner */}

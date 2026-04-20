@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { Header } from '@/components/Header';
 
 jest.mock('@/hooks/useAuth', () => ({
@@ -23,6 +23,8 @@ describe('Header navigation', () => {
 
     expect(screen.getAllByRole('button', { name: /studio desk/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /ai mentor/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /community/i }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /galeri|gallery/i }));
     expect(screen.getAllByRole('button', { name: /hall of fame/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: /wall of death/i }).length).toBeGreaterThan(0);
 

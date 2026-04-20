@@ -286,8 +286,46 @@ If any command fails → fix before declaring done. Never silence a lint rule wi
 
 ---
 
-## 17. References
+## 17. Domain Rule Files (`AGENTS_*.md`)
+
+Alongside this master `AGENTS.md`, the repo carries **focused domain rule files** named `AGENTS_<DOMAIN>.md` (uppercase). Each file owns the deep rules for one slice of the product so that the master file stays short and authoritative. **Always check whether a domain rule file exists for the area you are about to touch and read it FIRST.**
+
+### Currently active
+
+| File | Read it BEFORE you... | One-line summary |
+|---|---|---|
+| [`AGENTS_DESIGN.md`](./AGENTS_DESIGN.md) | touch any visual layer (components, layouts, `globals.css`, navigation, marketing pages, copy, icons, motion, tier-gating UI, Rapido cost UI). | Single source of truth for the Draw or Die design system — colors, typography, spacing, components, patterns, voice. References the visual artifacts `docs/internal/Draw or Die Design System (1).html` (token/component catalog) and `docs/internal/Draw or Die Redesign (1).html` (interactive screen reference). |
+
+### Rules for creating a new `AGENTS_*.md`
+
+The owner adds new domain files when a recurring topic starts producing inconsistent AI output (e.g. Stripe, Appwrite schema, AI prompting, growth/analytics). Follow these rules **strictly** when creating one:
+
+1. **Filename:** `AGENTS_<DOMAIN>.md` at the **repo root**, where `<DOMAIN>` is a single uppercase word or `SNAKE_CASE`. Examples: `AGENTS_DESIGN.md`, `AGENTS_STRIPE.md`, `AGENTS_APPWRITE.md`, `AGENTS_AI_PROMPTING.md`, `AGENTS_GROWTH.md`.
+2. **Trigger:** create one only when (a) the owner explicitly asks, OR (b) the same class of mistake has repeated ≥ 3 times across recent agent turns. **Do not** create a file proactively on a single bug fix.
+3. **Required sections** (in this order):
+   1. **Purpose + "When to read this file"** — exact list of files / actions / keywords that should make a future agent open it first.
+   2. **Source-of-truth references** — link the upstream artifacts (HTML, JSON, lib files, external docs) the rules are derived from, and state which wins on conflict.
+   3. **Hard rules / tokens / contracts** — concrete, copy-pasteable rules. No vague "be consistent" advice.
+   4. **Implementation checklist** — bullet list to run through before declaring a task done in this domain.
+   5. **References** — links back to `AGENTS.md` and to other related `AGENTS_*.md` files.
+4. **Tone:** terse, declarative, English. Use tables, code blocks, ✅/❌ rows. No filler prose.
+5. **Register it in `AGENTS.md`:** add a one-row entry to the table above with the file name + when to read it + 1-line summary. The master file is how agents discover domain files — never leave a domain file unregistered.
+6. **Master ↔ domain split:** keep cross-cutting rules (branching, security, language policy, version-bump nudge, ADHD protocol) in `AGENTS.md`. Move deep, file-specific or topic-specific rules into the domain file. Master should remain ~300 lines, domain files can be longer.
+7. **Conflict resolution:** if `AGENTS.md` and an `AGENTS_*.md` disagree, the **domain file wins** for its scope (it is more specific). For everything else, master wins.
+8. **Versioning:** when you make a non-trivial change to a domain file, append a 1-line note to its bottom under a `## Changelog` section (date + summary). Do not maintain a global changelog.
+
+### Reading order at the start of a task
+
+1. `AGENTS.md` (this file) — every session.
+2. The matching `AGENTS_<DOMAIN>.md` for the area you will touch — before any edit in that area.
+3. Linked source-of-truth artifacts (e.g. the design HTMLs for UI work).
+4. The actual code file being edited.
+
+---
+
+## 18. References
 
 - Architecture: `docs/ARCHITECTURE.md`
 - API contracts: `docs/API.md`
 - Env vars: `docs/ENVIRONMENT.md`
+- Design system: [`AGENTS_DESIGN.md`](./AGENTS_DESIGN.md) + `docs/internal/Draw or Die Design System (1).html` + `docs/internal/Draw or Die Redesign (1).html`

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { OAuthProvider } from 'appwrite'
 import { account } from '@/lib/appwrite'
-import { Badge } from '@/types'
+import type { Badge } from '@/types'
 import type { SupportedLanguage } from '@/lib/i18n'
 
 const AUTH_SESSION_HINT_KEY = 'dod_has_appwrite_session'
@@ -249,8 +249,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             setUser(mappedUser)
             setSession(nextSession)
-            await fetchProfile(accessToken)
             setSessionHint(true)
+            await fetchProfile(accessToken)
         } catch {
             const activeUser = userRef.current
             const activeSession = sessionRef.current
@@ -299,10 +299,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
                 const jwt = await getJWT()
                 const headers = { Authorization: `Bearer ${jwt}` }
-                await Promise.allSettled([
-                    fetch('/api/profile/stats', { headers }),
-                    fetch('/api/analysis-history?limit=6&offset=0', { headers }),
-                ])
+                await fetch('/api/profile/stats', { headers })
             } catch {
                 // Prefetch should not affect foreground auth state.
             }
