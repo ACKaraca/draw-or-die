@@ -384,6 +384,13 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
                 'Choose the default language for the UI and AI responses.',
               )}
             </p>
+            <p className="mt-2 text-[11px] font-mono leading-relaxed text-cyan-200/80">
+              {pickLocalized(
+                language,
+                'Bu tercih AI cevap dilidir. Arayuz dili footerdan degisir ve sadece tarayicida saklanir.',
+                'This controls AI response language. UI language changes from the footer and stays in the browser.',
+              )}
+            </p>
             <label className="mt-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-200">
               <Globe2 size={14} className="text-cyan-300 shrink-0" />
               <span className="sr-only">{pickLocalized(language, 'Dil seçimi', 'Language selection')}</span>

@@ -13,7 +13,8 @@ import { TIER_DEFAULTS } from '@/lib/pricing';
 import { Header } from '@/components/Header';
 import { AuthModal } from '@/components/AuthModal';
 import { StepRouter } from '@/components/StepRouter';
-import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
+import { normalizeLanguage } from '@/lib/i18n';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import type { StepType } from '@/types';
 
 /** Full-height pages that should start below the header instead of vertical centering */
@@ -41,12 +42,13 @@ const ROOT_PRESERVED_STEPS = new Set([
 export default function Home() {
   const router = useRouter();
   const pathname = usePathname();
+  const uiLanguage = useLanguage();
   const [routeHydrated, setRouteHydrated] = useState(false);
-  const [preferredLanguage, setPreferredLanguageState] = useState<SupportedLanguage>('tr');
   const [multiJuryPromoActive, setMultiJuryPromoActive] = useState(false);
 
   // ---- Auth & rapido economy -----------------------------------------------
   const { user, profile, setProfile, refreshProfile, getJWT } = useAuth();
+  const responseLanguage = normalizeLanguage(profile?.preferred_language, 'tr');
 
   const isPremiumUser = profile?.is_premium ?? false;
   const isAnonymous = user ? user.identities?.[0]?.provider === 'anonymous' : false; // P0.3: Guest mode
@@ -95,23 +97,6 @@ export default function Home() {
   }, [pathname, setCurrentGallery, setStep]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const stored = window.localStorage.getItem('dod_preferred_language');
-    if (stored) {
-      setPreferredLanguageState(normalizeLanguage(stored, 'tr'));
-      return;
-    }
-
-    setPreferredLanguageState(normalizeLanguage(window.navigator.language, 'tr'));
-  }, []);
-
-  useEffect(() => {
-    if (!profile?.preferred_language) return;
-    setPreferredLanguageState(normalizeLanguage(profile.preferred_language, 'tr'));
-  }, [profile?.preferred_language]);
-
-  useEffect(() => {
     let cancelled = false;
     void fetch('/api/feature-flags')
       .then((res) => res.json() as Promise<{ multiJuryPromo?: boolean }>)
@@ -126,19 +111,19 @@ export default function Home() {
     };
   }, []);
 
-  const runtimeCopy = preferredLanguage === 'en'
+  const runtimeCopy = uiLanguage === 'en'
     ? {
       checkoutSuccess: 'Payment successful! Your Premium account is now active.',
       checkoutCancelled: 'Payment cancelled. You can try again anytime.',
       oauthFailed: 'Google sign-in could not be completed. Please try again.',
     }
-    : preferredLanguage === 'de'
+    : uiLanguage === 'de'
       ? {
         checkoutSuccess: 'Zahlung erfolgreich! Ihr Premium-Konto ist jetzt aktiv.',
         checkoutCancelled: 'Zahlung abgebrochen. Sie können es jederzeit erneut versuchen.',
         oauthFailed: 'Die Anmeldung mit Google konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
       }
-      : preferredLanguage === 'it'
+      : uiLanguage === 'it'
         ? {
           checkoutSuccess: 'Pagamento riuscito! Il tuo account Premium è ora attivo.',
           checkoutCancelled: 'Pagamento annullato. Puoi riprovare in qualsiasi momento.',
@@ -179,14 +164,14 @@ export default function Home() {
       
       const isAccountExists = errStr.toLowerCase().includes('already exists') || errStr.toLowerCase().includes('conflict');
       const detailMsg = isAccountExists 
-          ? (preferredLanguage === 'en' ? ' Account already exists. Please login using email and password.' : ' Bu email ile kayıtlı normal bir hesap mevcut. Lütfen şifrenizle giriş yapın.')
+          ? (uiLanguage === 'en' ? ' Account already exists. Please login using email and password.' : ' Bu email ile kayıtlı normal bir hesap mevcut. Lütfen şifrenizle giriş yapın.')
           : (errStr ? ` (${errStr})` : '');
           
       addToast(runtimeCopy.oauthFailed + detailMsg, 'error', 7000);
       window.history.replaceState({}, '', window.location.pathname);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshProfile, runtimeCopy.checkoutCancelled, runtimeCopy.checkoutSuccess, runtimeCopy.oauthFailed, setCheckoutMessage, addToast, preferredLanguage]);
+  }, [refreshProfile, runtimeCopy.checkoutCancelled, runtimeCopy.checkoutSuccess, runtimeCopy.oauthFailed, setCheckoutMessage, addToast, uiLanguage]);
 
   // Capture uncaught browser errors and mirror them into server-side site logs.
   useEffect(() => {
@@ -241,7 +226,7 @@ export default function Home() {
   // ---- File drop handler ---------------------------------------------------
   const { getRootProps, getInputProps, isDragActive } = useDropHandler({
     isPremiumUser,
-    preferredLanguage,
+    preferredLanguage: responseLanguage,
   });
 
   // ---- AI analysis handlers ------------------------------------------------
@@ -263,7 +248,7 @@ export default function Home() {
     getJWT,
     refreshProfile,
     setProfile,
-    preferredLanguage,
+    preferredLanguage: responseLanguage,
     multiJuryPromoActive,
   });
 
@@ -325,7 +310,7 @@ export default function Home() {
         rapidoPens={rapidoPens}
         progressionScore={progressionScore}
         earnedBadges={earnedBadges}
-        preferredLanguage={preferredLanguage}
+        preferredLanguage={responseLanguage}
         multiJuryPromoActive={multiJuryPromoActive}
         handleAnalyze={handleAnalyze}
         handleMultiAnalyze={handleMultiAnalyze}

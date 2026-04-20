@@ -3,21 +3,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, Layers, Hammer, Frown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { MultiPersonaData } from '@/types';
-import { SimplePdfPreview } from './SimplePdfPreview';
-import { InteractiveImagePreview } from './InteractiveImagePreview';
+import { SimplePdfPreview } from '@/components/SimplePdfPreview';
+import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
+import { RAPIDO_COSTS } from '@/lib/pricing';
 
 interface MultiResultStepProps {
     multiData: MultiPersonaData;
     previewUrl: string | null;
     mimeType: string | null;
     handleNewProject: () => void;
+    handlePremium?: () => void;
     handlePreserveAnalysis?: () => void;
     handleShareToCommunity?: () => void;
 }
 
-export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProject, handlePreserveAnalysis, handleShareToCommunity }: MultiResultStepProps) {
+export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProject, handlePremium, handlePreserveAnalysis, handleShareToCommunity }: MultiResultStepProps) {
     const language = useLanguage();
     const personas = useMemo(() => {
         if (Array.isArray(multiData.personas) && multiData.personas.length > 0) {
@@ -130,6 +132,14 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                 </div>
 
                 <div className="mt-auto pt-4 border-t border-white/10">
+                    {handlePremium && (
+                        <button
+                            onClick={handlePremium}
+                            className="mb-2 w-full rounded-lg border border-neon-red/30 bg-neon-red/10 px-3 py-3 font-mono text-[11px] font-bold uppercase tracking-wider text-neon-red transition-colors hover:bg-neon-red/20"
+                        >
+                            {pickLocalized(language, 'Juri Kararlarindan Kurtarma Plani Cikar', 'Build a rescue plan from jury critiques')} ({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)
+                        </button>
+                    )}
                     <button
                         onClick={handlePreserveAnalysis}
                         disabled={!handlePreserveAnalysis}

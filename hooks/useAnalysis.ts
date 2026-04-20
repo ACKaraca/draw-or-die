@@ -15,6 +15,7 @@ import { RAPIDO_COSTS } from '@/lib/pricing';
 import { reportClientError } from '@/lib/logger';
 import { PremiumData, MultiPersonaData } from '@/types';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { trackConversionEvent } from '@/lib/growth-tracking';
 import type { UserProfile } from '@/hooks/useAuth';
 import type { AppUser } from '@/hooks/useAuth';
@@ -26,6 +27,10 @@ const PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const PREVIEW_JPEG_QUALITIES = [0.82, 0.74, 0.66, 0.58, 0.5, 0.42];
 const PREMIUM_MAX_RENDERED_PAGES = 12;
 const ANALYSIS_PRESERVE_COST = 1.5;
+const PREMIUM_RESCUE_IMAGE_EDITING_ENABLED =
+  process.env.NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED === 'true';
+type FlawSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
 function communityShareConfirmationText(language: SupportedLanguage): string {
   if (language === 'en') {
     return [
@@ -151,6 +156,38 @@ function normalizePercentValue(value: unknown): number | null {
   const parsed = parseFiniteNumber(value);
   if (parsed === null) return null;
   return clampPercent(toPercent(parsed));
+}
+
+function normalizeOverlayBox(box: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}): { x: number; y: number; width: number; height: number } {
+  const minSize = 4;
+  const x = clampPercent(box.x);
+  const y = clampPercent(box.y);
+  const width = Math.max(minSize, Math.min(clampPercent(box.width), 100 - x));
+  const height = Math.max(minSize, Math.min(clampPercent(box.height), 100 - y));
+
+  return {
+    x: Math.min(x, 100 - minSize),
+    y: Math.min(y, 100 - minSize),
+    width: Math.min(width, 100 - Math.min(x, 100 - minSize)),
+    height: Math.min(height, 100 - Math.min(y, 100 - minSize)),
+  };
+}
+
+function normalizeFlawSeverity(value: unknown): FlawSeverity {
+  if (typeof value !== 'string') return 'MEDIUM';
+  const normalized = value.trim().toUpperCase();
+  if (normalized === 'LOW' || normalized === 'MEDIUM' || normalized === 'HIGH' || normalized === 'CRITICAL') {
+    return normalized;
+  }
+  if (normalized.includes('KRITIK') || normalized.includes('CRIT')) return 'CRITICAL';
+  if (normalized.includes('YUKSEK') || normalized.includes('HIGH')) return 'HIGH';
+  if (normalized.includes('DUSUK') || normalized.includes('LOW')) return 'LOW';
+  return 'MEDIUM';
 }
 
 function normalizeTextArray(value: unknown): string[] {
@@ -682,14 +719,14 @@ export function parsePremiumRescueResult(raw: unknown, language: SupportedLangua
     const page = parseFiniteNumber(flaw.page) ?? parseFiniteNumber(flaw.pageNumber) ?? parseFiniteNumber(flaw.sheet);
     const pageLabel = typeof flaw.pageLabel === 'string' && flaw.pageLabel.trim() ? flaw.pageLabel.trim() : undefined;
     const drawingGuide = typeof flaw.drawingGuide === 'string' && flaw.drawingGuide.trim() ? flaw.drawingGuide.trim() : undefined;
+    const severity = normalizeFlawSeverity(flaw.severity ?? flaw.priority ?? flaw.level);
 
     if (x !== null && y !== null && width !== null && height !== null) {
+      const box = normalizeOverlayBox({ x, y, width, height });
       return {
-        x,
-        y,
-        width,
-        height,
+        ...box,
         reason: pickFlawReason(flaw, idx, language),
+        severity,
         ...(page !== null ? { page: Math.max(1, Math.floor(page)) } : {}),
         ...(pageLabel ? { pageLabel } : {}),
         ...(drawingGuide ? { drawingGuide } : {}),
@@ -699,12 +736,16 @@ export function parsePremiumRescueResult(raw: unknown, language: SupportedLangua
     // Fallback overlay placement to keep entries visible even when coords are absent.
     const col = idx % 3;
     const row = Math.floor(idx / 3);
+    const box = normalizeOverlayBox({
+      x: 8 + col * 30,
+      y: 8 + (row % 6) * 14,
+      width: 24,
+      height: 12,
+    });
     return {
-      x: 10 + col * 30,
-      y: 10 + row * 30,
-      width: 25,
-      height: 20,
+      ...box,
       reason: pickFlawReason(flaw, idx, language),
+      severity,
       ...(page !== null ? { page: Math.max(1, Math.floor(page)) } : {}),
       ...(pageLabel ? { pageLabel } : {}),
       ...(drawingGuide ? { drawingGuide } : {}),
@@ -716,8 +757,26 @@ export function parsePremiumRescueResult(raw: unknown, language: SupportedLangua
     normalizeTextArray(payload.practical_solutions),
     normalizeTextArray(payload.solutions),
   ];
-  const practicalSolutions =
+  const practicalSolutionsRaw =
     practicalSolutionsCandidates.find((entries) => entries.length > 0) ?? [];
+  const fallbackSolutions = flaws.map((flaw, index) => {
+    const prefix = pickLanguageCopy(language, `#${index + 1} icin`, `For #${index + 1}`);
+    return `${prefix}: ${flaw.drawingGuide || flaw.reason}`;
+  });
+  const practicalSolutions = Array.from(new Set([
+    ...practicalSolutionsRaw,
+    ...fallbackSolutions,
+  ]));
+  while (practicalSolutions.length > 0 && practicalSolutions.length < 6) {
+    practicalSolutions.push(
+      pickLanguageCopy(
+        language,
+        `Eksik kalan kritik pafta kararlarini teknik gerekceyle yeniden duzenle (${practicalSolutions.length + 1}).`,
+        `Rework the remaining critical board decisions with technical justification (${practicalSolutions.length + 1}).`,
+      ),
+    );
+  }
+  const clampedPracticalSolutions = practicalSolutions.slice(0, 18);
 
   const referenceCandidates = [
     payload.reference,
@@ -733,8 +792,9 @@ export function parsePremiumRescueResult(raw: unknown, language: SupportedLangua
 
   const result: PremiumData = {
     flaws,
-    practicalSolutions,
+    practicalSolutions: clampedPracticalSolutions,
     reference: reference ?? pickLanguageCopy(language, 'Belirtilmedi', 'Not specified'),
+    imageEditPlanEnabled: PREMIUM_RESCUE_IMAGE_EDITING_ENABLED,
   };
 
   if (drawingInstructions.length > 0) {
@@ -760,7 +820,8 @@ export function useAnalysis({
   multiJuryPromoActive = false,
 }: UseAnalysisOptions) {
   const store = useDrawOrDieStore();
-  const uiLanguage = useMemo<SupportedLanguage>(() => {
+  const uiLanguage = useLanguage();
+  const responseLanguage = useMemo<SupportedLanguage>(() => {
     if (preferredLanguage) return normalizeLanguage(preferredLanguage, 'tr');
     if (profile?.preferred_language) return normalizeLanguage(profile.preferred_language, 'tr');
     if (typeof window !== 'undefined') return normalizeLanguage(window.navigator.language, 'tr');
@@ -775,9 +836,9 @@ export function useAnalysis({
   const withLanguage = useCallback(
     (params: Record<string, unknown>) => ({
       ...params,
-      language: uiLanguage,
+      language: responseLanguage,
     }),
-    [uiLanguage]
+    [responseLanguage]
   );
 
   const handleInsufficientRapido = useCallback(
@@ -1613,7 +1674,7 @@ export function useAnalysis({
   // handlePremium — PREMIUM_RESCUE
   // -------------------------------------------------------------------------
   const handlePremium = useCallback(async () => {
-    const { image, imageBase64, mimeType, formData, pdfText, additionalUploads } = store;
+    const { image, imageBase64, mimeType, formData, pdfText, additionalUploads, multiData } = store;
     const readyPayload = getReadyImagePayload(imageBase64, mimeType);
     if (!readyPayload) return;
     const { imageBase64: readyImageBase64, mimeType: readyMimeType } = readyPayload;
@@ -1651,6 +1712,12 @@ export function useAnalysis({
           topic: formData.topic,
           site: formData.site,
           concept: formData.concept,
+          multiJuryCritiques: multiData?.personas?.map((persona) => ({
+            id: persona.id,
+            name: persona.name,
+            score: persona.score,
+            critique: persona.critique,
+          })),
           analysisLength: formData.analysisLength,
           pdfText: pdfText?.substring(0, 1000),
           additionalFiles: premiumPrepared.additionalFiles,
