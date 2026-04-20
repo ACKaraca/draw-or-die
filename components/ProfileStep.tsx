@@ -22,7 +22,7 @@ import { EduVerificationCard } from '@/components/EduVerificationCard';
 import { PromoRedeemCard } from '@/components/PromoRedeemCard';
 import { ReferralCard } from '@/components/ReferralCard';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
-import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
+import { normalizeLanguage, pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
 const LANGUAGE_OPTIONS: Array<{ value: SupportedLanguage; label: string }> = [
   { value: 'tr', label: 'Türkçe' },
@@ -308,7 +308,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
   const progression = profile?.progression_score ?? 0;
   const wallCount = profile?.wall_of_death_count ?? 0;
   const badges = profile?.earned_badges ?? [];
-  const currentLanguage = LANGUAGE_OPTIONS.find((option) => option.value === (profile?.preferred_language === 'en' || profile?.preferred_language === 'de' || profile?.preferred_language === 'it' ? profile.preferred_language : 'tr'))?.value ?? 'tr';
+  const currentLanguage = normalizeLanguage(profile?.preferred_language, 'tr');
 
   return (
     <motion.div

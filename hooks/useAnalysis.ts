@@ -184,9 +184,20 @@ function normalizeFlawSeverity(value: unknown): FlawSeverity {
   if (normalized === 'LOW' || normalized === 'MEDIUM' || normalized === 'HIGH' || normalized === 'CRITICAL') {
     return normalized;
   }
-  if (normalized.includes('KRITIK') || normalized.includes('CRIT')) return 'CRITICAL';
-  if (normalized.includes('YUKSEK') || normalized.includes('HIGH')) return 'HIGH';
-  if (normalized.includes('DUSUK') || normalized.includes('LOW')) return 'LOW';
+  const aliasMap: Record<string, FlawSeverity> = {
+    KRITIK: 'CRITICAL',
+    CRITICAL: 'CRITICAL',
+    CRITIC: 'CRITICAL',
+    HIGH: 'HIGH',
+    YUKSEK: 'HIGH',
+    MEDIUM: 'MEDIUM',
+    ORTA: 'MEDIUM',
+    LOW: 'LOW',
+    DUSUK: 'LOW',
+  };
+  if (normalized in aliasMap) {
+    return aliasMap[normalized];
+  }
   return 'MEDIUM';
 }
 
@@ -827,6 +838,7 @@ export function useAnalysis({
     if (typeof window !== 'undefined') return normalizeLanguage(window.navigator.language, 'tr');
     return 'tr';
   }, [preferredLanguage, profile?.preferred_language]);
+  const profileLanguageLoaded = Boolean(profile?.preferred_language);
 
   const t = useCallback(
     (trText: string, enText: string) => pickLanguageCopy(uiLanguage, trText, enText),
@@ -836,9 +848,9 @@ export function useAnalysis({
   const withLanguage = useCallback(
     (params: Record<string, unknown>) => ({
       ...params,
-      language: responseLanguage,
+      ...(profileLanguageLoaded ? { language: responseLanguage } : {}),
     }),
-    [responseLanguage]
+    [profileLanguageLoaded, responseLanguage]
   );
 
   const handleInsufficientRapido = useCallback(
@@ -1609,7 +1621,7 @@ export function useAnalysis({
       });
 
       if (aiResponse) {
-        const multiData = parseMultiJuryResult(aiResponse.result, uiLanguage);
+        const multiData = parseMultiJuryResult(aiResponse.result, responseLanguage);
 
         store.setMultiData(multiData);
         await refreshProfile();
@@ -1668,7 +1680,7 @@ export function useAnalysis({
 
       store.setStep('upload');
     }
-  }, [store, isPremiumUser, multiJuryPromoActive, rapidoPens, refreshProfile, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
+  }, [store, isPremiumUser, multiJuryPromoActive, rapidoPens, refreshProfile, getReadyImagePayload, toUserErrorMessage, withLanguage, responseLanguage, uiLanguage, t]);
 
   // -------------------------------------------------------------------------
   // handlePremium — PREMIUM_RESCUE
@@ -1731,7 +1743,7 @@ export function useAnalysis({
 
       if (aiResponse) {
         const raw = safeParseJsonObject(aiResponse.result);
-        const data = parsePremiumRescueResult(raw, uiLanguage);
+        const data = parsePremiumRescueResult(raw, responseLanguage);
         if (premiumPrepared.pages.length > 0) {
           data.pages = premiumPrepared.pages.map((entry) => ({
             page: entry.page,
@@ -1775,7 +1787,7 @@ export function useAnalysis({
       store.addToast(toUserErrorMessage(error), 'error');
       store.setStep('result');
     }
-  }, [store, rapidoPens, isPremiumUser, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
+  }, [store, rapidoPens, isPremiumUser, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, responseLanguage, uiLanguage, t]);
 
   // -------------------------------------------------------------------------
   // handleAutoConcept — AUTO_CONCEPT

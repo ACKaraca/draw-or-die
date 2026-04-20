@@ -958,8 +958,8 @@ function buildMemorySnippetCandidates(params: {
 
   const userProfileSnippet = summarizeForFileCache(
     [
-      compactTitle ? `Proje: ${compactTitle}` : '',
-      `Kisa ozet: ${firstLine}`,
+      compactTitle ? `Project: ${compactTitle}` : '',
+      `Short summary: ${firstLine}`,
     ]
       .filter(Boolean)
       .join('\n')
@@ -967,14 +967,14 @@ function buildMemorySnippetCandidates(params: {
 
   const recentContextSnippet = summarizeForFileCache(
     [
-      'Son analiz odagi:',
+      'Recent analysis focus:',
       contextLines.length > 0 ? contextLines.join(' | ') : firstLine,
     ].join('\n')
   ).substring(0, 320);
 
   const hiddenStyleSnippet = summarizeForFileCache(
     [
-      'Gizli stil notu:',
+      'Hidden style note:',
       summaryLines.slice(0, 2).join(' | ') || firstLine,
     ].join('\n')
   ).substring(0, 320);
