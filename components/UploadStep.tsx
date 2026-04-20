@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { motion } from 'framer-motion';
 import {
   Upload,
@@ -467,7 +467,13 @@ export function UploadStep({
     }
   };
 
-  const rootProps = getRootProps();
+  const rootProps = getRootProps({
+    onClick: (event: MouseEvent<HTMLElement>) => {
+      if (previewFiles.length > 0) {
+        event.stopPropagation();
+      }
+    },
+  });
 
   return (
     <>
@@ -563,6 +569,7 @@ export function UploadStep({
                   </p>
                   <label
                     htmlFor="studio-desk-upload-input"
+                    onClick={(event) => event.stopPropagation()}
                     className="px-3 py-1.5 rounded border border-white/20 text-[11px] font-mono text-slate-200 hover:border-neon-red hover:text-white transition-colors cursor-pointer"
                   >
                     {pickLocalized(language, 'Dosya Değiştir', 'Replace file')}

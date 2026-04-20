@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { OAuthProvider } from 'appwrite'
 import { account } from '@/lib/appwrite'
 import type { Badge } from '@/types'
-import type { SupportedLanguage } from '@/lib/i18n'
+import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n'
 
 const AUTH_SESSION_HINT_KEY = 'dod_has_appwrite_session'
 const JWT_CACHE_TTL_MS = 45_000
@@ -393,7 +393,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const setPreferredLanguage = useCallback(async (language: SupportedLanguage) => {
-        const nextLanguage: SupportedLanguage = language === 'en' ? 'en' : 'tr'
+        const nextLanguage = normalizeLanguage(language, 'tr')
 
         setProfile((prev) => (prev ? { ...prev, preferred_language: nextLanguage } : prev))
 

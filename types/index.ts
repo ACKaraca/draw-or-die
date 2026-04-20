@@ -57,6 +57,7 @@ export interface Flaw {
     width: number;
     height: number;
     reason: string;
+    severity?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
     page?: number;
     pageLabel?: string;
     drawingGuide?: string;
@@ -77,6 +78,7 @@ export interface PremiumData {
     pages?: PremiumPage[];
     drawingInstructions?: string[];
     summary?: string;
+    imageEditPlanEnabled?: boolean;
 }
 
 export interface PersonaCritique {
