@@ -723,7 +723,10 @@ async function runInParallelBatches<T>(
   batchSize: number,
   worker: (item: T) => Promise<void>,
 ): Promise<void> {
-    await Promise.all(batch.map((item) => worker(item).catch((err) => console.error('[runInParallelBatches] item failed', err))));
+  for (let index = 0; index < items.length; index += batchSize) {
+    const chunk = items.slice(index, index + batchSize);
+    await Promise.all(chunk.map((item: T) => worker(item)));
+  }
 }
 
 async function loadAnalysisFileCacheRows(userId: string, hashes: string[]): Promise<Map<string, AnalysisFileCacheRow>> {
@@ -737,7 +740,7 @@ async function loadAnalysisFileCacheRows(userId: string, hashes: string[]): Prom
     queries: [
       Query.equal('user_id', userId),
       Query.equal('file_hash', uniqueHashes),
-      Query.limit(Math.min(uniqueHashes.length, 5000)),
+      Query.limit(uniqueHashes.length),
     ],
   });
 

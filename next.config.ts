@@ -19,12 +19,6 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**', // This allows any path under the hostname
       },
-      {
-        protocol: 'https',
-        hostname: 'fra.cloud.appwrite.io',
-        port: '',
-        pathname: '/**',
-      },
     ],
   },
   output: 'standalone',

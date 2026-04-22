@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { BookMarked, Crown, Lock, Search, MapPin } from 'lucide-react';
 import { account } from '@/lib/appwrite';
@@ -181,13 +180,8 @@ export default function ReferencesLibraryPage() {
               >
                 <div className="aspect-[4/3] bg-slate-900 overflow-hidden relative">
                   {r.coverImageUrl ? (
-                    <Image
-                      src={r.coverImageUrl}
-                      alt={r.title}
-                      fill
-                      className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                    />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={r.coverImageUrl} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-600">
                       <BookMarked size={48} />

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import Image from 'next/image';
 import { BookHeart, Flame, Loader2, Send, ShieldCheck, Upload, X } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
@@ -135,12 +134,12 @@ function ConfessionCard({ confession, liked, onLike, language }: ConfessionCardP
     >
       {confession.imageUrl && (
         <div className="w-full max-h-64 overflow-hidden">
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={confession.imageUrl}
             alt=""
-            width={600}
-            height={400}
             className="w-full max-h-64 object-cover"
+            loading="lazy"
           />
         </div>
       )}
@@ -497,14 +496,8 @@ export default function ConfessionsPage() {
             )}
             {imagePreview && (
               <div className="rounded-lg overflow-hidden border border-white/10 max-h-40">
-                <Image
-                  src={imagePreview}
-                  alt="preview"
-                  width={400}
-                  height={300}
-                  className="w-full max-h-40 object-cover"
-                  unoptimized
-                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreview} alt="preview" className="w-full max-h-40 object-cover" />
               </div>
             )}
           </div>
