@@ -737,12 +737,13 @@ async function loadAnalysisFileCacheRows(userId: string, hashes: string[]): Prom
     queries: [
       Query.equal('user_id', userId),
       Query.equal('file_hash', uniqueHashes),
-      Query.limit(Math.min(uniqueHashes.length, 5000)),
+      Query.limit(Math.max(100, uniqueHashes.length)),
     ],
   });
 
   const map = new Map<string, AnalysisFileCacheRow>();
   for (const row of res.rows) {
+    if (!row?.file_hash) continue;
     map.set(row.file_hash, row);
   }
   return map;

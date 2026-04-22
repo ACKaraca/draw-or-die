@@ -4,7 +4,7 @@ import { join } from 'path';
 import { Account, Client, ID, Query, Storage, TablesDB } from 'node-appwrite';
 import type { Models } from 'node-appwrite';
 import type { NextRequest } from 'next/server';
-import { isAppwriteConflict, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
+import { getAppwriteErrorDetails, isAppwriteConflict, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
 import { TIER_DEFAULTS } from '@/lib/pricing';
 
@@ -859,8 +859,10 @@ export async function markStripeEventProcessed(eventId: string): Promise<boolean
       },
     });
     return false;
-  } catch (error: any) {
-    if (error?.code === 409) {
+  } catch (error: unknown) {
+    const details = getAppwriteErrorDetails(error);
+    const status = details.code ?? details.status ?? details.responseCode ?? details.responseStatus;
+    if (status === 409) {
       return true;
     }
     throw error;
