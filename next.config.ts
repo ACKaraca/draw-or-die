@@ -25,6 +25,23 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: '/favicon.ico', destination: '/icon' }];
   },
+  async headers() {
+    return [
+      {
+        source: '/',
+        headers: [
+          {
+            key: 'Link',
+            value:
+              '</.well-known/api-catalog>; rel="api-catalog service-desc", ' +
+              '</references>; rel="service-doc", ' +
+              '</api/health>; rel="status", ' +
+              '</.well-known/http-message-signatures-directory>; rel="service-meta"',
+          },
+        ],
+      },
+    ];
+  },
   transpilePackages: ['motion'],
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.

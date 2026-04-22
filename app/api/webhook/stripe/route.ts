@@ -64,7 +64,8 @@ export async function POST(request: NextRequest) {
     try {
         event = getStripe().webhooks.constructEvent(body, signature, getWebhookSecret());
     } catch (err) {
-        console.error('Webhook signature verification failed:', err);
+        const message = err instanceof Error ? err.message : 'unknown error';
+        console.error(`Webhook signature verification failed: ${message}`);
         return NextResponse.json({ error: 'Webhook signature verification failed' }, { status: 400 });
     }
 
@@ -98,7 +99,8 @@ export async function POST(request: NextRequest) {
             }
         }
     } catch (error) {
-        console.error('Webhook handler error:', error);
+        const message = error instanceof Error ? error.message : 'unknown error';
+        console.error(`Webhook handler error: ${message}`);
         return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
     }
 
@@ -298,7 +300,17 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-    const subscriptionId = (invoice as any).subscription as string;
+    const invoiceWithSubscription = invoice as Stripe.Invoice & {
+        subscription?: string | Stripe.Subscription | null;
+    };
+    const subscriptionId =
+        typeof invoiceWithSubscription.subscription === 'string'
+            ? invoiceWithSubscription.subscription
+            : invoiceWithSubscription.subscription &&
+                typeof invoiceWithSubscription.subscription === 'object' &&
+                'id' in invoiceWithSubscription.subscription
+                ? String(invoiceWithSubscription.subscription.id)
+                : '';
     if (!subscriptionId) return;
 
     const profile = await findProfileBySubscriptionId(subscriptionId);
