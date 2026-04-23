@@ -197,7 +197,8 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
             try {
                 subscription = await getStripe().subscriptions.retrieve(session.subscription);
             } catch (error) {
-                console.warn('Could not retrieve Stripe subscription snapshot:', error);
+                const message = error instanceof Error ? error.message : 'unknown error';
+                console.warn('Could not retrieve Stripe subscription snapshot:', message);
             }
         }
 

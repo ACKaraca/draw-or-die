@@ -1,6 +1,0 @@
-User-agent: *
-Allow: /
-Content-Signal: ai-train=no, search=yes, ai-input=no
-
-Sitemap: https://drawordie.ackaraca.me/sitemap.xml
-host: https://drawordie.ackaraca.me
