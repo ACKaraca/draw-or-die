@@ -19,11 +19,34 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**', // This allows any path under the hostname
       },
+      {
+        protocol: 'https',
+        hostname: 'fra.cloud.appwrite.io',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
   output: 'standalone',
   async rewrites() {
     return [{ source: '/favicon.ico', destination: '/icon' }];
+  },
+  async headers() {
+    return [
+      {
+        source: '/',
+        headers: [
+          {
+            key: 'Link',
+            value:
+              '</.well-known/api-catalog>; rel="api-catalog service-desc", ' +
+              '</references>; rel="service-doc", ' +
+              '</api/health>; rel="status", ' +
+              '</.well-known/http-message-signatures-directory>; rel="service-meta"',
+          },
+        ],
+      },
+    ];
   },
   transpilePackages: ['motion'],
   webpack: (config, {dev}) => {

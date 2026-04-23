@@ -755,30 +755,46 @@ function summarizeForFileCache(value: string): string {
   return normalized.substring(0, 3000);
 }
 
+async function runInParallelBatches<T>(
+  items: T[],
+  batchSize: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new Error(`Invalid batchSize: ${batchSize}`);
+  }
+
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map((item) =>
+        worker(item).catch((err) => {
+          logServerError('api.ai-generate.runInParallelBatches', err, { batchIndex: i, batchSize });
+        }),
+      ),
+    );
+  }
+}
+
 async function loadAnalysisFileCacheRows(userId: string, hashes: string[]): Promise<Map<string, AnalysisFileCacheRow>> {
   const uniqueHashes = Array.from(new Set(hashes.filter(Boolean)));
   if (uniqueHashes.length === 0) return new Map();
 
   const tables = getAdminTables();
-  const entries = await Promise.all(
-    uniqueHashes.map(async (hash) => {
-      const res = await tables.listRows<AnalysisFileCacheRow>({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
-        queries: [
-          Query.equal('user_id', userId),
-          Query.equal('file_hash', hash),
-          Query.limit(1),
-        ],
-      });
-
-      return [hash, res.rows[0] ?? null] as const;
-    }),
-  );
+  const res = await tables.listRows<AnalysisFileCacheRow>({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
+    queries: [
+      Query.equal('user_id', userId),
+      Query.equal('file_hash', uniqueHashes),
+      Query.limit(Math.max(100, uniqueHashes.length)),
+    ],
+  });
 
   const map = new Map<string, AnalysisFileCacheRow>();
-  for (const [hash, row] of entries) {
-    if (row) map.set(hash, row);
+  for (const row of res.rows) {
+    if (!row?.file_hash) continue;
+    map.set(row.file_hash, row);
   }
   return map;
 }
@@ -797,39 +813,37 @@ async function upsertAnalysisFileCacheRows(params: {
   const tables = getAdminTables();
   const existing = await loadAnalysisFileCacheRows(params.userId, uniqueHashes);
 
-  await Promise.all(
-    uniqueHashes.map(async (hash) => {
-      const row = existing.get(hash);
-      if (row) {
-        await tables.updateRow({
-          databaseId: APPWRITE_DATABASE_ID,
-          tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
-          rowId: row.$id,
-          data: {
-            last_operation: params.operation,
-            latest_summary: cleanedSummary,
-            title_guess: (params.titleGuess || '').substring(0, 255),
-            analysis_count: Math.max(1, (Number(row.analysis_count) || 0) + 1),
-          },
-        });
-        return;
-      }
-
-      await tables.createRow<AnalysisFileCacheRow>({
+  await runInParallelBatches(uniqueHashes, 3, async (hash) => {
+    const row = existing.get(hash);
+    if (row) {
+      await tables.updateRow({
         databaseId: APPWRITE_DATABASE_ID,
         tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
-        rowId: ID.unique(),
+        rowId: row.$id,
         data: {
-          user_id: params.userId,
-          file_hash: hash,
           last_operation: params.operation,
           latest_summary: cleanedSummary,
           title_guess: (params.titleGuess || '').substring(0, 255),
-          analysis_count: 1,
+          analysis_count: Math.max(1, (Number(row.analysis_count) || 0) + 1),
         },
       });
-    }),
-  );
+      return;
+    }
+
+    await tables.createRow<AnalysisFileCacheRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
+      rowId: ID.unique(),
+      data: {
+        user_id: params.userId,
+        file_hash: hash,
+        last_operation: params.operation,
+        latest_summary: cleanedSummary,
+        title_guess: (params.titleGuess || '').substring(0, 255),
+        analysis_count: 1,
+      },
+    });
+  });
 }
 
 function normalizeKnownFileContexts(value: unknown): KnownFileContext[] {
@@ -1032,40 +1046,21 @@ async function upsertMemorySnippets(params: {
     }
   }
 
-  await Promise.all(
-    candidates.map(async (candidate) => {
-      const existing = byCategory.get(candidate.category);
-      if (existing) {
-        if (existing.deleted_by_user === true) {
-          const deletedAt = existing.deleted_at || existing.$updatedAt;
-          if (isDeletedSnippetStillRetained(deletedAt)) {
-            return;
-          }
+  await runInParallelBatches(candidates, 3, async (candidate) => {
+    const existing = byCategory.get(candidate.category);
+    if (existing) {
+      if (existing.deleted_by_user === true) {
+        const deletedAt = existing.deleted_at || existing.$updatedAt;
+        if (isDeletedSnippetStillRetained(deletedAt)) {
+          return;
         }
-
-        await tables.updateRow({
-          databaseId: APPWRITE_DATABASE_ID,
-          tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
-          rowId: existing.$id,
-          data: {
-            category: candidate.category,
-            snippet: candidate.snippet,
-            visible_to_user: candidate.visibleToUser,
-            deleted_by_user: false,
-            delete_reason: '',
-            deleted_at: '',
-            updated_from_operation: params.operation,
-          },
-        });
-        return;
       }
 
-      await tables.createRow<MemorySnippetRow>({
+      await tables.updateRow({
         databaseId: APPWRITE_DATABASE_ID,
         tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
-        rowId: ID.unique(),
+        rowId: existing.$id,
         data: {
-          user_id: params.userId,
           category: candidate.category,
           snippet: candidate.snippet,
           visible_to_user: candidate.visibleToUser,
@@ -1075,8 +1070,25 @@ async function upsertMemorySnippets(params: {
           updated_from_operation: params.operation,
         },
       });
-    }),
-  );
+      return;
+    }
+
+    await tables.createRow<MemorySnippetRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
+      rowId: ID.unique(),
+      data: {
+        user_id: params.userId,
+        category: candidate.category,
+        snippet: candidate.snippet,
+        visible_to_user: candidate.visibleToUser,
+        deleted_by_user: false,
+        delete_reason: '',
+        deleted_at: '',
+        updated_from_operation: params.operation,
+      },
+    });
+  });
 }
 
 function buildCacheSummaryFromResult(operation: string, result: string): { summary: string; titleGuess: string } {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import Markdown from 'react-markdown';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Crown, Lock, MapPin, Ruler } from 'lucide-react';
@@ -152,8 +153,14 @@ export default function ReferenceDetailPage() {
 
           {reference.coverImageUrl && (
             <div className="mb-10 rounded-2xl overflow-hidden border border-white/10">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={reference.coverImageUrl} alt={reference.title} className="w-full h-auto" />
+              <Image
+                src={reference.coverImageUrl}
+                alt={reference.title}
+                width={1200}
+                height={675}
+                className="w-full h-auto"
+                priority
+              />
             </div>
           )}
 
@@ -168,8 +175,14 @@ export default function ReferenceDetailPage() {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {reference.planImageUrls.map((url, idx) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={idx} src={url} alt={`Plan ${idx + 1}`} className="w-full rounded-xl border border-white/10" />
+                  <Image
+                    key={idx}
+                    src={url}
+                    alt={`Plan ${idx + 1}`}
+                    width={800}
+                    height={600}
+                    className="w-full h-auto rounded-xl border border-white/10"
+                  />
                 ))}
               </div>
             </section>
@@ -182,8 +195,14 @@ export default function ReferenceDetailPage() {
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {reference.sectionImageUrls.map((url, idx) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={idx} src={url} alt={`Section ${idx + 1}`} className="w-full rounded-xl border border-white/10" />
+                  <Image
+                    key={idx}
+                    src={url}
+                    alt={`Section ${idx + 1}`}
+                    width={800}
+                    height={600}
+                    className="w-full h-auto rounded-xl border border-white/10"
+                  />
                 ))}
               </div>
             </section>
