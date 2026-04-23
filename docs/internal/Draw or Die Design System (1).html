@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draw or Die — Design System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg0: #0A0F1A; --bg1: #0D1525; --bg2: #101A2F; --bg3: #152034;
+      --red: #FF0033; --cyan: #22D3EE; --amber: #F59E0B; --green: #10B981;
+      --purple: #7C3AED; --sky: #0EA5E9;
+      --border: rgba(255,255,255,0.08); --border-md: rgba(255,255,255,0.13);
+      --text: #E2E8F0; --muted: #94A3B8; --dim: #4A5568;
+      --font-display: 'Space Grotesk', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg0); color: var(--text);
+      font-family: var(--font-body); font-size: 14px; line-height: 1.6;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px);
+      background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
+    }
+    ::selection { background: var(--red); color: #fff; }
+    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+    a { color: inherit; text-decoration: none; }
+
+    /* Layout */
+    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+    .sidebar {
+      position: fixed; top: 0; left: 0; width: 240px; height: 100vh;
+      background: rgba(10,15,26,0.95); border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 32px 0 40px;
+      backdrop-filter: blur(20px);
+    }
+    .main { grid-column: 2; padding: 64px 72px 120px; max-width: 960px; }
+
+    /* Sidebar nav */
+    .sidebar-logo { padding: 0 24px 28px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+    .sidebar-logo h1 { font-family: var(--font-display); font-size: 16px; font-weight: 700; letter-spacing: 0.12em; }
+    .sidebar-logo h1 span { color: var(--red); }
+    .sidebar-logo p { font-family: var(--font-mono); font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 4px; }
+    .nav-section { padding: 4px 24px 8px; font-family: var(--font-mono); font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 12px; }
+    .nav-link { display: block; padding: 7px 24px; font-size: 13px; color: var(--muted); transition: color 0.15s, background 0.15s; border-left: 2px solid transparent; }
+    .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+    .nav-link.active { color: var(--text); border-left-color: var(--red); background: rgba(255,0,51,0.06); }
+
+    /* Page sections */
+    .section { margin-bottom: 80px; scroll-margin-top: 40px; }
+    .section-label {
+      font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.15em; color: var(--red); margin-bottom: 8px;
+    }
+    .section-title { font-family: var(--font-display); font-size: 28px; font-weight: 700; color: #fff; margin-bottom: 12px; }
+    .section-desc { color: var(--muted); max-width: 560px; line-height: 1.7; margin-bottom: 36px; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 48px 0; }
+
+    /* Canvas */
+    .canvas {
+      background: var(--bg1); border: 1px solid var(--border); border-radius: 12px;
+      padding: 32px; margin-bottom: 16px;
+    }
+    .canvas-dark { background: var(--bg0); }
+    .canvas-label { font-family: var(--font-mono); font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; }
+
+    /* Code block */
+    .code {
+      background: rgba(0,0,0,0.5); border: 1px solid var(--border);
+      border-radius: 8px; padding: 16px 20px;
+      font-family: var(--font-mono); font-size: 12px; color: #94A3B8;
+      overflow-x: auto; line-height: 1.7; margin-top: 16px;
+    }
+    .code .key { color: var(--cyan); }
+    .code .val { color: #A5F3FC; }
+    .code .comment { color: var(--dim); }
+    .code .red { color: #FCA5A5; }
+
+    /* Token row */
+    .token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+    .token-card {
+      border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+    }
+    .token-swatch { height: 56px; }
+    .token-info { padding: 10px 12px; background: var(--bg2); }
+    .token-name { font-family: var(--font-mono); font-size: 11px; color: var(--text); }
+    .token-val { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    /* Type specimens */
+    .type-row { display: flex; align-items: baseline; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--border); }
+    .type-row:last-child { border-bottom: none; }
+    .type-meta { width: 180px; flex-shrink: 0; }
+    .type-meta p { font-family: var(--font-mono); font-size: 10px; color: var(--muted); line-height: 1.6; }
+    .type-specimen { flex: 1; color: var(--text); }
+
+    /* Component showcase */
+    .component-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 24px 0; border-bottom: 1px solid var(--border); }
+    .component-row:last-child { border-bottom: none; }
+
+    /* Spacing */
+    .space-row { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
+    .space-bar { background: rgba(255,0,51,0.4); height: 4px; border-radius: 2px; }
+    .space-label { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+    /* States grid */
+    .states-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+    /* Rule card */
+    .rule-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px 22px; margin-bottom: 12px;
+    }
+    .rule-card h4 { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+    .rule-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .rule-card .do { color: var(--green); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+    .rule-card .dont { color: #FF6B6B; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; }
+
+    /* Inline styles for components */
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; background: var(--red); color: #fff;
+      font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      border: none; cursor: pointer; border-radius: 0;
+      box-shadow: 0 0 24px rgba(255,0,51,0.35);
+      transition: background 0.15s;
+    }
+    .btn-outline {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 22px; background: transparent; color: var(--text);
+      font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      border: 1px solid var(--border-md); cursor: pointer; border-radius: 8px;
+      transition: background 0.15s;
+    }
+    .btn-amber {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 22px; background: rgba(245,158,11,0.15);
+      color: #F59E0B; border: 1px solid rgba(245,158,11,0.4);
+      font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      cursor: pointer; border-radius: 8px; transition: background 0.15s;
+    }
+    .btn-purple {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 22px; background: rgba(124,58,237,0.15);
+      color: #C4B5FD; border: 1px solid rgba(124,58,237,0.4);
+      font-family: var(--font-mono); font-weight: 600; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      cursor: pointer; border-radius: 8px; transition: background 0.15s;
+    }
+    .btn-ghost {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 22px; background: transparent; color: var(--muted);
+      font-family: var(--font-mono); font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      border: none; cursor: pointer;
+    }
+    .btn-disabled {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 12px 24px; background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.2);
+      font-family: var(--font-mono); font-weight: 700; font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      border: none; cursor: not-allowed; border-radius: 0;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 99px;
+      font-family: var(--font-mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .input-field {
+      width: 100%; background: rgba(0,0,0,0.4); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 14px;
+      font-family: var(--font-body); outline: none; transition: border-color 0.15s;
+    }
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+    .tag-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 12px; border-radius: 99px; font-family: var(--font-mono);
+      font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    /* Rapido cost badge */
+    .cost-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 4px;
+      background: rgba(255,0,51,0.12); border: 1px solid rgba(255,0,51,0.25);
+      font-family: var(--font-mono); font-size: 10px; color: var(--red);
+      letter-spacing: 0.08em;
+    }
+    .upgrade-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 4px;
+      background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3);
+      font-family: var(--font-mono); font-size: 10px; color: var(--amber);
+      letter-spacing: 0.08em;
+    }
+    /* Empty state */
+    .empty-state { text-align: center; padding: 48px 24px; border: 1px dashed var(--border); border-radius: 12px; }
+    /* Toast */
+    .toast { display: inline-flex; align-items: center; gap: 10px; padding: 12px 18px; border-radius: 10px; font-family: var(--font-mono); font-size: 12px; }
+
+    /* Section header with line */
+    .section-divider {
+      display: flex; align-items: center; gap: 10px;
+      padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid var(--border);
+    }
+    .section-divider span {
+      font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.12em; color: var(--muted);
+    }
+
+    /* Highlight note */
+    .note {
+      background: rgba(34,211,238,0.06); border: 1px solid rgba(34,211,238,0.2);
+      border-radius: 8px; padding: 14px 18px; margin: 16px 0;
+      font-size: 13px; color: var(--muted); line-height: 1.6;
+    }
+    .note strong { color: var(--cyan); }
+
+    .warn {
+      background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2);
+      border-radius: 8px; padding: 14px 18px; margin: 16px 0;
+      font-size: 13px; color: var(--muted); line-height: 1.6;
+    }
+    .warn strong { color: var(--amber); }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>DRAW<span>OR</span>DIE</h1>
+    <p>Design System v1.0</p>
+  </div>
+
+  <p class="nav-section">Foundations</p>
+  <a href="#colors" class="nav-link">Colors</a>
+  <a href="#typography" class="nav-link">Typography</a>
+  <a href="#spacing" class="nav-link">Spacing & Layout</a>
+  <a href="#borders" class="nav-link">Borders & Effects</a>
+  <a href="#motion" class="nav-link">Motion</a>
+
+  <p class="nav-section">Components</p>
+  <a href="#buttons" class="nav-link">Buttons</a>
+  <a href="#chips" class="nav-link">Chips & Badges</a>
+  <a href="#forms" class="nav-link">Form Inputs</a>
+  <a href="#cards" class="nav-link">Cards & Sections</a>
+  <a href="#states" class="nav-link">States</a>
+  <a href="#toasts" class="nav-link">Toasts</a>
+
+  <p class="nav-section">Patterns</p>
+  <a href="#cta-stack" class="nav-link">CTA Stack</a>
+  <a href="#tier-gating" class="nav-link">Tier Gating</a>
+  <a href="#form-layout" class="nav-link">Form Layout</a>
+  <a href="#navigation" class="nav-link">Navigation</a>
+
+  <p class="nav-section">UX Rules</p>
+  <a href="#rules-hierarchy" class="nav-link">Visual Hierarchy</a>
+  <a href="#rules-feedback" class="nav-link">Feedback & Errors</a>
+  <a href="#rules-cost" class="nav-link">Cost Indicators</a>
+  <a href="#rules-voice" class="nav-link">Voice & Copy</a>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- Hero -->
+  <div style="margin-bottom:72px;">
+    <div style="display:inline-flex;align-items:center;gap:8px;padding:4px 12px;border-radius:99px;background:rgba(255,0,51,0.1);border:1px solid rgba(255,0,51,0.3);font-family:var(--font-mono);font-size:10px;color:var(--red);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:20px;">
+      ⚡ Blueprint Design System
+    </div>
+    <h1 style="font-family:var(--font-display);font-size:48px;font-weight:700;color:#fff;letter-spacing:-0.02em;line-height:1.1;margin-bottom:16px;">
+      Draw or Die<br><span style="color:var(--red);">Design System</span>
+    </h1>
+    <p style="color:var(--muted);font-size:16px;max-width:520px;line-height:1.7;margin-bottom:32px;">
+      The single source of truth for all UI decisions in the Draw or Die product. Follow these rules to ensure consistency across every screen, feature, and interaction.
+    </p>
+    <div style="display:flex;gap:24px;font-family:var(--font-mono);font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:0.1em;">
+      <span>v1.0 · April 2026</span>
+      <span>·</span>
+      <span>Next.js · Tailwind · React</span>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════ COLORS -->
+  <section class="section" id="colors">
+    <p class="section-label">01 — Foundations</p>
+    <h2 class="section-title">Colors</h2>
+    <p class="section-desc">The palette is built around a dark blueprint ground (#0A0F1A) with a single destructive-energy accent (Neon Red). Semantic colors are used sparingly for state communication only.</p>
+
+    <div class="canvas-label">Background Scale</div>
+    <div class="token-grid" style="margin-bottom:28px;">
+      <div class="token-card">
+        <div class="token-swatch" style="background:#0A0F1A;"></div>
+        <div class="token-info"><p class="token-name">bg-0 · Blueprint</p><p class="token-val">#0A0F1A — Page base</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#0D1525;"></div>
+        <div class="token-info"><p class="token-name">bg-1 · Surface</p><p class="token-val">#0D1525 — Panels, sidebars</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#101A2F;"></div>
+        <div class="token-info"><p class="token-name">bg-2 · Raised</p><p class="token-val">#101A2F — Cards, inputs</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#152034;border:1px solid rgba(255,255,255,0.06);"></div>
+        <div class="token-info"><p class="token-name">bg-3 · Elevated</p><p class="token-val">#152034 — Active tabs</p></div>
+      </div>
+    </div>
+
+    <div class="canvas-label">Accent & Semantic Colors</div>
+    <div class="token-grid" style="margin-bottom:28px;">
+      <div class="token-card">
+        <div class="token-swatch" style="background:#FF0033;box-shadow:0 0 20px rgba(255,0,51,0.4) inset;"></div>
+        <div class="token-info"><p class="token-name">red · Neon Red</p><p class="token-val">#FF0033 — Primary action, brand</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#22D3EE;"></div>
+        <div class="token-info"><p class="token-name">cyan · Information</p><p class="token-val">#22D3EE — Info, AI, auto-fill</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#F59E0B;"></div>
+        <div class="token-info"><p class="token-name">amber · Premium</p><p class="token-val">#F59E0B — Premium, upgrade CTAs</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#10B981;"></div>
+        <div class="token-info"><p class="token-name">green · Success</p><p class="token-val">#10B981 — Success, score, gallery</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#7C3AED;"></div>
+        <div class="token-info"><p class="token-name">purple · Multi-Jury</p><p class="token-val">#7C3AED — Multi-persona, premium mode</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#0EA5E9;"></div>
+        <div class="token-info"><p class="token-name">sky · Concept</p><p class="token-val">#0EA5E9 — Concept analysis action</p></div>
+      </div>
+    </div>
+
+    <div class="canvas-label">Text Scale</div>
+    <div class="token-grid">
+      <div class="token-card">
+        <div class="token-swatch" style="background:#E2E8F0;"></div>
+        <div class="token-info"><p class="token-name">text</p><p class="token-val">#E2E8F0 — Primary content</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#94A3B8;"></div>
+        <div class="token-info"><p class="token-name">text-muted</p><p class="token-val">#94A3B8 — Secondary, labels</p></div>
+      </div>
+      <div class="token-card">
+        <div class="token-swatch" style="background:#4A5568;"></div>
+        <div class="token-info"><p class="token-name">text-dim</p><p class="token-val">#4A5568 — Disabled, placeholders</p></div>
+      </div>
+    </div>
+
+    <div class="note"><strong>Opacity rule:</strong> Instead of new colors, use opacity variants of the 6 semantic colors. e.g. <code>rgba(255,0,51,0.15)</code> for a red tinted background. This keeps the palette coherent.</div>
+  </section>
+
+  <!-- ═══════════════════════════════════ TYPOGRAPHY -->
+  <section class="section" id="typography">
+    <p class="section-label">01 — Foundations</p>
+    <h2 class="section-title">Typography</h2>
+    <p class="section-desc">Three typefaces with strictly defined roles. Never mix roles — display fonts only for headings, mono only for metadata and code.</p>
+
+    <div class="canvas">
+      <div class="type-row">
+        <div class="type-meta">
+          <p>Space Grotesk 700<br>Display headings<br><code style="color:var(--dim)">font-display</code></p>
+        </div>
+        <div class="type-specimen" style="font-family:var(--font-display);font-size:40px;font-weight:700;letter-spacing:-0.02em;color:#fff;line-height:1;">Upload Your Board</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">
+          <p>Space Grotesk 700<br>Section titles<br>Uppercase + tracking</p>
+        </div>
+        <div class="type-specimen" style="font-family:var(--font-display);font-size:22px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Studio Desk</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">
+          <p>Inter 400<br>Body text<br><code style="color:var(--dim)">font-body</code></p>
+        </div>
+        <div class="type-specimen" style="font-size:16px;color:var(--muted);line-height:1.7;">Draw or Die helps architecture students get structured critique — multi-persona jury, PDF-aware review, and an AI Mentor for your studio desk.</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">
+          <p>Inter 600<br>Form labels, UI labels</p>
+        </div>
+        <div class="type-specimen" style="font-size:13px;font-weight:600;">Topic · Site · Concept · Jury Harshness</div>
+      </div>
+      <div class="type-row">
+        <div class="type-meta">
+          <p>JetBrains Mono 400<br>Metadata, costs, status<br><code style="color:var(--dim)">font-mono</code></p>
+        </div>
+        <div class="type-specimen" style="font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);">4.0 Rapido · Auto On · Analysis Length · PROMO</div>
+      </div>
+      <div class="type-row" style="border-bottom:none;">
+        <div class="type-meta">
+          <p>JetBrains Mono 700<br>Nav links, CTAs</p>
+        </div>
+        <div class="type-specimen" style="font-family:var(--font-mono);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;">Face the Jury · Open Studio Desk</div>
+      </div>
+    </div>
+
+    <div class="warn"><strong>Never use Inter for CTAs or navigation.</strong> All interactive labels (buttons, nav links, status chips, cost indicators) must use JetBrains Mono. This creates a clear visual distinction between readable content and actionable UI.</div>
+  </section>
+
+  <!-- ═══════════════════════════════════ SPACING -->
+  <section class="section" id="spacing">
+    <p class="section-label">01 — Foundations</p>
+    <h2 class="section-title">Spacing & Layout</h2>
+    <p class="section-desc">An 8px base grid. All spacing, padding, and gap values are multiples of 4px (preferred: 8, 12, 16, 20, 24, 32, 48, 64).</p>
+
+    <div class="canvas">
+      <div class="canvas-label">Spacing Scale</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="space-row"><div class="space-bar" style="width:4px;"></div><span class="space-label">4px — xs · tight gaps inside chips</span></div>
+        <div class="space-row"><div class="space-bar" style="width:8px;"></div><span class="space-label">8px — sm · icon-label gap, inline spacing</span></div>
+        <div class="space-row"><div class="space-bar" style="width:12px;"></div><span class="space-label">12px — md · form field gap, grid gap small</span></div>
+        <div class="space-row"><div class="space-bar" style="width:16px;"></div><span class="space-label">16px — lg · card padding horizontal</span></div>
+        <div class="space-row"><div class="space-bar" style="width:20px;"></div><span class="space-label">20px — xl · card padding, section gap</span></div>
+        <div class="space-row"><div class="space-bar" style="width:24px;"></div><span class="space-label">24px — 2xl · panel padding, main grid gap</span></div>
+        <div class="space-row"><div class="space-bar" style="width:32px;"></div><span class="space-label">32px — 3xl · page margin, header padding</span></div>
+        <div class="space-row"><div class="space-bar" style="width:48px;"></div><span class="space-label">48px — 4xl · section dividers, hero content</span></div>
+        <div class="space-row"><div class="space-bar" style="width:64px;"></div><span class="space-label">64px — 5xl · page-level vertical rhythm</span></div>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:20px;">
+      <div class="canvas-label">Layout Constraints</div>
+      <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;">
+        <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);"><span style="width:180px;color:var(--muted);font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">Header height</span><span>64px fixed</span></div>
+        <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);"><span style="width:180px;color:var(--muted);font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">Right panel width</span><span>420px fixed</span></div>
+        <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);"><span style="width:180px;color:var(--muted);font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">Page max-width</span><span>1100–1440px depending on screen</span></div>
+        <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);"><span style="width:180px;color:var(--muted);font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">Page padding</span><span>32px horizontal minimum</span></div>
+        <div style="display:flex;gap:16px;padding:8px 0;"><span style="width:180px;color:var(--muted);font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;">Body padding-top</span><span>64px (header height) always</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ BORDERS -->
+  <section class="section" id="borders">
+    <p class="section-label">01 — Foundations</p>
+    <h2 class="section-title">Borders, Radius & Effects</h2>
+
+    <div class="canvas">
+      <div class="canvas-label">Border Tokens</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+        <div style="padding:12px 16px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;"><span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">border-subtle</span> — <code>rgba(255,255,255,0.08)</code> — Default card border</div>
+        <div style="padding:12px 16px;border:1px solid rgba(255,255,255,0.13);border-radius:8px;"><span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">border-md</span> — <code>rgba(255,255,255,0.13)</code> — Active/hover border</div>
+        <div style="padding:12px 16px;border:1px solid rgba(255,0,51,0.4);border-radius:8px;"><span style="font-family:var(--font-mono);font-size:10px;color:var(--red);">border-red</span> — <code>rgba(255,0,51,0.4)</code> — Focus state, active upload</div>
+        <div style="padding:12px 16px;border:2px dashed rgba(255,255,255,0.15);border-radius:8px;"><span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">border-dashed</span> — <code>2px dashed rgba(255,255,255,0.15)</code> — Drop zones, empty states</div>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Border Radius Scale</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+        <div style="text-align:center;">
+          <div style="width:48px;height:48px;background:var(--bg3);border:1px solid var(--border-md);border-radius:0;margin:0 auto 8px;"></div>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">0 · CTA</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="width:48px;height:48px;background:var(--bg3);border:1px solid var(--border-md);border-radius:4px;margin:0 auto 8px;"></div>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">4px · action</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="width:48px;height:48px;background:var(--bg3);border:1px solid var(--border-md);border-radius:8px;margin:0 auto 8px;"></div>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">8px · input</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="width:48px;height:48px;background:var(--bg3);border:1px solid var(--border-md);border-radius:12px;margin:0 auto 8px;"></div>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">12px · card</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="width:48px;height:48px;background:var(--bg3);border:1px solid var(--border-md);border-radius:16px;margin:0 auto 8px;"></div>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">16px · modal</span>
+        </div>
+        <div style="text-align:center;">
+          <div style="width:48px;height:48px;background:var(--bg3);border:1px solid var(--border-md);border-radius:99px;margin:0 auto 8px;"></div>
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted);">99px · chip/pill</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Glow Effects</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div style="padding:14px 24px;background:var(--red);border:none;font-family:var(--font-mono);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;box-shadow:0 0 28px rgba(255,0,51,0.4);">Red Glow CTA</div>
+        <div style="padding:14px 24px;background:rgba(255,0,51,0.1);border:1px solid rgba(255,0,51,0.4);font-family:var(--font-mono);font-size:11px;color:var(--red);text-transform:uppercase;letter-spacing:0.1em;">Neon text: 0 0 20px rgba(255,0,51,0.5)</div>
+        <div style="padding:14px 24px;background:rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.1em;backdrop-filter:blur(20px);">Glassmorphism panel</div>
+      </div>
+      <div style="margin-top:12px;font-size:12px;color:var(--muted);">Red glow is <strong style="color:var(--text);">exclusive</strong> to the primary CTA button. Never apply box-shadow/glow to other elements.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ MOTION -->
+  <section class="section" id="motion">
+    <p class="section-label">01 — Foundations</p>
+    <h2 class="section-title">Motion</h2>
+    <p class="section-desc">Purposeful, fast transitions. Never use motion for decoration. All durations are 150ms–400ms.</p>
+    <div class="canvas">
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;">
+        <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="width:200px;font-family:var(--font-mono);font-size:11px;color:var(--muted);text-transform:uppercase;">Hover transition</span>
+          <span><code>transition: all 0.15s ease</code> — Buttons, links, chips</span>
+        </div>
+        <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="width:200px;font-family:var(--font-mono);font-size:11px;color:var(--muted);text-transform:uppercase;">Screen entrance</span>
+          <span><code>opacity 0→1, translateY 16px→0, 400ms</code> — Page sections, modals</span>
+        </div>
+        <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="width:200px;font-family:var(--font-mono);font-size:11px;color:var(--muted);text-transform:uppercase;">Framer Motion</span>
+          <span><code>initial opacity:0 y:20 → animate opacity:1 y:0</code> — Step transitions</span>
+        </div>
+        <div style="display:flex;gap:16px;padding:8px 0;">
+          <span style="width:200px;font-family:var(--font-mono);font-size:11px;color:var(--muted);text-transform:uppercase;">Loading pulse</span>
+          <span><code>opacity 1→0.5→1, 2s infinite</code> — Skeleton, status indicators</span>
+        </div>
+      </div>
+    </div>
+    <div class="note"><strong>Rule:</strong> Motion should reinforce the app's "high-stakes review" personality — snappy and decisive, not playful or springy.</div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════ BUTTONS -->
+  <section class="section" id="buttons">
+    <p class="section-label">02 — Components</p>
+    <h2 class="section-title">Buttons</h2>
+    <p class="section-desc">Five button variants, each with a strict semantic role. Never use a primary button for secondary actions.</p>
+
+    <div class="canvas">
+      <div class="canvas-label">Variants</div>
+      <div class="component-row">
+        <button class="btn-primary">Face the Jury</button>
+        <div style="font-size:12px;color:var(--muted);">Primary — <strong style="color:var(--text);">One per screen</strong>. The single most important action. Zero border-radius. Red glow shadow.</div>
+      </div>
+      <div class="component-row">
+        <button class="btn-outline">View History</button>
+        <div style="font-size:12px;color:var(--muted);">Outline — Secondary actions within a section. 8px radius.</div>
+      </div>
+      <div class="component-row">
+        <button class="btn-amber">Go Premium ✦</button>
+        <div style="font-size:12px;color:var(--muted);">Amber — Upgrade/upsell actions only. Signals tier progression.</div>
+      </div>
+      <div class="component-row">
+        <button class="btn-purple">⬡ Multi-Jury</button>
+        <div style="font-size:12px;color:var(--muted);">Purple — Multi-persona mode exclusively. Distinguishes from single analysis.</div>
+      </div>
+      <div class="component-row">
+        <button class="btn-ghost">Skip Tutorial</button>
+        <div style="font-size:12px;color:var(--muted);">Ghost — Dismissal and low-priority actions. No border, no background.</div>
+      </div>
+      <div class="component-row">
+        <button class="btn-disabled" disabled>Face the Jury <span style="font-size:10px;opacity:0.5">— upload first</span></button>
+        <div style="font-size:12px;color:var(--muted);">Disabled — Same shape as primary but <code>rgba(255,255,255,0.06)</code> background, no glow, no cursor.</div>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Sizes</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <button style="padding:8px 16px;background:var(--red);color:#fff;font-family:var(--font-mono);font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;border:none;cursor:pointer;">Small · 8×16</button>
+        <button class="btn-primary">Medium · 12×24</button>
+        <button style="padding:16px 32px;background:var(--red);color:#fff;font-family:var(--font-mono);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:0.1em;border:none;cursor:pointer;">Large · 16×32</button>
+      </div>
+    </div>
+
+    <div class="warn"><strong>CTA button is always full-width</strong> inside form panels (right-column layout). When used inline (hero, cards), it sizes to its content.</div>
+  </section>
+
+  <!-- ═══════════════════════════════════ CHIPS -->
+  <section class="section" id="chips">
+    <p class="section-label">02 — Components</p>
+    <h2 class="section-title">Chips, Tags & Badges</h2>
+
+    <div class="canvas">
+      <div class="canvas-label">Tags (non-interactive, informational)</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+        <span class="tag-badge" style="background:rgba(255,0,51,0.1);border:1px solid rgba(255,0,51,0.3);color:var(--red);">⚡ AI-Powered</span>
+        <span class="tag-badge" style="background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.3);color:#C4B5FD;">PROMO</span>
+        <span class="tag-badge" style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);color:var(--amber);">Premium</span>
+        <span class="tag-badge" style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);color:var(--green);">Approved</span>
+      </div>
+
+      <div class="canvas-label">Cost Indicators</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+        <span class="cost-badge">✦ 4 Rapido</span>
+        <span class="cost-badge">18 Rapido</span>
+        <span class="cost-badge">2 Rapido</span>
+        <span class="upgrade-badge">Upgrade</span>
+      </div>
+
+      <div class="canvas-label">Nav Chips (header, interactive)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:99px;background:rgba(255,0,51,0.1);border:1px solid rgba(255,0,51,0.3);font-family:var(--font-mono);font-size:11px;color:var(--red);text-transform:uppercase;letter-spacing:0.08em;">✦ 15.0 Rapido</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:99px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);font-family:var(--font-mono);font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:0.08em;">↑ 0 Score</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:99px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);font-family:var(--font-mono);font-size:11px;color:var(--amber);text-transform:uppercase;letter-spacing:0.08em;">Upgrade</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ FORMS -->
+  <section class="section" id="forms">
+    <p class="section-label">02 — Components</p>
+    <h2 class="section-title">Form Inputs</h2>
+
+    <div class="canvas">
+      <div style="display:flex;flex-direction:column;gap:20px;max-width:480px;">
+
+        <div>
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+            <label style="font-size:13px;font-weight:600;color:var(--text);">Topic</label>
+          </div>
+          <input class="input-field" placeholder="e.g. Sustainable Library" value="Cliffside Half-Aperture">
+          <p style="font-size:11px;color:var(--dim);font-family:var(--font-mono);margin-top:4px;">Default: border rgba(255,255,255,0.08) · Focus: border rgba(255,0,51,0.6)</p>
+        </div>
+
+        <div>
+          <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:8px;">Defense Statement</label>
+          <textarea class="input-field" rows="3" placeholder="Strengths, decisions and reasoning..."></textarea>
+        </div>
+
+        <div>
+          <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:8px;">Category</label>
+          <select class="input-field" style="appearance:none;cursor:pointer;">
+            <option>Render</option><option>Sketch</option><option>Section/Plan</option>
+          </select>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <label style="font-size:13px;font-weight:600;color:var(--text);">Jury Harshness</label>
+            <span style="font-family:var(--font-mono);font-size:11px;color:var(--red);">Constructive</span>
+          </div>
+          <input type="range" min="1" max="5" value="1" style="width:100%;accent-color:var(--red);height:4px;cursor:pointer;">
+          <div style="display:flex;justify-content:space-between;margin-top:4px;">
+            <span style="font-family:var(--font-mono);font-size:9px;color:var(--dim);">Mild</span>
+            <span style="font-family:var(--font-mono);font-size:9px;color:var(--dim);">Brutal</span>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;background:rgba(0,0,0,0.3);border-radius:10px;border:1px solid var(--border);padding:4px;gap:4px;">
+            <button style="flex:1;padding:8px;border-radius:7px;background:rgba(255,255,255,0.1);color:#fff;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;border:1px solid var(--border-md);font-weight:600;cursor:pointer;">Single</button>
+            <button style="flex:1;padding:8px;border-radius:7px;background:transparent;color:var(--muted);font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;border:1px solid transparent;cursor:pointer;">Multi</button>
+          </div>
+          <p style="font-size:11px;color:var(--dim);font-family:var(--font-mono);margin-top:6px;">Segmented control — always pill container with inset buttons. Active: bg-3 + border-md.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ CARDS -->
+  <section class="section" id="cards">
+    <p class="section-label">02 — Components</p>
+    <h2 class="section-title">Cards & Section Headers</h2>
+
+    <div class="canvas">
+      <div class="canvas-label">Standard Card</div>
+      <div class="card" style="max-width:420px;">
+        <div class="section-divider">
+          <span>◈ Project Context</span>
+        </div>
+        <p style="font-size:13px;color:var(--muted);line-height:1.6;">Card content goes here. Use bg-2 (#101A2F) background, 12px border-radius, 1px border with rgba(255,255,255,0.08).</p>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Stat Card (profile/dashboard)</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:600px;">
+        <div class="card" style="padding:16px 18px;">
+          <p style="font-family:var(--font-mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Rapido</p>
+          <p style="font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--red);">✦ 15.0x</p>
+        </div>
+        <div class="card" style="padding:16px 18px;">
+          <p style="font-family:var(--font-mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Score</p>
+          <p style="font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--green);">↑ 0</p>
+        </div>
+        <div class="card" style="padding:16px 18px;">
+          <p style="font-family:var(--font-mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;">Membership</p>
+          <p style="font-family:var(--font-display);font-size:26px;font-weight:700;color:var(--muted);">◈ Free</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Section Divider Header (inside cards)</div>
+      <div style="max-width:420px;">
+        <div class="section-divider"><span>◎ Analysis Settings</span></div>
+        <div class="section-divider"><span>★ Earned Badges</span></div>
+        <div class="section-divider"><span>□ Project Context</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--dim);margin-top:12px;">Always mono, 10px, uppercase, 0.12em tracking, color: text-muted. Left icon is geometric Unicode (◈ □ ◎ ◉ ★ ✦ ⬡ ◆).</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ STATES -->
+  <section class="section" id="states">
+    <p class="section-label">02 — Components</p>
+    <h2 class="section-title">States</h2>
+
+    <div class="canvas">
+      <div class="canvas-label">Empty State</div>
+      <div class="empty-state" style="max-width:400px;">
+        <p style="font-size:32px;margin-bottom:10px;opacity:0.25;">◎</p>
+        <p style="font-size:14px;color:var(--muted);margin-bottom:6px;">No analyses yet.</p>
+        <p style="font-family:var(--font-mono);font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:0.08em;">Run your first analysis from Studio Desk.</p>
+      </div>
+      <p style="font-size:12px;color:var(--dim);margin-top:12px;">Dashed border, centered layout, large faded icon (opacity 0.2–0.3), short description, optional mono hint.</p>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Loading State</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:16px;">
+        <div style="width:16px;height:16px;border:2px solid rgba(255,255,255,0.1);border-top-color:var(--cyan);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        <span style="font-family:var(--font-mono);font-size:12px;color:var(--muted);">Loading...</span>
+      </div>
+      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Error State</div>
+      <div style="padding:12px 16px;background:rgba(255,107,107,0.08);border:1px solid rgba(255,107,107,0.25);border-radius:8px;max-width:480px;">
+        <p style="font-family:var(--font-mono);font-size:11px;color:#FF6B6B;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Error</p>
+        <p style="font-size:13px;color:#FCA5A5;">File exceeds the 35 MB limit. Reduce size and re-upload.</p>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Processing / File uploading</div>
+      <div style="padding:14px 18px;background:rgba(34,211,238,0.06);border:1px solid rgba(34,211,238,0.2);border-radius:8px;max-width:480px;display:flex;align-items:center;gap:12px;">
+        <div style="width:14px;height:14px;border:2px solid rgba(34,211,238,0.3);border-top-color:var(--cyan);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>
+        <p style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);">Processing file...</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ TOASTS -->
+  <section class="section" id="toasts">
+    <p class="section-label">02 — Components</p>
+    <h2 class="section-title">Toasts & Notifications</h2>
+    <div class="canvas">
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start;">
+        <div class="toast" style="background:rgba(16,185,129,0.9);color:#fff;">✓ Payment successful! Your Premium account is now active.</div>
+        <div class="toast" style="background:rgba(220,38,38,0.9);color:#fff;">✕ File exceeds size limit. Please reduce to under 35 MB.</div>
+        <div class="toast" style="background:rgba(59,130,246,0.9);color:#fff;">ℹ Analysis queued. Results will appear in your history.</div>
+        <div class="toast" style="background:rgba(245,158,11,0.9);color:#000;">★ Badge unlocked: First Analysis!</div>
+      </div>
+      <p style="font-size:12px;color:var(--dim);margin-top:16px;">Fixed: <code>bottom: 24px, left: 50%, transform: translateX(-50%)</code>. Max-width 400px. JetBrains Mono 12px. 4–7s auto-dismiss.</p>
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════ CTA STACK -->
+  <section class="section" id="cta-stack">
+    <p class="section-label">03 — Patterns</p>
+    <h2 class="section-title">CTA Stack Pattern</h2>
+    <p class="section-desc">The Studio Desk action zone follows a strict 4-layer hierarchy. Every new analysis type must fit into one of these layers.</p>
+
+    <div class="canvas" style="max-width:440px;">
+      <!-- Layer 1: Primary -->
+      <div style="width:100%;padding:14px 16px;background:var(--red);color:#fff;font-family:var(--font-mono);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.12em;text-align:center;box-shadow:0 0 28px rgba(255,0,51,0.35);display:flex;align-items:center;justify-content:center;gap:8px;">
+        Face the Jury <span style="opacity:0.6;font-size:10px;font-weight:400;">(4 Rapido)</span>
+      </div>
+      <!-- Layer 2: Multi-jury -->
+      <div style="width:100%;padding:11px 16px;background:rgba(124,58,237,0.1);border:1px solid rgba(124,58,237,0.45);color:#C4B5FD;font-family:var(--font-mono);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;border-radius:4px;">
+        ⬡ Multi-Jury (4 Personas)
+        <span style="opacity:0.6;font-size:10px;font-weight:400;">(18 Rapido)</span>
+        <span style="padding:2px 6px;border-radius:4px;background:rgba(124,58,237,0.3);border:1px solid rgba(167,139,250,0.4);color:#DDD6FE;font-size:9px;">PROMO</span>
+      </div>
+      <!-- Layer 3: Secondary actions -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <div style="padding:10px;background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.3);color:#7DD3FC;font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.08em;border-radius:4px;text-align:center;">
+          ◎ Concept Analysis<br><span style="opacity:0.6;">(2 Rapido)</span>
+        </div>
+        <div style="padding:10px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.2);font-family:var(--font-mono);font-size:9px;text-transform:uppercase;letter-spacing:0.08em;border-radius:4px;text-align:center;cursor:not-allowed;">
+          ◈ Material Analysis<br><span style="padding:1px 5px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:#FCD34D;font-size:8px;border-radius:3px;">UPGRADE</span>
+        </div>
+      </div>
+      <!-- Layer 4: Privacy note -->
+      <p style="font-family:var(--font-mono);font-size:9px;color:rgba(255,255,255,0.2);text-align:center;letter-spacing:0.04em;margin-top:10px;">Projects stay in your browser session only; they are not shown publicly.</p>
+    </div>
+
+    <div class="note" style="margin-top:16px;">
+      <strong>Rule:</strong> Layer 1 is always full-width, zero border-radius. Layer 2 is always 4px radius, color-coded to its persona type. Layer 3 uses a 2-column grid with smaller type. Layer 4 is the privacy assurance note — always present for non-premium users.
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ TIER GATING -->
+  <section class="section" id="tier-gating">
+    <p class="section-label">03 — Patterns</p>
+    <h2 class="section-title">Tier Gating</h2>
+    <p class="section-desc">Three access tiers. Visual treatment must clearly communicate the tier state without blocking the user's view.</p>
+
+    <div class="canvas">
+      <div class="canvas-label">Access Tiers</div>
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="padding:16px;border:1px solid var(--border);border-radius:10px;display:flex;gap:16px;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">◈</div>
+          <div><p style="font-weight:600;color:#fff;margin-bottom:4px;">Guest (Anonymous)</p><p style="font-size:13px;color:var(--muted);">1 trial analysis. Upload zone active, form active, but CTA becomes "Upgrade to continue" after limit.</p></div>
+        </div>
+        <div style="padding:16px;border:1px solid rgba(34,211,238,0.2);border-radius:10px;display:flex;gap:16px;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;background:rgba(34,211,238,0.08);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:var(--cyan);">✓</div>
+          <div><p style="font-weight:600;color:#fff;margin-bottom:4px;">Registered</p><p style="font-size:13px;color:var(--muted);">Full analysis access. Medium length unlocked. Multi-jury shown but gated with amber "Upgrade" badge unless PROMO.</p></div>
+        </div>
+        <div style="padding:16px;border:1px solid rgba(245,158,11,0.3);border-radius:10px;display:flex;gap:16px;align-items:center;">
+          <div style="width:40px;height:40px;border-radius:50%;background:rgba(245,158,11,0.12);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;color:var(--amber);">♛</div>
+          <div><p style="font-weight:600;color:#fff;margin-bottom:4px;">Premium</p><p style="font-size:13px;color:var(--muted);">All features unlocked. Long analysis, Multi-Jury, Material Analysis, AI Mentor defense mode.</p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="canvas" style="margin-top:16px;">
+      <div class="canvas-label">Gating Treatment Rules</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div class="rule-card" style="padding:14px 16px;">
+          <p class="do">✓ Do</p>
+          <p style="font-size:13px;color:var(--muted);margin-top:4px;">Show the locked feature with an <span class="upgrade-badge">UPGRADE</span> badge. Keep it visible but disabled. Never hide it entirely.</p>
+        </div>
+        <div class="rule-card" style="padding:14px 16px;">
+          <p class="dont">✗ Don't</p>
+          <p style="font-size:13px;color:var(--muted);margin-top:4px;">Don't remove locked features from the UI. Don't use modal interrupts to block the user mid-flow.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ FORM LAYOUT -->
+  <section class="section" id="form-layout">
+    <p class="section-label">03 — Patterns</p>
+    <h2 class="section-title">Form Layout</h2>
+    <p class="section-desc">Forms are always organized into named sections with a section divider header. Never render a flat list of fields without grouping.</p>
+
+    <div class="canvas">
+      <div style="display:flex;flex-direction:column;gap:20px;max-width:420px;">
+        <div>
+          <div class="section-divider"><span>□ Project Context</span></div>
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Topic</label><input class="input-field" placeholder="e.g. Sustainable Library"></div>
+            <div><label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Site</label><input class="input-field" placeholder="e.g. Karaköy, Istanbul"></div>
+          </div>
+        </div>
+        <div>
+          <div class="section-divider"><span>◈ Defense Statement</span></div>
+          <textarea class="input-field" rows="2" placeholder="Strengths, decisions..."></textarea>
+        </div>
+        <div>
+          <div class="section-divider"><span>◎ Analysis Settings</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Category</label><select class="input-field" style="appearance:none;"><option>Render</option></select></div>
+            <div><label style="font-size:12px;font-weight:600;display:block;margin-bottom:6px;">Length</label><select class="input-field" style="appearance:none;"><option>Short</option></select></div>
+          </div>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--dim);margin-top:16px;">Group spacing: 20px between sections, 14px between fields within a section.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════ NAVIGATION -->
+  <section class="section" id="navigation">
+    <p class="section-label">03 — Patterns</p>
+    <h2 class="section-title">Navigation</h2>
+
+    <div class="canvas">
+      <div class="canvas-label">Header Zones</div>
+      <div style="display:flex;background:rgba(10,15,26,0.95);border:1px solid var(--border);border-radius:8px;height:48px;overflow:hidden;align-items:center;padding:0 16px;gap:0;">
+        <div style="display:flex;align-items:center;gap:8px;padding-right:24px;border-right:1px solid var(--border);flex-shrink:0;">
+          <div style="width:20px;height:20px;background:var(--red);transform:rotate(45deg);border-radius:3px;"></div>
+          <span style="font-family:var(--font-display);font-weight:700;font-size:14px;letter-spacing:0.12em;">DRAW<span style="color:var(--red);">OR</span>DIE</span>
+        </div>
+        <div style="display:flex;gap:16px;padding:0 20px;flex:1;font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);">
+          <span style="color:#fff;border-bottom:1px solid var(--red);padding-bottom:2px;">Studio</span>
+          <span>ArchBuilder</span>
+          <span style="color:var(--cyan);">Community</span>
+          <span style="color:var(--amber);">AI Mentor</span>
+          <span>Gallery ▾</span>
+        </div>
+        <div style="display:flex;gap:6px;font-family:var(--font-mono);font-size:10px;flex-shrink:0;">
+          <span style="padding:4px 8px;border-radius:99px;background:rgba(255,0,51,0.1);border:1px solid rgba(255,0,51,0.3);color:var(--red);">✦ 15.0</span>
+          <span style="padding:4px 8px;border-radius:99px;background:rgba(0,0,0,0.4);border:1px solid var(--border);">Ahmet ▾</span>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--dim);margin-top:10px;display:flex;gap:24px;">
+        <span>← Logo zone (fixed width)</span>
+        <span>← Nav zone (flex: 1)</span>
+        <span>← User zone (fixed width) →</span>
+      </div>
+    </div>
+
+    <div class="note">
+      <strong>Grouping rule:</strong> Nav links that share a concept are collapsed into a dropdown (e.g. Hall of Fame + Wall of Death → Gallery). Max 6 top-level nav items. Color-code special items: amber = AI/premium, cyan = community features.
+    </div>
+  </section>
+
+  <hr class="divider">
+
+  <!-- ═══════════════════════════════════ UX RULES -->
+  <section class="section" id="rules-hierarchy">
+    <p class="section-label">04 — UX Rules</p>
+    <h2 class="section-title">Visual Hierarchy</h2>
+
+    <div class="rule-card">
+      <h4>One Primary Action Per Screen</h4>
+      <p>Every screen must have exactly one red primary CTA button. All other actions are secondary (outline) or tertiary (ghost). Never place two red buttons in the same view.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Don't ALL-CAPS Everything</h4>
+      <p>ALL-CAPS text is reserved for: navigation links, CTA button labels, cost indicators, section divider headers, and status chips. Body text, form labels, and descriptions are sentence case.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Mono = Metadata</h4>
+      <p>JetBrains Mono signals "system information" — costs, IDs, statuses, progress indicators. Never use mono for descriptive body copy or instructions.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Form Panels Have Sticky CTAs</h4>
+      <p>Multi-step or scrollable form panels always have a fixed footer with the primary action. The user should never need to scroll to submit. The footer is <code>border-top + bg-1 + padding 16px 24px</code>.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Blueprint Grid is the Stage</h4>
+      <p>The grid background is a product personality element — it must always be visible on the page body. Never cover it with full-bleed solid backgrounds. Cards and panels sit on top of it.</p>
+    </div>
+  </section>
+
+  <section class="section" id="rules-feedback">
+    <p class="section-label">04 — UX Rules</p>
+    <h2 class="section-title">Feedback & Errors</h2>
+
+    <div class="rule-card">
+      <h4>Error Before Submit</h4>
+      <p>Validation errors (file too large, missing field) appear inline, immediately adjacent to the problematic element. Never only in a toast. Inline errors use the red error card pattern.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Disabled State Must Explain Itself</h4>
+      <p>A disabled CTA must always show a secondary label explaining why. e.g., "Face the Jury — upload a file first" or "File processing...". Never show a gray button with no context.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Toasts for Transient Confirmations Only</h4>
+      <p>Toasts are for: successful payment, badge unlock, successful auto-fill. Not for errors — those belong inline. Toasts auto-dismiss after 4–7 seconds. No manual close button needed.</p>
+    </div>
+  </section>
+
+  <section class="section" id="rules-cost">
+    <p class="section-label">04 — UX Rules</p>
+    <h2 class="section-title">Cost Indicators (Rapido)</h2>
+
+    <div class="rule-card">
+      <h4>Always Show Cost on CTAs</h4>
+      <p>Every action that consumes Rapido must display the cost in the button label itself: "Face the Jury (4 Rapido)". Use the cost-badge component inline, or a parenthetical in mono/lighter weight.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Low Balance Warning</h4>
+      <p>When Rapido balance falls below 15, show the amber low-balance bar above the CTA stack. Show remaining balance and a "Go Premium" link. Never use a modal for this warning.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Rapido Color is Always Red</h4>
+      <p>The Rapido icon (✦), value text, and cost badges are always <code>--red: #FF0033</code>. This creates an instant cost-awareness association throughout the product.</p>
+    </div>
+  </section>
+
+  <section class="section" id="rules-voice">
+    <p class="section-label">04 — UX Rules</p>
+    <h2 class="section-title">Voice & Copy</h2>
+
+    <div class="rule-card">
+      <h4>CTAs: Imperative, Present Tense</h4>
+      <p>"Face the Jury" not "Submit for Analysis". "Open Studio Desk" not "Go to Studio". Direct, action-oriented. The product has a high-stakes jury personality — the language should match.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Placeholder Text: Concrete Examples</h4>
+      <p>Form placeholders use "e.g. Karaköy, Istanbul" not "Enter your site location". Every placeholder should be a realistic example the user can understand immediately.</p>
+    </div>
+    <div class="rule-card">
+      <h4>Error Messages: Cause + Fix</h4>
+      <p>"File exceeds the 35 MB limit. Reduce size and re-upload." — always state what went wrong AND what to do next. Never just "Error occurred."</p>
+    </div>
+    <div class="rule-card">
+      <h4>Section Headers: Title Case, No Verbs</h4>
+      <p>"Project Context" not "Enter Project Context". "Analysis Settings" not "Configure Analysis". Headers name the content, not the action.</p>
+    </div>
+
+    <div style="margin-top:40px;padding:24px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;">
+      <p style="font-family:var(--font-mono);font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:12px;">Quick Reference Card</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;font-size:13px;">
+        <div>
+          <p style="font-family:var(--font-mono);font-size:10px;color:var(--green);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">✓ Use</p>
+          <ul style="color:var(--muted);line-height:2;list-style:none;">
+            <li>Space Grotesk for all headings</li>
+            <li>JetBrains Mono for all UI labels</li>
+            <li>Inter for body and descriptions</li>
+            <li>Red for primary CTAs only</li>
+            <li>Amber for premium upsell only</li>
+            <li>8px grid for all spacing</li>
+            <li>Zero border-radius for primary CTA</li>
+            <li>Blueprint grid always visible</li>
+          </ul>
+        </div>
+        <div>
+          <p style="font-family:var(--font-mono);font-size:10px;color:#FF6B6B;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">✗ Avoid</p>
+          <ul style="color:var(--muted);line-height:2;list-style:none;">
+            <li>Two red buttons on same screen</li>
+            <li>Inter for nav/button labels</li>
+            <li>ALL-CAPS for body/description text</li>
+            <li>Hiding locked features from view</li>
+            <li>Modal interrupts mid-analysis</li>
+            <li>Toasts for error messages</li>
+            <li>Gradient backgrounds on body</li>
+            <li>New colors outside the palette</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+</div>
+
+<script>
+  // Active nav link on scroll
+  const links = document.querySelectorAll('.nav-link');
+  const sections = document.querySelectorAll('.section[id]');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const active = document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

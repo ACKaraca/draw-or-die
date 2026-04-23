@@ -1,0 +1,1299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Draw or Die — Redesign</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg0: #0A0F1A;
+      --bg1: #0D1525;
+      --bg2: #101A2F;
+      --bg3: #152034;
+      --red: #FF0033;
+      --red-dim: rgba(255,0,51,0.15);
+      --red-glow: rgba(255,0,51,0.3);
+      --border: rgba(255,255,255,0.08);
+      --border-md: rgba(255,255,255,0.12);
+      --border-lg: rgba(255,255,255,0.18);
+      --text: #E2E8F0;
+      --text-muted: #94A3B8;
+      --text-dim: #4A5568;
+      --cyan: #22D3EE;
+      --amber: #F59E0B;
+      --green: #10B981;
+      --font-display: 'Space Grotesk', sans-serif;
+      --font-body: 'Inter', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    html, body { height: 100%; background: var(--bg0); color: var(--text); font-family: var(--font-body); }
+    body {
+      background-image:
+        linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+      background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
+    }
+    ::selection { background: var(--red); color: white; }
+    #root { height: 100%; }
+    button { cursor: pointer; border: none; background: none; color: inherit; font-family: inherit; }
+    input, textarea, select { font-family: inherit; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+    /* Tweaks panel */
+    .tweaks-panel {
+      position: fixed; bottom: 24px; right: 24px; z-index: 200;
+      background: var(--bg2); border: 1px solid var(--border-md);
+      border-radius: 16px; padding: 20px; width: 260px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+      display: none;
+    }
+    .tweaks-panel.open { display: block; }
+
+    /* Animations */
+    @keyframes fadeUp { from { opacity:0; transform: translateY(16px); } to { opacity:1; transform: none; } }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+    .fade-up { animation: fadeUp 0.4s ease both; }
+    .neon-text { color: var(--red); text-shadow: 0 0 20px var(--red-glow), 0 0 40px rgba(255,0,51,0.2); }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect } = React;
+
+// ── Tokens ──────────────────────────────────────────────────────────────────
+const T = {
+  red: '#FF0033', cyan: '#22D3EE', amber: '#F59E0B', green: '#10B981',
+  bg0: '#0A0F1A', bg1: '#0D1525', bg2: '#101A2F', bg3: '#152034',
+  border: 'rgba(255,255,255,0.08)',
+  borderMd: 'rgba(255,255,255,0.12)',
+  text: '#E2E8F0', muted: '#94A3B8', dim: '#4A5568',
+};
+
+// ── Small UI primitives ──────────────────────────────────────────────────────
+const Tag = ({ color = T.red, children }) => (
+  <span style={{
+    display:'inline-flex', alignItems:'center', gap:6,
+    padding:'4px 12px', borderRadius:99,
+    border: `1px solid ${color}40`,
+    background: `${color}12`,
+    color, fontSize:11, fontFamily:'var(--font-mono)',
+    letterSpacing:'0.08em', textTransform:'uppercase',
+  }}>{children}</span>
+);
+
+const Chip = ({ icon, label, color = T.red, onClick }) => (
+  <button onClick={onClick} style={{
+    display:'flex', alignItems:'center', gap:6,
+    padding:'6px 12px', borderRadius:99,
+    border:`1px solid ${color}30`,
+    background:`${color}0e`,
+    color, fontFamily:'var(--font-mono)', fontSize:11,
+    letterSpacing:'0.06em', textTransform:'uppercase',
+    transition:'all 0.15s',
+  }}
+  onMouseEnter={e => e.currentTarget.style.background=`${color}20`}
+  onMouseLeave={e => e.currentTarget.style.background=`${color}0e`}
+  >{icon && <span style={{opacity:0.8}}>{icon}</span>}{label}</button>
+);
+
+const Btn = ({ variant='primary', size='md', children, onClick, disabled }) => {
+  const base = {
+    display:'inline-flex', alignItems:'center', gap:8,
+    fontFamily:'var(--font-mono)', fontWeight:600,
+    textTransform:'uppercase', letterSpacing:'0.08em',
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.45 : 1,
+    transition:'all 0.15s', border:'none',
+    borderRadius: variant === 'primary' ? 0 : 8,
+  };
+  const sizes = { sm:{padding:'8px 16px',fontSize:11}, md:{padding:'12px 24px',fontSize:12}, lg:{padding:'16px 32px',fontSize:13} };
+  const variants = {
+    primary: { background:T.red, color:'#fff', boxShadow:`0 0 24px ${T.red}40` },
+    outline: { background:'transparent', color:T.text, border:`1px solid ${T.borderMd}` },
+    ghost: { background:'transparent', color:T.muted },
+    amber: { background:`${T.amber}18`, color:T.amber, border:`1px solid ${T.amber}40`, borderRadius:8 },
+  };
+  return (
+    <button onClick={onClick} disabled={disabled} style={{...base,...sizes[size],...variants[variant]}}
+      onMouseEnter={e => { if(!disabled && variant==='primary') e.currentTarget.style.background='#cc0029'; }}
+      onMouseLeave={e => { if(!disabled && variant==='primary') e.currentTarget.style.background=T.red; }}
+    >{children}</button>
+  );
+};
+
+const FormField = ({ label, icon, children, hint }) => (
+  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+    <div style={{display:'flex',alignItems:'center',gap:6}}>
+      {icon && <span style={{color:T.muted,opacity:0.7,fontSize:13}}>{icon}</span>}
+      <label style={{fontSize:13,fontWeight:500,color:T.text}}>{label}</label>
+    </div>
+    {children}
+    {hint && <p style={{fontSize:11,color:T.dim,fontFamily:'var(--font-mono)'}}>{hint}</p>}
+  </div>
+);
+
+const inputStyle = {
+  width:'100%', background:'rgba(0,0,0,0.4)',
+  border:`1px solid ${T.border}`, borderRadius:8,
+  padding:'10px 14px', color:T.text, fontSize:14,
+  outline:'none', transition:'border-color 0.15s',
+  fontFamily:'var(--font-body)',
+};
+
+const Card = ({ children, style, pad=20 }) => (
+  <div style={{
+    background:T.bg2, border:`1px solid ${T.border}`,
+    borderRadius:12, padding:pad, ...style
+  }}>{children}</div>
+);
+
+const SectionLabel = ({ children, icon }) => (
+  <div style={{
+    display:'flex', alignItems:'center', gap:8,
+    paddingBottom:12, marginBottom:16,
+    borderBottom:`1px solid ${T.border}`,
+  }}>
+    {icon && <span style={{color:T.muted,fontSize:14}}>{icon}</span>}
+    <span style={{
+      fontFamily:'var(--font-mono)', fontSize:11,
+      textTransform:'uppercase', letterSpacing:'0.12em',
+      color:T.muted,
+    }}>{children}</span>
+  </div>
+);
+
+// ── HEADER ───────────────────────────────────────────────────────────────────
+function Header({ screen, setScreen }) {
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const galleryRef = useRef();
+  const profileRef = useRef();
+
+  useEffect(() => {
+    const handler = e => {
+      if (galleryRef.current && !galleryRef.current.contains(e.target)) setGalleryOpen(false);
+      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false);
+    };
+    window.addEventListener('pointerdown', handler);
+    return () => window.removeEventListener('pointerdown', handler);
+  }, []);
+
+  const navLink = (label, id, color='#94A3B8', special) => (
+    <button onClick={() => setScreen(id)} style={{
+      fontFamily:'var(--font-mono)', fontSize:11, textTransform:'uppercase',
+      letterSpacing:'0.1em', color: screen===id ? T.text : color,
+      background:'none', border:'none', padding:'4px 0',
+      transition:'color 0.15s', position:'relative',
+    }}
+    onMouseEnter={e=>e.currentTarget.style.color='#fff'}
+    onMouseLeave={e=>e.currentTarget.style.color=screen===id?T.text:color}
+    >
+      {special && <span style={{marginRight:4}}>{special}</span>}
+      {label}
+      {screen===id && <span style={{
+        position:'absolute', bottom:-18, left:0, right:0,
+        height:2, background:T.red, borderRadius:1,
+      }}/>}
+    </button>
+  );
+
+  return (
+    <header style={{
+      position:'fixed', top:0, left:0, right:0, zIndex:100,
+      height:64, background:'rgba(10,15,26,0.92)',
+      backdropFilter:'blur(20px)',
+      borderBottom:`1px solid ${T.border}`,
+      display:'flex', alignItems:'center',
+      padding:'0 24px', gap:0,
+    }}>
+      {/* Logo */}
+      <button onClick={()=>setScreen('hero')} style={{
+        display:'flex', alignItems:'center', gap:10,
+        marginRight:40, flexShrink:0,
+        background:'none', border:'none',
+      }}>
+        <div style={{
+          width:28, height:28, background:T.red,
+          transform:'rotate(45deg)', borderRadius:4,
+          flexShrink:0, boxShadow:`0 0 16px ${T.red}50`,
+        }}/>
+        <span style={{
+          fontFamily:'var(--font-display)', fontWeight:700,
+          fontSize:18, letterSpacing:'0.12em', color:'#fff',
+          whiteSpace:'nowrap',
+        }}>DRAW<span style={{color:T.red}}>OR</span>DIE</span>
+      </button>
+
+      {/* Nav */}
+      <nav style={{display:'flex', alignItems:'center', gap:28, flex:1}}>
+        {navLink('Studio Desk','studio')}
+        {navLink('ArchBuilder','archbuilder',T.amber)}
+        {navLink('Community','community',T.cyan)}
+        {navLink('AI Mentor','mentor',T.amber,'✦')}
+
+        {/* Gallery dropdown */}
+        <div ref={galleryRef} style={{position:'relative'}}>
+          <button onClick={()=>setGalleryOpen(v=>!v)} style={{
+            fontFamily:'var(--font-mono)', fontSize:11, textTransform:'uppercase',
+            letterSpacing:'0.1em', color:'#94A3B8',
+            background:'none', border:'none', padding:'4px 0',
+            display:'flex', alignItems:'center', gap:4,
+          }}
+          onMouseEnter={e=>e.currentTarget.style.color='#fff'}
+          onMouseLeave={e=>e.currentTarget.style.color='#94A3B8'}
+          >Gallery <span style={{fontSize:9,opacity:0.7}}>▾</span></button>
+          {galleryOpen && (
+            <div style={{
+              position:'absolute', top:'calc(100% + 12px)', left:0,
+              background:T.bg1, border:`1px solid ${T.borderMd}`,
+              borderRadius:10, overflow:'hidden', minWidth:180,
+              boxShadow:'0 16px 48px rgba(0,0,0,0.6)',
+            }}>
+              {[['🏆 Hall of Fame','green'],['💀 Wall of Death','red']].map(([label,c])=>(
+                <button key={label} onClick={()=>{setGalleryOpen(false);}} style={{
+                  display:'block', width:'100%', textAlign:'left',
+                  padding:'10px 16px', fontFamily:'var(--font-mono)',
+                  fontSize:11, textTransform:'uppercase', letterSpacing:'0.08em',
+                  color: c==='green' ? T.green : '#FF6B6B',
+                  background:'none', border:'none',
+                  transition:'background 0.12s',
+                }}
+                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.06)'}
+                onMouseLeave={e=>e.currentTarget.style.background='none'}
+                >{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {navLink('References','references')}
+        {navLink('Portfolio','portfolio')}
+        {navLink('Peer Review','peerreview')}
+      </nav>
+
+      {/* Right: user */}
+      <div style={{display:'flex', alignItems:'center', gap:8, flexShrink:0}}>
+        {/* Rapido */}
+        <div style={{
+          display:'flex', alignItems:'center', gap:6,
+          padding:'6px 12px', borderRadius:99,
+          border:`1px solid ${T.red}30`, background:`${T.red}0a`,
+          fontFamily:'var(--font-mono)', fontSize:11, color:T.red,
+        }}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path d="M6 1L7.5 4.5H11L8.5 7L9.5 11L6 9L2.5 11L3.5 7L1 4.5H4.5L6 1Z" fill={T.red}/>
+          </svg>
+          15.0 Rapido
+        </div>
+
+        {/* Score */}
+        <div style={{
+          display:'flex', alignItems:'center', gap:6,
+          padding:'6px 12px', borderRadius:99,
+          border:`1px solid ${T.border}`, background:'rgba(0,0,0,0.3)',
+          fontFamily:'var(--font-mono)', fontSize:11, color:T.green,
+        }}>
+          ↑ 0 Score
+        </div>
+
+        {/* Profile dropdown */}
+        <div ref={profileRef} style={{position:'relative'}}>
+          <button onClick={()=>setProfileOpen(v=>!v)} style={{
+            display:'flex', alignItems:'center', gap:8,
+            padding:'7px 14px', borderRadius:99,
+            border:`1px solid ${T.borderMd}`,
+            background:'rgba(0,0,0,0.4)',
+            color:T.text, fontFamily:'var(--font-mono)', fontSize:11,
+            letterSpacing:'0.06em',
+          }}>
+            <div style={{
+              width:22, height:22, borderRadius:'50%',
+              background:'linear-gradient(135deg, #6366F1, #22D3EE)',
+              flexShrink:0,
+            }}/>
+            Ahmet Cem Karaca
+            <span style={{fontSize:9,color:T.muted}}>▾</span>
+          </button>
+          {profileOpen && (
+            <div style={{
+              position:'absolute', top:'calc(100% + 10px)', right:0,
+              background:T.bg1, border:`1px solid ${T.borderMd}`,
+              borderRadius:12, overflow:'hidden', minWidth:200,
+              boxShadow:'0 16px 48px rgba(0,0,0,0.6)',
+            }}>
+              {[
+                ['Profile & Settings','profile','#E2E8F0'],
+                ['Analysis History','history',T.cyan],
+                ['Rapido Shop','shop',T.red],
+                ['Go Premium','premium',T.amber],
+                ['Sign Out','signout','#FF6B6B'],
+              ].map(([label,id,color])=>(
+                <button key={id} onClick={()=>{setProfileOpen(false); if(id==='profile')setScreen('profile');}} style={{
+                  display:'block', width:'100%', textAlign:'left',
+                  padding:'10px 16px', fontFamily:'var(--font-mono)',
+                  fontSize:11, textTransform:'uppercase', letterSpacing:'0.08em',
+                  color, background:'none', border:'none',
+                  borderBottom: id!=='signout' ? `1px solid ${T.border}` : 'none',
+                  transition:'background 0.12s',
+                }}
+                onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.06)'}
+                onMouseLeave={e=>e.currentTarget.style.background='none'}
+                >{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Upgrade pill */}
+        <button onClick={()=>setScreen('profile')} style={{
+          padding:'7px 16px', borderRadius:99,
+          background:'rgba(245,158,11,0.15)',
+          border:`1px solid ${T.amber}40`,
+          color:T.amber, fontFamily:'var(--font-mono)', fontSize:11,
+          letterSpacing:'0.08em', textTransform:'uppercase',
+          transition:'all 0.15s',
+        }}
+        onMouseEnter={e=>e.currentTarget.style.background='rgba(245,158,11,0.25)'}
+        onMouseLeave={e=>e.currentTarget.style.background='rgba(245,158,11,0.15)'}
+        >Upgrade</button>
+      </div>
+    </header>
+  );
+}
+
+// ── HERO SCREEN ──────────────────────────────────────────────────────────────
+function HeroScreen({ setScreen }) {
+  const features = [
+    { icon:'⬡', title:'Structured Jury', body:'Consistent scores and feedback across concept, structure, and presentation.' },
+    { icon:'□', title:'Board + PDF', body:'Reads composition and extracted text together from images and PDFs.' },
+    { icon:'✦', title:'AI Mentor', body:'Chat-based guidance for defense strategy and iteration.' },
+  ];
+  const steps = [
+    { n:'01', title:'Drop Your File', body:'Upload your A0/A1 sheet, sketch, or render. Add PDFs and supporting sheets in one flow.' },
+    { n:'02', title:'Set the Stage', body:'Enter project context, choose your jury persona and harshness level.' },
+    { n:'03', title:'Face the Jury', body:'Receive structured critique with scores per dimension. Go deeper with AI Mentor.' },
+  ];
+
+  return (
+    <div style={{paddingTop:64, minHeight:'100vh'}}>
+      {/* Hero */}
+      <div style={{
+        maxWidth:900, margin:'0 auto', padding:'80px 32px 64px',
+        textAlign:'center',
+      }}>
+        <div style={{marginBottom:28}}>
+          <Tag color={T.red}>⚡ AI-Powered Architecture Jury</Tag>
+        </div>
+        <h1 style={{
+          fontFamily:'var(--font-display)', fontWeight:700,
+          fontSize:'clamp(52px, 8vw, 96px)',
+          lineHeight:1.02, letterSpacing:'-0.02em',
+          color:'#fff', textTransform:'uppercase', marginBottom:24,
+        }}>
+          Upload Your Board,{' '}
+          <span className="neon-text">Face the Jury</span>
+        </h1>
+        <p style={{
+          fontSize:18, color:T.muted, maxWidth:560, margin:'0 auto 36px',
+          lineHeight:1.7,
+        }}>
+          Draw or Die helps architecture students get structured critique — multi-persona jury, PDF-aware review, and an AI Mentor for your studio desk.
+        </p>
+        <div style={{display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap'}}>
+          <Btn size="lg" onClick={()=>setScreen('studio')}>
+            Open Studio Desk →
+          </Btn>
+          <Btn variant="amber" size="lg" onClick={()=>setScreen('archbuilder')}>
+            Try ArchBuilder
+          </Btn>
+        </div>
+
+        <div style={{marginTop:56, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:6, color:T.dim}}>
+          <span style={{fontFamily:'var(--font-mono)',fontSize:10,letterSpacing:'0.2em',textTransform:'uppercase'}}>Discover</span>
+          <span style={{fontSize:18, animation:'pulse 2s infinite'}}>↓</span>
+        </div>
+      </div>
+
+      {/* Feature cards */}
+      <div style={{
+        maxWidth:1100, margin:'0 auto', padding:'0 32px 64px',
+        display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:20,
+      }}>
+        {features.map((f,i) => (
+          <div key={i} style={{
+            background:T.bg1, border:`1px solid ${T.border}`,
+            borderRadius:16, padding:'28px 28px 24px',
+            transition:'border-color 0.2s',
+          }}
+          onMouseEnter={e=>e.currentTarget.style.borderColor=`${T.red}30`}
+          onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}
+          >
+            <div style={{
+              fontSize:28, color:T.red, marginBottom:16,
+              filter:`drop-shadow(0 0 8px ${T.red}50)`,
+            }}>{f.icon}</div>
+            <h3 style={{
+              fontFamily:'var(--font-display)', fontSize:16, fontWeight:600,
+              textTransform:'uppercase', letterSpacing:'0.04em',
+              color:'#fff', marginBottom:10,
+            }}>{f.title}</h3>
+            <p style={{fontSize:14, color:T.muted, lineHeight:1.6}}>{f.body}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* How it works */}
+      <div style={{
+        maxWidth:1100, margin:'0 auto', padding:'0 32px 80px',
+      }}>
+        <div style={{textAlign:'center', marginBottom:48}}>
+          <h2 style={{
+            fontFamily:'var(--font-display)', fontSize:28, fontWeight:700,
+            textTransform:'uppercase', letterSpacing:'0.04em', color:'#fff',
+            marginBottom:12,
+          }}>How It Works</h2>
+          <p style={{color:T.muted, maxWidth:520, margin:'0 auto', lineHeight:1.7}}>
+            Three steps from file to structured critique. No setup required.
+          </p>
+        </div>
+
+        <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:20}}>
+          {steps.map((s,i) => (
+            <div key={i} style={{
+              background:T.bg1, border:`1px solid ${T.border}`,
+              borderRadius:16, padding:'28px',
+              position:'relative', overflow:'hidden',
+            }}>
+              <div style={{
+                position:'absolute', top:20, right:20,
+                fontFamily:'var(--font-mono)', fontSize:48, fontWeight:700,
+                color:'rgba(255,255,255,0.03)', lineHeight:1,
+              }}>{s.n}</div>
+              <div style={{
+                fontFamily:'var(--font-mono)', fontSize:11, color:T.red,
+                letterSpacing:'0.1em', marginBottom:12,
+              }}>STEP {s.n}</div>
+              <h3 style={{
+                fontFamily:'var(--font-display)', fontSize:18, fontWeight:600,
+                color:'#fff', marginBottom:10,
+              }}>{s.title}</h3>
+              <p style={{fontSize:14, color:T.muted, lineHeight:1.6}}>{s.body}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom CTA */}
+      <div style={{
+        maxWidth:700, margin:'0 auto', padding:'0 32px 100px', textAlign:'center',
+      }}>
+        <div style={{
+          background:`linear-gradient(135deg, rgba(10,15,26,0.8), rgba(255,0,51,0.04))`,
+          border:`1px solid ${T.border}`,
+          borderRadius:20, padding:'48px',
+        }}>
+          <p style={{color:T.muted, fontSize:16, lineHeight:1.7, marginBottom:28}}>
+            Built for student studios: fast iteration, clear language, and measurable progress.
+          </p>
+          <Btn size="lg" onClick={()=>setScreen('studio')}>
+            Start Analyzing →
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── STUDIO DESK SCREEN ───────────────────────────────────────────────────────
+function StudioScreen() {
+  const [formData, setFormData] = useState({
+    topic: 'Cliffside Half-Aperture',
+    site: '', concept: '', defense: '',
+    category: 'Render', length: 'Short',
+    harshness: 1, juryMode: 'single', persona: 'Constructive',
+  });
+  const [hasFile, setHasFile] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const personas = ['Constructive','Structural','Conceptual','Grumpy','Visionary'];
+  const pMap = {
+    Constructive: 'Hard truths, actionable feedback. Keeps morale intact.',
+    Structural: 'Focuses on tectonics, systems, and spatial logic.',
+    Conceptual: 'Challenges the idea at its core. Pushes abstraction.',
+    Grumpy: 'Brutal honesty. No sugarcoating.',
+    Visionary: 'Big-picture thinking. Questions the brief itself.',
+  };
+  const hMap = {1:'Constructive',2:'Normal',3:'Harsh',4:'Roast',5:'Brutal'};
+
+  return (
+    <div style={{
+      paddingTop:64, height:'100vh', display:'flex', flexDirection:'column', overflow:'hidden',
+    }}>
+      <div style={{
+        display:'grid', gridTemplateColumns:'1fr 420px',
+        flex:1, minHeight:0,
+      }}>
+
+        {/* LEFT: Upload */}
+        <div style={{
+          padding:'28px 24px 24px 32px', display:'flex', flexDirection:'column', gap:16,
+          borderRight:`1px solid ${T.border}`, overflow:'auto',
+        }}>
+          <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+            <div style={{display:'flex', alignItems:'center', gap:10}}>
+              <div style={{width:8,height:8,background:T.red,borderRadius:'50%',boxShadow:`0 0 8px ${T.red}`}}/>
+              <h2 style={{fontFamily:'var(--font-display)', fontWeight:700, fontSize:20, letterSpacing:'0.06em', textTransform:'uppercase'}}>Studio Desk</h2>
+            </div>
+            <button style={{
+              fontFamily:'var(--font-mono)', fontSize:10, color:T.muted,
+              textTransform:'uppercase', letterSpacing:'0.1em',
+              background:'none', border:`1px solid ${T.border}`, borderRadius:6, padding:'5px 10px',
+            }}>Tutorial</button>
+          </div>
+
+          {/* Drop zone */}
+          <div
+            onDragOver={e=>{e.preventDefault();setIsDragging(true);}}
+            onDragLeave={()=>setIsDragging(false)}
+            onDrop={e=>{e.preventDefault();setIsDragging(false);setHasFile(true);}}
+            onClick={()=>setHasFile(v=>!v)}
+            style={{
+              flex:1, minHeight:320,
+              border: isDragging ? `2px dashed ${T.red}` : `2px dashed rgba(255,255,255,0.15)`,
+              borderRadius:16, background: isDragging ? `${T.red}08` : 'rgba(0,0,0,0.2)',
+              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+              gap:12, cursor:'pointer', transition:'all 0.15s',
+              position:'relative', overflow:'hidden',
+            }}
+          >
+            {hasFile ? (
+              <div style={{
+                width:'100%', height:'100%', position:'absolute', inset:0,
+                background:'linear-gradient(160deg, #1a2540, #0d1525)',
+                display:'flex', alignItems:'center', justifyContent:'center',
+              }}>
+                {/* Striped placeholder for board image */}
+                <svg width="100%" height="100%" style={{position:'absolute',inset:0,opacity:0.07}}>
+                  <defs>
+                    <pattern id="hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                      <line x1="0" y1="0" x2="0" y2="12" stroke="white" strokeWidth="1"/>
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#hatch)"/>
+                </svg>
+                <div style={{textAlign:'center',position:'relative',zIndex:1}}>
+                  <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.12em'}}>architecture board</p>
+                  <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.dim,marginTop:4}}>cliffside-half-aperture.pdf</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{
+                  width:56, height:56, borderRadius:'50%',
+                  background:'rgba(255,255,255,0.06)',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  fontSize:22,
+                }}>↑</div>
+                <div style={{textAlign:'center'}}>
+                  <p style={{fontFamily:'var(--font-mono)', fontSize:13, color:T.text, marginBottom:6}}>Upload A0/A1 sheet, sketch, or render</p>
+                  <p style={{fontSize:12, color:T.dim}}>Drag and drop or click to select · JPG, PNG, PDF</p>
+                  <p style={{fontFamily:'var(--font-mono)', fontSize:10, color:T.dim, marginTop:6, letterSpacing:'0.06em'}}>UP TO 8 FILES · 35 MB TOTAL</p>
+                </div>
+              </>
+            )}
+          </div>
+
+          {hasFile && (
+            <div style={{
+              background:T.bg2, border:`1px solid ${T.border}`,
+              borderRadius:10, padding:'12px 14px',
+              display:'flex', gap:10, alignItems:'center',
+            }}>
+              <div style={{
+                padding:'4px 8px', borderRadius:6,
+                background:`${T.red}15`, border:`1px solid ${T.red}30`,
+                fontFamily:'var(--font-mono)', fontSize:10, color:T.red,
+                textTransform:'uppercase', letterSpacing:'0.08em',
+              }}>Main</div>
+              <div style={{flex:1}}>
+                <p style={{fontSize:12, color:T.text}}>cliffside-half-aperture.pdf</p>
+                <p style={{fontFamily:'var(--font-mono)', fontSize:10, color:T.muted, marginTop:2}}>2.4 MB · 2.4 / 35 MB</p>
+              </div>
+              <button onClick={()=>setHasFile(false)} style={{
+                color:T.dim, fontSize:14, background:'none', border:'none',
+                transition:'color 0.12s',
+              }}
+              onMouseEnter={e=>e.currentTarget.style.color='#FF6B6B'}
+              onMouseLeave={e=>e.currentTarget.style.color=T.dim}
+              >✕</button>
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT: Form */}
+        <div style={{
+          display:'flex', flexDirection:'column',
+          borderLeft:`1px solid ${T.border}`,
+          overflow:'hidden', background:T.bg1,
+        }}>
+          {/* Form header */}
+          <div style={{
+            padding:'18px 24px', borderBottom:`1px solid ${T.border}`,
+            display:'flex', alignItems:'center', justifyContent:'space-between',
+            flexShrink:0,
+          }}>
+            <div>
+              <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.12em'}}>Project Defense</p>
+            </div>
+            <button style={{
+              display:'flex', alignItems:'center', gap:6,
+              padding:'7px 14px', borderRadius:8,
+              background:`${T.cyan}10`, border:`1px solid ${T.cyan}30`,
+              color:T.cyan, fontFamily:'var(--font-mono)', fontSize:10,
+              textTransform:'uppercase', letterSpacing:'0.08em',
+              transition:'all 0.15s',
+            }}
+            onMouseEnter={e=>e.currentTarget.style.background=`${T.cyan}20`}
+            onMouseLeave={e=>e.currentTarget.style.background=`${T.cyan}10`}
+            >✦ Auto-fill</button>
+          </div>
+
+          {/* Scrollable form body */}
+          <div style={{flex:1, overflowY:'auto', padding:'20px 24px', display:'flex', flexDirection:'column', gap:18}}>
+
+            {/* Context group */}
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <SectionLabel icon="□">Project Context</SectionLabel>
+
+              <FormField label="Topic" icon="📄">
+                <input value={formData.topic} onChange={e=>setFormData({...formData,topic:e.target.value})}
+                  placeholder="e.g. Sustainable Library"
+                  style={{...inputStyle}}
+                  onFocus={e=>e.target.style.borderColor=`${T.red}60`}
+                  onBlur={e=>e.target.style.borderColor=T.border}
+                />
+              </FormField>
+
+              <FormField label="Site" icon="⊹">
+                <input value={formData.site} onChange={e=>setFormData({...formData,site:e.target.value})}
+                  placeholder="e.g. Karaköy, Istanbul"
+                  style={{...inputStyle}}
+                  onFocus={e=>e.target.style.borderColor=`${T.red}60`}
+                  onBlur={e=>e.target.style.borderColor=T.border}
+                />
+              </FormField>
+
+              <FormField label="Concept" icon="☆">
+                <textarea value={formData.concept} onChange={e=>setFormData({...formData,concept:e.target.value})}
+                  placeholder="e.g. On the permeability of voids..."
+                  rows={2} style={{...inputStyle, resize:'none'}}
+                  onFocus={e=>e.target.style.borderColor=`${T.red}60`}
+                  onBlur={e=>e.target.style.borderColor=T.border}
+                />
+              </FormField>
+            </div>
+
+            {/* Defense */}
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <SectionLabel icon="◈">Defense Statement</SectionLabel>
+              <textarea value={formData.defense} onChange={e=>setFormData({...formData,defense:e.target.value})}
+                placeholder="Strengths, decisions, and reasoning you want to explain to the jury..."
+                rows={3} style={{...inputStyle, resize:'none'}}
+                onFocus={e=>e.target.style.borderColor=`${T.red}60`}
+                onBlur={e=>e.target.style.borderColor=T.border}
+              />
+            </div>
+
+            {/* Analysis settings */}
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <SectionLabel icon="◎">Analysis Settings</SectionLabel>
+
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}}>
+                <FormField label="Category">
+                  <select value={formData.category} onChange={e=>setFormData({...formData,category:e.target.value})}
+                    style={{...inputStyle, appearance:'none', cursor:'pointer'}}
+                  >
+                    {['Sketch','Render','Section/Plan','Physical Model','Diagram','Presentation Board'].map(c=>(
+                      <option key={c} style={{background:T.bg0}}>{c}</option>
+                    ))}
+                  </select>
+                </FormField>
+                <FormField label="Length">
+                  <select value={formData.length} onChange={e=>setFormData({...formData,length:e.target.value})}
+                    style={{...inputStyle, appearance:'none', cursor:'pointer'}}
+                  >
+                    {['Short','Medium (signed-in)','Long (premium)'].map(l=>(
+                      <option key={l} style={{background:T.bg0}}>{l}</option>
+                    ))}
+                  </select>
+                </FormField>
+              </div>
+
+              <FormField label="Jury Harshness">
+                <div style={{padding:'4px 0'}}>
+                  <div style={{display:'flex', justifyContent:'space-between', marginBottom:8}}>
+                    <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.08em'}}>Level</span>
+                    <span style={{fontFamily:'var(--font-mono)',fontSize:11,color:T.red}}>{hMap[formData.harshness]}</span>
+                  </div>
+                  <input type="range" min={1} max={5} step={1} value={formData.harshness}
+                    onChange={e=>setFormData({...formData,harshness:+e.target.value})}
+                    style={{width:'100%', accentColor:T.red, height:4, cursor:'pointer'}}
+                  />
+                  <div style={{display:'flex',justifyContent:'space-between', marginTop:4}}>
+                    <span style={{fontFamily:'var(--font-mono)',fontSize:9,color:T.dim}}>Mild</span>
+                    <span style={{fontFamily:'var(--font-mono)',fontSize:9,color:T.dim}}>Brutal</span>
+                  </div>
+                </div>
+              </FormField>
+            </div>
+
+            {/* Jury mode */}
+            <div style={{display:'flex',flexDirection:'column',gap:14}}>
+              <SectionLabel icon="◉">Jury Mode</SectionLabel>
+
+              <div style={{
+                display:'flex',
+                background:'rgba(0,0,0,0.3)', borderRadius:10,
+                border:`1px solid ${T.border}`, padding:4, gap:4,
+              }}>
+                {['single','multi'].map(m=>(
+                  <button key={m} onClick={()=>setFormData({...formData,juryMode:m})} style={{
+                    flex:1, padding:'8px', borderRadius:7,
+                    fontFamily:'var(--font-mono)', fontSize:11,
+                    textTransform:'uppercase', letterSpacing:'0.08em',
+                    background: formData.juryMode===m ? (m==='multi'?'#7C3AED':'rgba(255,255,255,0.1)') : 'transparent',
+                    color: formData.juryMode===m ? '#fff' : T.muted,
+                    fontWeight: formData.juryMode===m ? 600 : 400,
+                    transition:'all 0.15s',
+                  }}>{m}</button>
+                ))}
+              </div>
+
+              {formData.juryMode === 'single' ? (
+                <div>
+                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+                    <span style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.1em'}}>Persona</span>
+                    <div style={{display:'flex',gap:4}}>
+                      {['←','→'].map(d=>(
+                        <button key={d} onClick={()=>{
+                          const idx = personas.indexOf(formData.persona);
+                          const next = d==='←' ? (idx-1+personas.length)%personas.length : (idx+1)%personas.length;
+                          setFormData({...formData,persona:personas[next]});
+                        }} style={{
+                          width:26, height:26, borderRadius:6,
+                          border:`1px solid ${T.border}`, background:'rgba(0,0,0,0.3)',
+                          color:T.muted, fontSize:11, display:'flex', alignItems:'center', justifyContent:'center',
+                        }}>{d}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{
+                    padding:'12px 14px', borderRadius:10,
+                    border:`1px solid ${T.border}`, background:'rgba(0,0,0,0.2)',
+                  }}>
+                    <p style={{fontSize:13,fontWeight:600,color:'#fff',marginBottom:4}}>{formData.persona}</p>
+                    <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,lineHeight:1.5}}>{pMap[formData.persona]}</p>
+                  </div>
+                </div>
+              ) : (
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {personas.map(p=>(
+                    <button key={p} style={{
+                      padding:'10px 12px', borderRadius:10, textAlign:'left',
+                      border:`1px solid rgba(124,58,237,0.3)`, background:'rgba(124,58,237,0.1)',
+                      color:'#C4B5FD', fontFamily:'var(--font-mono)', fontSize:10,
+                      textTransform:'uppercase', letterSpacing:'0.08em',
+                    }}>{p}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{height:16}}/>
+          </div>
+
+          {/* Sticky CTA stack */}
+          <div style={{
+            padding:'16px 20px 12px', borderTop:`1px solid ${T.border}`,
+            background:T.bg1, flexShrink:0, display:'flex', flexDirection:'column', gap:8,
+          }}>
+            {/* Primary: Face the Jury */}
+            <button
+              style={{
+                width:'100%', padding:'14px 16px',
+                background: hasFile ? T.red : 'rgba(255,255,255,0.06)',
+                color: hasFile ? '#fff' : 'rgba(255,255,255,0.25)',
+                fontFamily:'var(--font-mono)', fontWeight:700, fontSize:12,
+                textTransform:'uppercase', letterSpacing:'0.12em',
+                border:'none', cursor: hasFile ? 'pointer' : 'not-allowed',
+                borderRadius:0,
+                boxShadow: hasFile ? `0 0 28px ${T.red}35` : 'none',
+                transition:'background 0.15s',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              }}
+              onMouseEnter={e=>{ if(hasFile) e.currentTarget.style.background='#cc0029'; }}
+              onMouseLeave={e=>{ if(hasFile) e.currentTarget.style.background=T.red; }}
+            >
+              Face the Jury
+              <span style={{opacity:0.6, fontSize:10, fontWeight:400}}>
+                {hasFile ? '(4 Rapido)' : '— upload a file first'}
+              </span>
+            </button>
+
+            {/* Secondary: Multi-Jury */}
+            <button style={{
+              width:'100%', padding:'11px 16px',
+              background:'rgba(124,58,237,0.1)',
+              border:`1px solid rgba(124,58,237,0.45)`,
+              color:'#C4B5FD',
+              fontFamily:'var(--font-mono)', fontWeight:600, fontSize:11,
+              textTransform:'uppercase', letterSpacing:'0.1em',
+              cursor:'pointer', borderRadius:4,
+              display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+              transition:'background 0.15s',
+            }}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(124,58,237,0.2)'}
+            onMouseLeave={e=>e.currentTarget.style.background='rgba(124,58,237,0.1)'}
+            >
+              <span style={{fontSize:13}}>⬡</span>
+              Multi-Jury (4 Personas)
+              <span style={{opacity:0.6, fontSize:10, fontWeight:400}}>(18 Rapido)</span>
+              <span style={{
+                padding:'2px 6px', borderRadius:4,
+                background:'rgba(124,58,237,0.3)', border:'1px solid rgba(167,139,250,0.4)',
+                color:'#DDD6FE', fontSize:9, letterSpacing:'0.1em',
+              }}>PROMO</span>
+            </button>
+
+            {/* Tertiary row: Concept + Material */}
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}>
+              {/* Concept Analysis */}
+              <button style={{
+                padding:'10px 8px',
+                background:'rgba(14,165,233,0.08)',
+                border:`1px solid rgba(14,165,233,0.3)`,
+                color:'#7DD3FC',
+                fontFamily:'var(--font-mono)', fontSize:9,
+                textTransform:'uppercase', letterSpacing:'0.08em',
+                cursor:'pointer', borderRadius:4,
+                display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+                transition:'background 0.15s', lineHeight:1.4, textAlign:'center',
+              }}
+              onMouseEnter={e=>e.currentTarget.style.background='rgba(14,165,233,0.15)'}
+              onMouseLeave={e=>e.currentTarget.style.background='rgba(14,165,233,0.08)'}
+              >
+                <span style={{fontSize:14}}>◎</span>
+                Concept Analysis &amp; Proposal
+                <span style={{opacity:0.6}}>(2 Rapido)</span>
+              </button>
+
+              {/* Material Analysis — Premium */}
+              <button style={{
+                padding:'10px 8px',
+                background:'rgba(0,0,0,0.2)',
+                border:`1px solid ${T.border}`,
+                color:'rgba(255,255,255,0.2)',
+                fontFamily:'var(--font-mono)', fontSize:9,
+                textTransform:'uppercase', letterSpacing:'0.08em',
+                cursor:'not-allowed', borderRadius:4,
+                display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+                lineHeight:1.4, textAlign:'center',
+              }}>
+                <span style={{fontSize:14, opacity:0.4}}>◈</span>
+                Material Analysis on Premium
+                <span style={{
+                  padding:'1px 5px', borderRadius:3,
+                  background:'rgba(245,158,11,0.15)', border:'1px solid rgba(245,158,11,0.3)',
+                  color:'#FCD34D', fontSize:8,
+                }}>UPGRADE</span>
+              </button>
+            </div>
+
+            {/* Privacy note */}
+            <p style={{
+              fontFamily:'var(--font-mono)', fontSize:9,
+              color:'rgba(255,255,255,0.2)', textAlign:'center',
+              letterSpacing:'0.04em', lineHeight:1.5, paddingTop:2,
+            }}>
+              Projects stay in your browser session only; they are not shown publicly.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PROFILE SCREEN ───────────────────────────────────────────────────────────
+function ProfileScreen() {
+  const [tab, setTab] = useState('account');
+  const tabs = [
+    {id:'account', label:'Account'},
+    {id:'billing', label:'Billing & Usage'},
+    {id:'badges', label:'Badges'},
+    {id:'memory', label:'AI Memory'},
+  ];
+
+  const StatCard = ({label,value,icon,color=T.text}) => (
+    <div style={{
+      background:T.bg2, border:`1px solid ${T.border}`,
+      borderRadius:12, padding:'18px 20px',
+    }}>
+      <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:10}}>{label}</p>
+      <p style={{fontFamily:'var(--font-display)',fontSize:28,fontWeight:700,color,display:'flex',alignItems:'center',gap:8}}>
+        {icon && <span style={{fontSize:18}}>{icon}</span>}
+        {value}
+      </p>
+    </div>
+  );
+
+  return (
+    <div style={{paddingTop:64, minHeight:'100vh'}}>
+      <div style={{maxWidth:900, margin:'0 auto', padding:'32px 32px 64px'}}>
+
+        {/* Page header */}
+        <div style={{
+          display:'flex', alignItems:'flex-start', justifyContent:'space-between',
+          marginBottom:32,
+        }}>
+          <div>
+            <h2 style={{
+              fontFamily:'var(--font-display)', fontSize:28, fontWeight:700,
+              textTransform:'uppercase', letterSpacing:'0.04em',
+              color:'#fff', display:'flex', alignItems:'center', gap:10, marginBottom:6,
+            }}>
+              <div style={{
+                width:32,height:32,borderRadius:'50%',
+                background:'linear-gradient(135deg,#6366F1,#22D3EE)',
+                flexShrink:0,
+              }}/>
+              Profile &amp; Settings
+            </h2>
+            <p style={{color:T.muted, fontSize:14}}>Manage your account tier, usage, and gallery status.</p>
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <Chip label="Rapido Shop" color={T.red}/>
+            <Chip label="Go Premium" color={T.amber}/>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div style={{display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:32}}>
+          <StatCard label="Membership" value="Registered" icon="◈" color={T.muted}/>
+          <StatCard label="Rapido" value="0.0x" icon="✦" color={T.red}/>
+          <StatCard label="Progression" value="0" icon="↑" color={T.green}/>
+          <StatCard label="Wall of Death" value="0" icon="⚠" color="#FF6B6B"/>
+        </div>
+
+        {/* Tabs */}
+        <div style={{
+          display:'flex', gap:2, marginBottom:24,
+          background:'rgba(0,0,0,0.3)', borderRadius:10,
+          border:`1px solid ${T.border}`, padding:4,
+        }}>
+          {tabs.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{
+              flex:1, padding:'9px',
+              borderRadius:7, fontFamily:'var(--font-mono)',
+              fontSize:11, textTransform:'uppercase', letterSpacing:'0.08em',
+              background: tab===t.id ? T.bg3 : 'transparent',
+              color: tab===t.id ? T.text : T.muted,
+              border: tab===t.id ? `1px solid ${T.borderMd}` : '1px solid transparent',
+              fontWeight: tab===t.id ? 600 : 400,
+              transition:'all 0.15s',
+            }}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* Account tab */}
+        {tab==='account' && (
+          <div style={{display:'flex', flexDirection:'column', gap:20}} className="fade-up">
+
+            {/* Edu verification */}
+            <Card>
+              <SectionLabel icon="✉">Student Email Verification</SectionLabel>
+              <p style={{fontSize:14,color:T.muted,marginBottom:16,lineHeight:1.6}}>
+                Add a secondary <strong style={{color:T.text}}>edu.tr</strong> email to enable the student discount.
+              </p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                {[['Verification Status','Pending verification'],['Verified Edu Email','—']].map(([l,v])=>(
+                  <div key={l} style={{padding:'12px 14px', borderRadius:8, border:`1px solid ${T.border}`, background:'rgba(0,0,0,0.2)'}}>
+                    <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:6}}>{l}</p>
+                    <p style={{fontSize:13,color:T.text}}>{v}</p>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:'flex', gap:8}}>
+                <input placeholder="example@university.edu.tr" style={{
+                  ...inputStyle, flex:1,
+                }}
+                onFocus={e=>e.target.style.borderColor=`${T.red}60`}
+                onBlur={e=>e.target.style.borderColor=T.border}
+                />
+                <button style={{
+                  padding:'10px 18px', borderRadius:8,
+                  background:'rgba(255,255,255,0.06)', border:`1px solid ${T.border}`,
+                  color:T.text, fontFamily:'var(--font-mono)',fontSize:11,
+                  textTransform:'uppercase', letterSpacing:'0.08em',
+                }}>Send Code</button>
+              </div>
+              <div style={{display:'flex', gap:8, marginTop:8}}>
+                <input placeholder="6-digit code" style={{
+                  ...inputStyle, flex:1, borderColor:`${T.cyan}40`,
+                }}
+                onFocus={e=>e.target.style.borderColor=T.cyan}
+                onBlur={e=>e.target.style.borderColor=`${T.cyan}40`}
+                />
+                <button style={{
+                  padding:'10px 18px', borderRadius:8,
+                  background:`${T.cyan}15`, border:`1px solid ${T.cyan}40`,
+                  color:T.cyan, fontFamily:'var(--font-mono)',fontSize:11,
+                  textTransform:'uppercase', letterSpacing:'0.08em',
+                }}>Confirm Code</button>
+              </div>
+            </Card>
+
+            {/* Personal settings */}
+            <Card>
+              <SectionLabel icon="⊕">Personal Settings</SectionLabel>
+              <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
+                <div>
+                  <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:6}}>Language Preference</p>
+                  <p style={{fontSize:13,color:T.muted,marginBottom:10,lineHeight:1.5}}>Choose the default language for the UI and AI responses.</p>
+                  <select style={{...inputStyle, appearance:'none'}}>
+                    {['Türkçe','English','Deutsch','Italiano'].map(l=><option key={l} style={{background:T.bg0}}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:6}}>Change Password</p>
+                  <div style={{display:'flex', flexDirection:'column', gap:8}}>
+                    <input type="password" placeholder="Current password"
+                      style={{...inputStyle}}
+                      onFocus={e=>e.target.style.borderColor=`${T.cyan}60`}
+                      onBlur={e=>e.target.style.borderColor=T.border}
+                    />
+                    <input type="password" placeholder="New password"
+                      style={{...inputStyle}}
+                      onFocus={e=>e.target.style.borderColor=`${T.cyan}60`}
+                      onBlur={e=>e.target.style.borderColor=T.border}
+                    />
+                    <button style={{
+                      padding:'10px', borderRadius:8,
+                      background:`${T.cyan}12`, border:`1px solid ${T.cyan}30`,
+                      color:T.cyan, fontFamily:'var(--font-mono)', fontSize:11,
+                      textTransform:'uppercase', letterSpacing:'0.08em',
+                    }}>🔑 Update Password</button>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* Promo */}
+            <Card>
+              <SectionLabel icon="◈">Redeem Promo Code</SectionLabel>
+              <p style={{fontSize:13,color:T.muted,marginBottom:14,lineHeight:1.5}}>
+                Manually entered codes here are only for Rapido or premium gifts. Discount codes work on the shop screen.
+              </p>
+              <div style={{display:'flex',gap:8}}>
+                <input placeholder="PROMO-2026" style={{...inputStyle,flex:1,fontFamily:'var(--font-mono)',letterSpacing:'0.08em'}}
+                  onFocus={e=>e.target.style.borderColor=`${T.red}60`}
+                  onBlur={e=>e.target.style.borderColor=T.border}
+                />
+                <button style={{
+                  padding:'10px 20px', borderRadius:8,
+                  background:`${T.red}15`, border:`1px solid ${T.red}40`,
+                  color:T.red, fontFamily:'var(--font-mono)', fontSize:11,
+                  textTransform:'uppercase', letterSpacing:'0.08em',
+                }}>⊕ Redeem</button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Billing tab */}
+        {tab==='billing' && (
+          <div style={{display:'flex',flexDirection:'column',gap:20}} className="fade-up">
+            <Card>
+              <div style={{
+                display:'flex', alignItems:'center', justifyContent:'space-between',
+                marginBottom:20,
+              }}>
+                <SectionLabel icon="$">Membership &amp; Purchase Summary</SectionLabel>
+                <div style={{display:'flex',gap:8}}>
+                  <Chip label="Analysis History" color={T.cyan}/>
+                  <Chip label="Premium Mgmt" color={T.amber}/>
+                </div>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+                {[
+                  ['Total Paid','₺0,00'],
+                  ['Rapido Purchased','0'],
+                  ['Rapido Transactions','0'],
+                  ['Membership Purchases','0'],
+                ].map(([l,v])=>(
+                  <div key={l} style={{
+                    padding:'16px', borderRadius:10,
+                    border:`1px solid ${T.border}`, background:'rgba(0,0,0,0.2)',
+                  }}>
+                    <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:T.muted,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>{l}</p>
+                    <p style={{fontFamily:'var(--font-display)',fontSize:22,fontWeight:700,color:T.text}}>{v}</p>
+                  </div>
+                ))}
+              </div>
+            </Card>
+
+            <Card>
+              <SectionLabel icon="◈">Analysis &amp; Gallery Summary</SectionLabel>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                {[
+                  ['Total analyses in history','0',T.text],
+                  ['Active gallery posts','0',T.green],
+                  ['Removed from gallery','0',T.amber],
+                  ['Pending approval','0',T.muted],
+                ].map(([l,v,c])=>(
+                  <div key={l} style={{
+                    display:'flex', justifyContent:'space-between', alignItems:'center',
+                    padding:'10px 14px', borderRadius:8,
+                    background:'rgba(0,0,0,0.2)', border:`1px solid ${T.border}`,
+                  }}>
+                    <span style={{fontSize:14,color:T.muted}}>{l}</span>
+                    <span style={{fontFamily:'var(--font-display)',fontSize:18,fontWeight:700,color:c}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Badges tab */}
+        {tab==='badges' && (
+          <div className="fade-up">
+            <Card>
+              <SectionLabel icon="★">Earned Badges</SectionLabel>
+              <div style={{
+                padding:'48px', textAlign:'center',
+                border:`1px dashed ${T.border}`, borderRadius:10,
+              }}>
+                <p style={{fontSize:32, marginBottom:12, opacity:0.3}}>🏅</p>
+                <p style={{fontSize:14,color:T.muted}}>No badges earned yet.</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:11,color:T.dim,marginTop:6}}>Complete jury analyses to unlock achievements.</p>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Memory tab */}
+        {tab==='memory' && (
+          <div className="fade-up">
+            <Card>
+              <SectionLabel icon="◎">AI Memory Notes</SectionLabel>
+              <div style={{
+                padding:'48px', textAlign:'center',
+                border:`1px dashed ${T.border}`, borderRadius:10,
+              }}>
+                <p style={{fontSize:32, marginBottom:12, opacity:0.3}}>🧠</p>
+                <p style={{fontSize:14,color:T.muted}}>No visible AI memory notes yet.</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:11,color:T.dim,marginTop:6}}>Memory notes appear after your first AI Mentor session.</p>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── TWEAKS ───────────────────────────────────────────────────────────────────
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#6366F1",
+  "density": "compact",
+  "formStyle": "sectioned"
+}/*EDITMODE-END*/;
+
+function TweaksPanel({ open }) {
+  const [vals, setVals] = useState(TWEAK_DEFAULTS);
+  useEffect(() => {
+    // Apply accent to a separate var so brand --red (#FF0033) is never clobbered
+    document.documentElement.style.setProperty('--accent', vals.accentColor);
+    window.parent.postMessage({type:'__edit_mode_set_keys', edits: vals}, '*');
+  }, [vals]);
+  if (!open) return null;
+  return (
+    <div className="tweaks-panel open">
+      <p style={{fontFamily:'var(--font-mono)',fontSize:10,color:'var(--text-muted)',textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:16}}>Tweaks</p>
+      <div style={{display:'flex',flexDirection:'column',gap:16}}>
+        <div>
+          <p style={{fontSize:12,color:T.muted,marginBottom:6}}>Accent Color</p>
+          <div style={{display:'flex',gap:8}}>
+            {['#FF0033','#6366F1','#22D3EE','#F59E0B'].map(c=>(
+              <button key={c} onClick={()=>setVals({...vals,accentColor:c})} style={{
+                width:28,height:28,borderRadius:'50%',background:c,
+                border: vals.accentColor===c ? '2px solid white' : '2px solid transparent',
+                cursor:'pointer',
+              }}/>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p style={{fontSize:12,color:T.muted,marginBottom:6}}>Form Density</p>
+          <div style={{display:'flex',gap:6}}>
+            {['comfortable','compact'].map(d=>(
+              <button key={d} onClick={()=>setVals({...vals,density:d})} style={{
+                flex:1, padding:'7px', borderRadius:7,
+                fontFamily:'var(--font-mono)', fontSize:10, textTransform:'uppercase',
+                background: vals.density===d ? T.bg3 : 'transparent',
+                border:`1px solid ${vals.density===d?T.borderMd:T.border}`,
+                color: vals.density===d ? T.text : T.muted,
+              }}>{d}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── APP ──────────────────────────────────────────────────────────────────────
+function App() {
+  const [screen, setScreen] = useState('hero');
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+
+  useEffect(() => {
+    window.addEventListener('message', e => {
+      if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
+      if (e.data?.type === '__deactivate_edit_mode') setTweaksOpen(false);
+    });
+    window.parent.postMessage({type:'__edit_mode_available'}, '*');
+  }, []);
+
+  return (
+    <div style={{minHeight:'100vh'}}>
+      <Header screen={screen} setScreen={setScreen} />
+      {screen === 'hero' && <HeroScreen setScreen={setScreen} />}
+      {screen === 'studio' && <StudioScreen />}
+      {screen === 'profile' && <ProfileScreen />}
+      {!['hero','studio','profile'].includes(screen) && (
+        <div style={{paddingTop:64,display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',flexDirection:'column',gap:16}}>
+          <p style={{fontFamily:'var(--font-mono)',fontSize:11,color:T.muted,textTransform:'uppercase',letterSpacing:'0.12em'}}>Screen: {screen}</p>
+          <p style={{fontSize:14,color:T.dim}}>This screen is not part of this prototype.</p>
+          <Btn onClick={()=>setScreen('hero')}>← Back to Home</Btn>
+        </div>
+      )}
+      <TweaksPanel open={tweaksOpen} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

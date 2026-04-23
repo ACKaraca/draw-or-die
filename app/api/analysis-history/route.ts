@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { ID, Query } from 'node-appwrite';
-import type { Models } from 'node-appwrite';
+import { NextResponse, type NextRequest } from 'next/server';
+import { ID, Query, type Models } from 'node-appwrite';
 import {
   APPWRITE_BUCKET_GALLERY_ID,
   APPWRITE_DATABASE_ID,
@@ -98,18 +97,25 @@ async function purgeExpiredDeletedRowsForUser(userId: string): Promise<void> {
   const storage = getAdminStorage();
   const nowIso = new Date().toISOString();
 
-  const result = await tables.listRows<AnalysisHistoryRow>({
-    databaseId: APPWRITE_DATABASE_ID,
-    tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
-    queries: [
-      Query.equal('user_id', userId),
-      Query.equal('is_deleted', true),
-      Query.lessThanEqual('purge_after', nowIso),
-      Query.limit(50),
-    ],
-  });
+  let result: Models.RowList<AnalysisHistoryRow>;
 
-    for (const row of result.rows) {
+  try {
+    result = await tables.listRows<AnalysisHistoryRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
+      queries: [
+        Query.equal('user_id', userId),
+        Query.equal('is_deleted', true),
+        Query.lessThanEqual('purge_after', nowIso),
+        Query.limit(50),
+      ],
+    });
+  } catch (error) {
+    logServerError('api.analysis-history.purgeExpiredDeletedRowsForUser', error);
+    return;
+  }
+
+  for (const row of result.rows) {
     const fileIds = new Set<string>();
     const previewId = extractFileIdFromUrl(row.preview_url || '');
     const sourceId = extractFileIdFromUrl(row.source_url || '');
@@ -137,6 +143,41 @@ async function purgeExpiredDeletedRowsForUser(userId: string): Promise<void> {
   }
 }
 
+async function listAnalysisHistoryRows(
+  userId: string,
+  limit: number,
+  offset: number,
+): Promise<Models.RowList<AnalysisHistoryRow>> {
+  const tables = getAdminTables();
+
+  try {
+    return await tables.listRows<AnalysisHistoryRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
+      queries: [
+        Query.equal('user_id', userId),
+        Query.orderDesc('$createdAt'),
+        Query.limit(limit),
+        Query.offset(offset),
+      ],
+      total: true,
+    });
+  } catch (error) {
+    logServerError('api.analysis-history.GET.primaryQuery', error);
+  }
+
+  return tables.listRows<AnalysisHistoryRow>({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
+    queries: [
+      Query.equal('user_id', userId),
+      Query.limit(limit),
+      Query.offset(offset),
+    ],
+    total: true,
+  });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthenticatedUserFromRequest(request);
@@ -156,18 +197,7 @@ export async function GET(request: NextRequest) {
       : 12;
     const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
 
-    const tables = getAdminTables();
-    const result = await tables.listRows<AnalysisHistoryRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
-      queries: [
-        Query.equal('user_id', user.id),
-        Query.orderDesc('createdAt'),
-        Query.limit(limit),
-        Query.offset(offset),
-      ],
-      total: true,
-    });
+    const result = await listAnalysisHistoryRows(user.id, limit, offset);
 
     const items = result.rows.map((row) => ({
       id: row.$id,
