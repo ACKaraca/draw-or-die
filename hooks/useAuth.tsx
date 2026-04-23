@@ -101,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const jwtCacheRef = useRef<{ token: string; expiresAt: number } | null>(null)
     const jwtInflightRef = useRef<Promise<string> | null>(null)
     const warmPrefetchUserIdRef = useRef<string | null>(null)
+    const resourceValidationUserIdRef = useRef<string | null>(null)
 
     useEffect(() => {
         userRef.current = user
@@ -285,6 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const activeUser = userRef.current
         if (!activeUser) {
             warmPrefetchUserIdRef.current = null
+            resourceValidationUserIdRef.current = null
             return
         }
 
@@ -326,6 +328,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 void prefetch()
             }
         }, 900)
+
+        return () => {
+            cancelled = true
+            window.clearTimeout(timeoutHandle)
+        }
+    }, [getJWT, user])
+
+    useEffect(() => {
+        const activeUser = userRef.current
+        if (!activeUser) {
+            return
+        }
+
+        if (resourceValidationUserIdRef.current === activeUser.id) {
+            return
+        }
+
+        resourceValidationUserIdRef.current = activeUser.id
+        let cancelled = false
+
+        const validateResources = async () => {
+            try {
+                const jwt = await getJWT()
+                await fetch('/api/health/appwrite', {
+                    headers: {
+                        Authorization: `Bearer ${jwt}`,
+                    },
+                })
+            } catch {
+                // Validation is best-effort and should never block auth or UX.
+            }
+        }
+
+        const win = window as IdleWindow
+        if (typeof win.requestIdleCallback === 'function') {
+            const idleHandle = win.requestIdleCallback(() => {
+                if (!cancelled) {
+                    void validateResources()
+                }
+            }, { timeout: 3000 })
+
+            return () => {
+                cancelled = true
+                if (typeof win.cancelIdleCallback === 'function') {
+                    win.cancelIdleCallback(idleHandle)
+                }
+            }
+        }
+
+        const timeoutHandle = window.setTimeout(() => {
+            if (!cancelled) {
+                void validateResources()
+            }
+        }, 1500)
 
         return () => {
             cancelled = true
