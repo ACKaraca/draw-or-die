@@ -5,9 +5,9 @@ import { Crown, AlertTriangle, RefreshCw, TrendingUp, Lightbulb } from 'lucide-r
 import Markdown from 'react-markdown';
 import html2canvas from 'html2canvas';
 import { useRef, useState, useEffect } from 'react';
-import { ChatDefense } from './ChatDefense';
-import { SimplePdfPreview } from './SimplePdfPreview';
-import { InteractiveImagePreview } from './InteractiveImagePreview';
+import { ChatDefense } from '@/components/ChatDefense';
+import { SimplePdfPreview } from '@/components/SimplePdfPreview';
+import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
 import { FormData, DefenseMessage, GalleryPlacementType } from '@/types';
 import { RAPIDO_COSTS } from '@/lib/pricing';
 
@@ -209,25 +209,25 @@ export function ResultStep({
                         </div>
                     )}
                 </div>
-                <div className="flex gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                     <button
                         onClick={handlePreserveAnalysis}
                         disabled={!handlePreserveAnalysis}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 border border-emerald-400/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-100 transition-colors text-sm font-mono uppercase"
+                        className="min-h-12 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
                     >
                         {pickLocalized(language, 'Analizi Koru', 'Preserve analysis')} (1.5 Rapido)
                     </button>
                     <button
                         onClick={handleShareToCommunity}
                         disabled={!handleShareToCommunity}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 border border-cyan-400/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-100 transition-colors text-sm font-mono uppercase disabled:opacity-50"
+                        className="min-h-12 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:opacity-50"
                     >
                         {pickLocalized(language, "Community'de Paylaş", 'Share on Community')}
                     </button>
                     {handleAutoConcept && (
                         <button
                             onClick={handleAutoConcept}
-                            className="flex-1 flex items-center justify-center gap-2 py-3 border border-sky-400/40 bg-sky-500/10 hover:bg-sky-500/20 text-sky-100 transition-colors text-sm font-mono uppercase"
+                            className="min-h-12 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-sky-100 transition-colors hover:bg-sky-500/20"
                             title={pickLocalized(language, 'Havalı felsefi konsept metni uydur', 'Spin up a philosophical concept text')}
                         >
                             <Lightbulb size={16} /> {pickLocalized(language, 'Konsept Metni Yaz', 'Write concept text')} ({RAPIDO_COSTS.AUTO_CONCEPT} Rapido)
@@ -235,14 +235,14 @@ export function ResultStep({
                     )}
                     <button
                         onClick={handleNewProject}
-                        className="flex-1 flex items-center justify-center gap-2 py-3 border border-white/20 hover:bg-white/5 transition-colors text-sm font-mono uppercase"
+                        className="min-h-12 rounded-lg border border-white/20 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-slate-200 transition-colors hover:bg-white/5"
                     >
                         <RefreshCw size={16} /> {pickLocalized(language, 'Yeni Proje', 'New Project')}
                     </button>
                     {previousProject && (
                         <button
                             onClick={handleRevision}
-                            className="flex-1 flex items-center justify-center gap-2 py-3 bg-neon-red/10 border border-neon-red/30 text-neon-red hover:bg-neon-red/20 transition-colors text-sm font-mono uppercase"
+                            className="min-h-12 rounded-lg border border-neon-red/30 bg-neon-red/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-neon-red transition-colors hover:bg-neon-red/20"
                         >
                             <TrendingUp size={16} /> {pickLocalized(language, 'Revizyon Yükle', 'Upload Revision')}
                         </button>
@@ -341,7 +341,7 @@ export function ResultStep({
                 />
 
                 {/* Premium Upsell */}
-                <div className="mt-6 bg-gradient-to-r from-neon-red/20 to-transparent border border-neon-red/30 rounded-xl p-6 flex items-center justify-between">
+                <div className="mt-6 rounded-xl border border-neon-red/30 bg-neon-red/10 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <h3 className="font-display font-bold text-xl text-white flex items-center gap-2 mb-1">
                             <Crown className="text-yellow-500" size={20} /> {pickLocalized(language, 'Projeyi Kurtar (Premium)', 'Rescue the project (Premium)')}
@@ -356,7 +356,7 @@ export function ResultStep({
                     </div>
                     <button
                         onClick={handlePremium}
-                        className="px-6 py-3 bg-neon-red hover:bg-[#cc0029] text-white font-bold uppercase tracking-wider text-sm transition-colors"
+                        className="min-h-12 px-6 py-3 bg-neon-red text-white font-mono font-bold uppercase tracking-wider text-xs transition-colors hover:bg-neon-red/80"
                     >
                         {pickLocalized(language, 'Kilidi Aç', 'Unlock')} ({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)
                     </button>

@@ -63,6 +63,43 @@ function readCleanEnv(name: string): string {
   return /[\r\n\0]/.test(value) ? '' : value;
 }
 
+function readFirstCleanEnv(names: string[]): string {
+  for (const name of names) {
+    const value = readCleanEnv(name);
+    if (value) return value;
+  }
+  return '';
+}
+
+function resolveAiModelForOperation(operation: string): string {
+  const defaultModel = readCleanEnv('AI_MODEL') || DEFAULTS.model;
+  const analysisModel = readFirstCleanEnv(['AI_MODEL_ANALYSIS', 'AI_MODEL_ANALYSIS_VISION']) || defaultModel;
+  const lowCostModel = readFirstCleanEnv(['AI_MODEL_LOW_COST', 'AI_MODEL_TEXT_CHEAP']) || defaultModel;
+
+  if (
+    operation === 'MATERIAL_BOARD' ||
+    operation === 'SINGLE_JURY' ||
+    operation === 'MULTI_JURY' ||
+    operation === 'REVISION_SAME'
+  ) {
+    return analysisModel;
+  }
+
+  if (operation === 'AI_MENTOR') {
+    return readFirstCleanEnv(['AI_MODEL_MENTOR', 'AI_MODEL_MENTOR_VISION']) || defaultModel;
+  }
+
+  if (operation === 'DEFENSE' || operation === 'AUTO_CONCEPT' || operation === 'AUTO_FILL_FORM') {
+    return lowCostModel;
+  }
+
+  if (operation === 'PREMIUM_RESCUE') {
+    return readFirstCleanEnv(['AI_MODEL_PREMIUM_RESCUE', 'AI_MODEL_PREMIUM_VISION']) || analysisModel;
+  }
+
+  return defaultModel;
+}
+
 // Maps allowed AI provider hostnames to their canonical base URLs.
 // The hostname from the env var is used ONLY as a lookup key — the returned value
 // is our own hardcoded constant, never the user-provided URL (prevents SSRF).
@@ -921,8 +958,8 @@ function buildMemorySnippetCandidates(params: {
 
   const userProfileSnippet = summarizeForFileCache(
     [
-      compactTitle ? `Proje: ${compactTitle}` : '',
-      `Kisa ozet: ${firstLine}`,
+      compactTitle ? `Project: ${compactTitle}` : '',
+      `Short summary: ${firstLine}`,
     ]
       .filter(Boolean)
       .join('\n')
@@ -930,14 +967,14 @@ function buildMemorySnippetCandidates(params: {
 
   const recentContextSnippet = summarizeForFileCache(
     [
-      'Son analiz odagi:',
+      'Recent analysis focus:',
       contextLines.length > 0 ? contextLines.join(' | ') : firstLine,
     ].join('\n')
   ).substring(0, 320);
 
   const hiddenStyleSnippet = summarizeForFileCache(
     [
-      'Gizli stil notu:',
+      'Hidden style note:',
       summaryLines.slice(0, 2).join(' | ') || firstLine,
     ].join('\n')
   ).substring(0, 320);
@@ -1978,6 +2015,7 @@ function buildPremiumRescuePrompt(
     pdfText: String(payload.pdfText ?? '').substring(0, 300) || pickLocalized(language, 'Yok', 'None'),
     pageTemplate: options.pageTemplate,
     pdfTemplateSummary: options.pdfTemplateSummary ?? '',
+    multiJuryCritiques: Array.isArray(payload.multiJuryCritiques) ? payload.multiJuryCritiques : [],
     knownFileContexts: normalizeKnownFileContexts(payload.knownFileContexts),
     memorySnippets: normalizeMemorySnippetContexts(payload.memorySnippets),
   });
@@ -1998,9 +2036,13 @@ ${getCategoryFocus(options.category, language)}
 Kurallar:
 - Her flaw icin sayfa numarasi zorunlu (page).
 - Koordinatlar yuzde biriminde olacak (x, y, width, height 0-100).
+- Koordinatlar goruntunun sol-ust kosesinden baslayan yuzdelik dikdortgenlerdir; x+width ve y+height 100'u gecmesin.
+- severity her flaw icin zorunlu: LOW | MEDIUM | HIGH | CRITICAL.
 - reason alani teknik ve acik olmali.
 - drawingGuide alani "hangi noktaya ne cizilecegi" bilgisini vermeli.
-- En az 4 flaw, en az 3 practicalSolutions ver.
+- En az 6, en fazla 18 practicalSolutions ver. Projenin durumuna gore onceliklendir.
+- Her practicalSolutions maddesi uygulanabilir bir iyilestirme onerisi olsun.
+- UI, isaretlenen yeri bir pencere/overlay elementiyle gosterecek; bu nedenle page ve koordinatlar dogru parse edilebilir olmali.
 
 JSON:
 {
@@ -2009,6 +2051,7 @@ JSON:
     {
       "page": 1,
       "pageLabel": "Pafta 1",
+      "severity": "LOW | MEDIUM | HIGH | CRITICAL",
       "x": 10,
       "y": 20,
       "width": 30,
@@ -2035,9 +2078,13 @@ ${getCategoryFocus(options.category, language)}
 Rules:
 - page is required for every flaw.
 - Coordinates must be percentages (x, y, width, height in 0-100).
+- Coordinates are percentage rectangles from the image top-left; x+width and y+height must not exceed 100.
+- severity is required for every flaw: LOW | MEDIUM | HIGH | CRITICAL.
 - reason must be technical and explicit.
 - drawingGuide must explain what to draw and where.
-- Return at least 4 flaws and at least 3 practicalSolutions.
+- Return at least 6 and at most 18 practicalSolutions. Prioritize them based on the project state.
+- Every practicalSolutions entry must be an actionable improvement recommendation.
+- The UI will display the marked area as a window/overlay element, so page and coordinates must be easy to parse.
 
 JSON:
 {
@@ -2046,6 +2093,7 @@ JSON:
     {
       "page": 1,
       "pageLabel": "Board 1",
+      "severity": "LOW | MEDIUM | HIGH | CRITICAL",
       "x": 10,
       "y": 20,
       "width": 30,
@@ -2595,7 +2643,7 @@ export async function POST(request: NextRequest) {
     const cfg: AIConfig = {
       baseUrl: readCleanEnv('AI_BASE_URL') || DEFAULTS.baseUrl,
       apiKey,
-      model: readCleanEnv('AI_MODEL') || DEFAULTS.model,
+      model: resolveAiModelForOperation(operation),
     };
 
     const harshnessRaw = payload.harshness;
@@ -2946,7 +2994,7 @@ export async function POST(request: NextRequest) {
         ? parsed.drawingInstructions.filter((entry) => typeof entry === 'string' && entry.trim().length > 0)
         : [];
 
-      if (flaws.length === 0 && practicalSolutions.length === 0 && drawingInstructions.length === 0) {
+      if (flaws.length === 0 && practicalSolutions.length < 6 && drawingInstructions.length === 0) {
         return respond(
           {
             error: pickLocalized(
@@ -2962,7 +3010,7 @@ export async function POST(request: NextRequest) {
 
       result = JSON.stringify({
         flaws,
-        practicalSolutions,
+        practicalSolutions: practicalSolutions.slice(0, 18),
         drawingInstructions,
         summary: ensureAtLeastTwoParagraphs(
           typeof parsed.summary === 'string' ? parsed.summary : '',
