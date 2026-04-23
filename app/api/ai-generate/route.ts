@@ -723,9 +723,19 @@ async function runInParallelBatches<T>(
   batchSize: number,
   worker: (item: T) => Promise<void>,
 ): Promise<void> {
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new Error(`Invalid batchSize: ${batchSize}`);
+  }
+
   for (let i = 0; i < items.length; i += batchSize) {
     const batch = items.slice(i, i + batchSize);
-    await Promise.all(batch.map((item) => worker(item).catch((err) => console.error('[runInParallelBatches] item failed', err))));
+    await Promise.all(
+      batch.map((item) =>
+        worker(item).catch((err) => {
+          logServerError('api.ai-generate.runInParallelBatches', err, { batchIndex: i, batchSize });
+        }),
+      ),
+    );
   }
 }
 
