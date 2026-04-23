@@ -723,7 +723,16 @@ async function runInParallelBatches<T>(
   batchSize: number,
   worker: (item: T) => Promise<void>,
 ): Promise<void> {
-    await Promise.all(batch.map((item) => worker(item).catch((err) => console.error('[runInParallelBatches] item failed', err))));
+  for (let index = 0; index < items.length; index += batchSize) {
+    const batch = items.slice(index, index + batchSize);
+    await Promise.all(
+      batch.map((item) =>
+        worker(item).catch((err) => {
+          logServerError('api.ai-generate.runInParallelBatches', err, { batchIndex: index, batchSize });
+        }),
+      ),
+    );
+  }
 }
 
 async function loadAnalysisFileCacheRows(userId: string, hashes: string[]): Promise<Map<string, AnalysisFileCacheRow>> {

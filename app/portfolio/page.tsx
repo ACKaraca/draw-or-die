@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import Image from 'next/image';
 import {
   ArrowLeft,
   ChevronRight,
@@ -451,17 +452,16 @@ function CanvasEditor({ pageId, portfolioId, initialLayout, onSave, getJWT }: Ca
                       </div>
                     )}
                     {el.type === 'image' && (
-                      <img
-                        src={el.imageUrl ?? ''}
-                        alt=""
-                        draggable={false}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: el.objectFit ?? 'cover',
-                          display: 'block',
-                        }}
-                      />
+                      <div className="relative w-full h-full">
+                        <Image
+                          src={el.imageUrl ?? ''}
+                          alt=""
+                          fill
+                          draggable={false}
+                          sizes="100vw"
+                          style={{ objectFit: el.objectFit ?? 'cover' }}
+                        />
+                      </div>
                     )}
                     {el.type === 'shape' && (
                       <div
@@ -987,24 +987,21 @@ export default function PortfolioPage() {
       const data = await res.json() as { pages: PortfolioPage[] };
       const sorted = (data.pages ?? []).sort((a, b) => a.pageIndex - b.pageIndex);
       setPages(sorted);
-      if (sorted.length > 0 && !selectedPageId) {
-        setSelectedPageId(sorted[0].id);
-      }
+      setSelectedPageId((current) => current ?? sorted[0]?.id ?? null);
     } catch {
       // silent
     } finally {
       setPagesLoading(false);
     }
-  }, [getJWT, selectedPageId]);
+  }, [getJWT]);
 
   useEffect(() => {
-    if (selectedPortfolio) {
-      setPages([]);
-      setSelectedPageId(null);
-      void loadPages(selectedPortfolio.id);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPortfolio?.id]);
+    if (!selectedPortfolio) return;
+
+    setPages([]);
+    setSelectedPageId(null);
+    void loadPages(selectedPortfolio.id);
+  }, [loadPages, selectedPortfolio]);
 
   const selectedPage = pages.find((p) => p.id === selectedPageId) ?? null;
   const selectedPageLayout = selectedPage ? parseLayout(selectedPage.layoutJson) : null;
@@ -1144,9 +1141,15 @@ export default function PortfolioPage() {
                     onClick={() => setSelectedPortfolio(p)}
                   >
                     {/* Cover */}
-                    <div className="w-full aspect-[1/1.414] bg-black/50 rounded-lg overflow-hidden border border-white/5">
+                    <div className="relative w-full aspect-[1/1.414] bg-black/50 rounded-lg overflow-hidden border border-white/5">
                       {p.coverUrl ? (
-                        <img src={p.coverUrl} alt={p.title} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                        <Image
+                          src={p.coverUrl}
+                          alt={p.title}
+                          fill
+                          sizes="(max-width: 1024px) 100vw, 33vw"
+                          className="object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                        />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           <Layers size={28} className="text-slate-700" />
@@ -1273,7 +1276,13 @@ export default function PortfolioPage() {
                               }}
                             >
                               {el.type === 'image' && el.imageUrl && (
-                                <img src={el.imageUrl} alt="" className="w-full h-full object-cover" />
+                                <Image
+                                  src={el.imageUrl}
+                                  alt=""
+                                  fill
+                                  sizes="57px"
+                                  className="object-cover"
+                                />
                               )}
                             </div>
                           ))}
