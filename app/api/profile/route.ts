@@ -5,8 +5,10 @@ import {
   getReferralSignupCountByCode,
   getOrCreateProfile,
   updateProfileById,
+  type AppwriteAuthUser,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
+import { isAppwriteColumnNotAvailable, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import { logServerError } from '@/lib/logger';
 import { normalizeLanguage } from '@/lib/i18n';
 import { getRequestLanguage } from '@/lib/server-i18n';
@@ -14,6 +16,19 @@ import { ApiMessages } from '@/lib/locales/apiMessages';
 
 function isAppwriteServerUnavailable(): boolean {
   return !APPWRITE_SERVER_API_KEY.trim();
+}
+
+async function getOrCreateProfileWithResourceRetry(user: AppwriteAuthUser) {
+  try {
+    return await getOrCreateProfile(user);
+  } catch (error) {
+    if (!isAppwriteColumnNotAvailable(error) && !isAppwriteNotFound(error)) {
+      throw error;
+    }
+
+    await ensureCoreAppwriteResources();
+    return getOrCreateProfile(user);
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -31,8 +46,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: ApiMessages.signInRequired(lang) }, { status: 401 });
     }
 
-    await ensureCoreAppwriteResources();
-    const profile = await getOrCreateProfile(user);
+    const profile = await getOrCreateProfileWithResourceRetry(user);
     let referralSignupCount = 0;
 
     if (profile.referral_code) {

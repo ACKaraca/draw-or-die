@@ -65,7 +65,6 @@ export async function GET(
       );
     }
 
-    await ensureCoreAppwriteResources();
     const tables = getAdminTables();
     const chat = await runWithResourceRetry(() => tables.getRow<MentorChatRow>({
       databaseId: APPWRITE_DATABASE_ID,
@@ -91,7 +90,7 @@ export async function GET(
       tableId: APPWRITE_TABLE_MENTOR_MESSAGES_ID,
       queries: [
         Query.equal('chat_id', chatId),
-        Query.orderAsc('createdAt'),
+        Query.orderAsc('$createdAt'),
         Query.limit(limit),
       ],
       total: true,

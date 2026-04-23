@@ -32,6 +32,7 @@ import {
 } from '@/lib/appwrite/server';
 import type { AppwriteAuthUser } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
+import { isAppwriteColumnNotAvailable, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import {
   normalizeLanguage,
   pickLocalized,
@@ -1203,6 +1204,19 @@ function rapidoCentsToMentorTokens(totalCents: number): number {
   const unitCostCents = MENTOR_BILLING_RAPIDO_PER_UNIT * RAPIDO_PRECISION_SCALE;
   const affordableUnits = Math.floor(totalCents / unitCostCents);
   return Math.max(0, affordableUnits * MENTOR_BILLING_TOKEN_UNIT);
+}
+
+async function getOrCreateProfileWithResourceRetry(user: AppwriteAuthUser) {
+  try {
+    return await getOrCreateProfile(user);
+  } catch (error) {
+    if (!isAppwriteColumnNotAvailable(error) && !isAppwriteNotFound(error)) {
+      throw error;
+    }
+
+    await ensureCoreAppwriteResources();
+    return getOrCreateProfile(user);
+  }
 }
 
 function toMb(bytes: number): number {
@@ -2398,9 +2412,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await ensureCoreAppwriteResources();
-
-    const profile = await getOrCreateProfile(user);
+    const profile = await getOrCreateProfileWithResourceRetry(user);
     const typedProfile: ProfileState = {
       preferred_language: normalizeLanguage(profile.preferred_language, 'tr'),
       is_premium: profile.is_premium,
@@ -3306,7 +3318,7 @@ export async function POST(request: NextRequest) {
         tableId: APPWRITE_TABLE_MENTOR_MESSAGES_ID,
         queries: [
           Query.equal('chat_id', chatId),
-          Query.orderDesc('createdAt'),
+          Query.orderDesc('$createdAt'),
           Query.limit(14),
         ],
       });

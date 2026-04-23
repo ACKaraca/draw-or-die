@@ -98,8 +98,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    await ensureCoreAppwriteResources();
-
     const params = request.nextUrl.searchParams;
     const limitRaw = Number(params.get('limit') ?? '20');
     const offsetRaw = Number(params.get('offset') ?? '0');
@@ -144,9 +142,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await ensureCoreAppwriteResources();
-
-    const profile = await getOrCreateProfile(user);
+    const profile = await runWithResourceRetry(() => getOrCreateProfile(user));
     const lang = normalizeLanguage(profile.preferred_language, headerLang);
     const isPremium = profile.is_premium;
     const monthKey = getCurrentMonthKey();
@@ -217,8 +213,6 @@ export async function DELETE(request: NextRequest) {
         { status: 401 },
       );
     }
-
-    await ensureCoreAppwriteResources();
 
     const body = (await request.json().catch(() => ({}))) as { chatId?: unknown };
     const chatId = typeof body.chatId === 'string' ? body.chatId.trim() : '';

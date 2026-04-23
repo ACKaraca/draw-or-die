@@ -20,6 +20,7 @@
     "test:payment-mocks": "jest --runInBand __tests__/security/payment.security.test.ts",
     "check:rate-limiting": "node scripts/check-rate-limiting.mjs",
     "deploy:prod": "node scripts/deploy-prod.mjs",
+    "deploy:appwrite-functions": "node scripts/deploy-appwrite-functions.mjs",
     "deploy:supabase-functions": "node scripts/deploy-supabase-functions.mjs",
     "validate:health-check": "node scripts/validate-health-check.mjs",
     "check:payment-system": "node scripts/check-payment-system.mjs"

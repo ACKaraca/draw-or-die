@@ -101,7 +101,11 @@ function resolveServerApiKey(): string {
   const localFileKey = readLocalEnvValue('APPWRITE_API_KEY').trim();
 
   if (process.env.NODE_ENV === 'development' && localFileKey && processKey && localFileKey !== processKey) {
-    console.warn('[appwrite] APPWRITE_API_KEY mismatch detected in development. Using key from .env.development.local/.env.local.');
+    const warningState = globalThis as typeof globalThis & { __dodAppwriteApiKeyMismatchWarned?: boolean };
+    if (!warningState.__dodAppwriteApiKeyMismatchWarned) {
+      console.warn('[appwrite] APPWRITE_API_KEY mismatch detected in development. Using key from .env.development.local/.env.local.');
+      warningState.__dodAppwriteApiKeyMismatchWarned = true;
+    }
     return localFileKey;
   }
 
