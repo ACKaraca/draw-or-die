@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useDropHandler } from '@/hooks/useDropHandler';
@@ -13,7 +13,7 @@ import { TIER_DEFAULTS } from '@/lib/pricing';
 import { Header } from '@/components/Header';
 import { AuthModal } from '@/components/AuthModal';
 import { StepRouter } from '@/components/StepRouter';
-import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
+import { normalizeLanguage, pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 import type { StepType } from '@/types';
 
 /** Full-height pages that should start below the header instead of vertical centering */
@@ -41,8 +41,15 @@ const ROOT_PRESERVED_STEPS = new Set([
 export default function Home() {
   const router = useRouter();
   const pathname = usePathname();
-  const [routeHydrated, setRouteHydrated] = useState(false);
-  const [preferredLanguage, setPreferredLanguageState] = useState<SupportedLanguage>('tr');
+  const routeHydratedRef = useRef(false);
+  const [clientLanguage] = useState<SupportedLanguage>(() => {
+    if (typeof window === 'undefined') return 'tr';
+
+    const stored = window.localStorage.getItem('dod_preferred_language');
+    if (stored) return normalizeLanguage(stored, 'tr');
+
+    return normalizeLanguage(window.navigator.language, 'tr');
+  });
   const [multiJuryPromoActive, setMultiJuryPromoActive] = useState(false);
 
   // ---- Auth & rapido economy -----------------------------------------------
@@ -79,7 +86,7 @@ export default function Home() {
 
     // Keep in-memory result/upload flows stable when root route is used as a shell.
     if (path === '/' && route.step === 'hero' && ROOT_PRESERVED_STEPS.has(currentStep)) {
-      setRouteHydrated(true);
+      routeHydratedRef.current = true;
       return;
     }
 
@@ -91,25 +98,10 @@ export default function Home() {
       setStep(route.step);
     }
 
-    setRouteHydrated(true);
+    routeHydratedRef.current = true;
   }, [pathname, setCurrentGallery, setStep]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    const stored = window.localStorage.getItem('dod_preferred_language');
-    if (stored) {
-      setPreferredLanguageState(normalizeLanguage(stored, 'tr'));
-      return;
-    }
-
-    setPreferredLanguageState(normalizeLanguage(window.navigator.language, 'tr'));
-  }, []);
-
-  useEffect(() => {
-    if (!profile?.preferred_language) return;
-    setPreferredLanguageState(normalizeLanguage(profile.preferred_language, 'tr'));
-  }, [profile?.preferred_language]);
+  const preferredLanguage = normalizeLanguage(profile?.preferred_language, clientLanguage);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,38 +118,32 @@ export default function Home() {
     };
   }, []);
 
-  const runtimeCopy = preferredLanguage === 'en'
-    ? {
-      checkoutSuccess: 'Payment successful! Your Premium account is now active.',
-      checkoutCancelled: 'Payment cancelled. You can try again anytime.',
-      oauthFailed: 'Google sign-in could not be completed. Please try again.',
-    }
-    : preferredLanguage === 'de'
-      ? {
-        checkoutSuccess: 'Zahlung erfolgreich! Ihr Premium-Konto ist jetzt aktiv.',
-        checkoutCancelled: 'Zahlung abgebrochen. Sie können es jederzeit erneut versuchen.',
-        oauthFailed: 'Die Anmeldung mit Google konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
-      }
-      : preferredLanguage === 'it'
-        ? {
-          checkoutSuccess: 'Pagamento riuscito! Il tuo account Premium è ora attivo.',
-          checkoutCancelled: 'Pagamento annullato. Puoi riprovare in qualsiasi momento.',
-          oauthFailed: 'L’accesso con Google non è stato completato. Riprova.',
-        }
-        : {
-          checkoutSuccess: 'Ödeme başarılı! Premium hesabınız aktif edildi.',
-          checkoutCancelled: 'Ödeme iptal edildi. İstediğiniz zaman tekrar deneyebilirsiniz.',
-          oauthFailed: 'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
-        };
+  const runtimeCopy = {
+    checkoutSuccess: pickLocalized(
+      preferredLanguage,
+      'Ödeme başarılı! Premium hesabınız aktif edildi.',
+      'Payment successful! Your Premium account is now active.',
+    ),
+    checkoutCancelled: pickLocalized(
+      preferredLanguage,
+      'Ödeme iptal edildi. İstediğiniz zaman tekrar deneyebilirsiniz.',
+      'Payment cancelled. You can try again anytime.',
+    ),
+    oauthFailed: pickLocalized(
+      preferredLanguage,
+      'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
+      'Google sign-in could not be completed. Please try again.',
+    ),
+  };
 
   useEffect(() => {
-    if (!routeHydrated) return;
+    if (!routeHydratedRef.current) return;
 
     const nextPath = resolvePathFromStep(step, currentGallery);
     if ((pathname || '/') === nextPath) return;
 
     router.push(nextPath);
-  }, [currentGallery, pathname, routeHydrated, router, step]);
+  }, [currentGallery, pathname, router, step]);
 
   // ---- Stripe redirect handling --------------------------------------------
   useEffect(() => {
@@ -174,18 +160,24 @@ export default function Home() {
     } else if (authStatus === 'oauth_failed') {
       let errStr = params.get('error_description') || params.get('error') || params.get('code') || '';
       if (errStr) {
-        try { errStr = decodeURIComponent(errStr); } catch (e) { /* ignore */ }
+        try {
+          errStr = decodeURIComponent(errStr);
+        } catch {
+          // Keep the raw error message when decoding fails.
+        }
       }
-      
+
       const isAccountExists = errStr.toLowerCase().includes('already exists') || errStr.toLowerCase().includes('conflict');
-      const detailMsg = isAccountExists 
-          ? (preferredLanguage === 'en' ? ' Account already exists. Please login using email and password.' : ' Bu email ile kayıtlı normal bir hesap mevcut. Lütfen şifrenizle giriş yapın.')
-          : (errStr ? ` (${errStr})` : '');
-          
+      const detailMsg = isAccountExists
+        ? pickLocalized(
+          preferredLanguage,
+          ' Bu e-posta ile kayıtlı normal bir hesap mevcut. Lütfen şifrenizle giriş yapın.',
+          ' Account already exists. Please log in with email and password.',
+        )
+        : (errStr ? ` (${errStr})` : '');
       addToast(runtimeCopy.oauthFailed + detailMsg, 'error', 7000);
       window.history.replaceState({}, '', window.location.pathname);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshProfile, runtimeCopy.checkoutCancelled, runtimeCopy.checkoutSuccess, runtimeCopy.oauthFailed, setCheckoutMessage, addToast, preferredLanguage]);
 
   // Capture uncaught browser errors and mirror them into server-side site logs.
@@ -230,9 +222,10 @@ export default function Home() {
     if (saved) {
       try {
         setFormData(JSON.parse(saved));
-      } catch (e) { /* ignore */ }
+      } catch {
+        // Ignore malformed local storage contents.
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     localStorage.setItem('drawOrDieSettings', JSON.stringify(formData));
@@ -340,3 +333,4 @@ export default function Home() {
     </div>
   );
 }
+
