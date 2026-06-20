@@ -329,6 +329,9 @@ function CanvasEditor({ pageId, portfolioId, initialLayout, onSave, getJWT }: Ca
     try {
       const cvs = await html2canvas(canvasRef.current, { scale: 2, useCORS: true });
       const url = cvs.toDataURL('image/png');
+      if (!url.startsWith('data:image/')) {
+        throw new Error('Security check failed: Invalid data URL');
+      }
       const a = document.createElement('a');
       a.href = url;
       a.download = `portfolio-page-${pageId}.png`;

@@ -166,6 +166,9 @@ export function PremiumResultStep({
     try {
       const canvas = await html2canvas(exportRef.current, { backgroundColor: '#0A0F1A', scale });
       const dataUrl = canvas.toDataURL('image/png');
+      if (!dataUrl.startsWith('data:image/')) {
+        throw new Error('Security check failed: Invalid data URL');
+      }
       const link = document.createElement('a');
       link.download = `draw-or-die-kirmizi-kalem-pafta-${activePage}${scale > 1 ? '-high' : ''}.png`;
       link.href = dataUrl;
