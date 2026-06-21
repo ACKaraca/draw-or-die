@@ -167,7 +167,12 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
         );
       }
 
-      window.location.href = payload.url;
+      const redirectUrl = new URL(payload.url, window.location.origin);
+      if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+        throw new Error(pickLocalized(language, 'Geçersiz yönlendirme adresi.', 'Invalid redirect URL.'));
+      }
+
+      window.location.href = redirectUrl.toString();
     } catch (portalError) {
       setError(
         portalError instanceof Error

@@ -185,7 +185,11 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
             });
             const data = await res.json();
             if (data.url) {
-                window.location.href = data.url;
+                const redirectUrl = new URL(data.url, window.location.origin);
+                if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
+                    throw new Error(pickLocalized(language, 'Geçersiz yönlendirme adresi.', 'Invalid redirect URL.'));
+                }
+                window.location.href = redirectUrl.toString();
             } else {
                 if (data.code === 'INVALID_PROMO_CODE') {
                     setPromoValidationId('');
