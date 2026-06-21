@@ -1,4 +1,5 @@
 'use client';
+import { safeRedirect } from '@/lib/utils';
 
 import { motion } from 'framer-motion';
 import { Crown, PenTool, Shield, Brain, Users, Palette, ArrowLeft, Sparkles, GraduationCap } from 'lucide-react';
@@ -185,11 +186,7 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
             });
             const data = await res.json();
             if (data.url) {
-                const redirectUrl = new URL(data.url, window.location.origin);
-                if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
-                    throw new Error(pickLocalized(language, 'Geçersiz yönlendirme adresi.', 'Invalid redirect URL.'));
-                }
-                window.location.href = redirectUrl.toString();
+                window.location.href = safeRedirect(data.url, language);
             } else {
                 if (data.code === 'INVALID_PROMO_CODE') {
                     setPromoValidationId('');

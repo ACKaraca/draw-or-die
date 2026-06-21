@@ -1,4 +1,5 @@
 'use client';
+import { safeRedirect } from '@/lib/utils';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -167,12 +168,7 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
         );
       }
 
-      const redirectUrl = new URL(payload.url, window.location.origin);
-      if (redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:') {
-        throw new Error(pickLocalized(language, 'Geçersiz yönlendirme adresi.', 'Invalid redirect URL.'));
-      }
-
-      window.location.href = redirectUrl.toString();
+      window.location.href = safeRedirect(payload.url, language);
     } catch (portalError) {
       setError(
         portalError instanceof Error
