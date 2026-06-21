@@ -1,4 +1,5 @@
 'use client';
+import { safeRedirect } from '@/lib/utils';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -167,7 +168,7 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
         );
       }
 
-      window.location.href = payload.url;
+      window.location.href = safeRedirect(payload.url, language);
     } catch (portalError) {
       setError(
         portalError instanceof Error

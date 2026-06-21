@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { AppwriteAuthUser } from '@/lib/appwrite/server';
+import type { NextRequest } from 'next/server';
 import { ID, Query } from 'node-appwrite';
 import { createHash, randomUUID } from 'crypto';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
@@ -30,7 +32,6 @@ import {
   getOrCreateProfile,
   updateProfileById,
 } from '@/lib/appwrite/server';
-import type { AppwriteAuthUser } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import {
   normalizeLanguage,

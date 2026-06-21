@@ -172,7 +172,7 @@ describe('Payment Security - Draw-or-Die', () => {
       }
     };
 
-    const appUrl = 'https://drawor-die.com';
+    const _appUrl = 'https://drawor-die.com';
     const localhost = 'http://localhost:3000';
     
     // Valid origin
@@ -237,7 +237,7 @@ describe('Payment Security - Draw-or-Die', () => {
    * Prevents user from paying for someone else's account
    */
   it('should use authenticated user email, not request parameter', () => {
-    const getCheckoutEmail = (authenticatedUserEmail: string, requestBody?: { email?: string }) => {
+    const getCheckoutEmail = (authenticatedUserEmail: string, _requestBody?: { email?: string }) => {
       // Always use authenticated user, never trust request body
       return authenticatedUserEmail;
     };
