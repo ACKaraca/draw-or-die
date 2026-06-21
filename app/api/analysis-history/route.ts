@@ -115,32 +115,39 @@ async function purgeExpiredDeletedRowsForUser(userId: string): Promise<void> {
     return;
   }
 
+  const allFileIds = new Set<string>();
+  const allRowIds: string[] = [];
+
   for (const row of result.rows) {
-    const fileIds = new Set<string>();
     const previewId = extractFileIdFromUrl(row.preview_url || '');
     const sourceId = extractFileIdFromUrl(row.source_url || '');
-    if (previewId) fileIds.add(previewId);
-    if (sourceId) fileIds.add(sourceId);
+    if (previewId) allFileIds.add(previewId);
+    if (sourceId) allFileIds.add(sourceId);
+    allRowIds.push(row.$id);
+  }
 
-    await Promise.allSettled(
-      [...fileIds].map((fileId) =>
-        storage.deleteFile({
-          bucketId: APPWRITE_BUCKET_GALLERY_ID,
-          fileId,
-        }),
-      ),
-    );
+  // Execute all storage deletions concurrently
+  await Promise.allSettled(
+    [...allFileIds].map((fileId) =>
+      storage.deleteFile({
+        bucketId: APPWRITE_BUCKET_GALLERY_ID,
+        fileId,
+      }),
+    ),
+  );
 
-    try {
-      await tables.deleteRow({
+  // Execute all row deletions concurrently
+  await Promise.allSettled(
+    allRowIds.map((rowId) =>
+      tables.deleteRow({
         databaseId: APPWRITE_DATABASE_ID,
         tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
-        rowId: row.$id,
-      });
-    } catch {
-      // ignore deleted row races
-    }
-  }
+        rowId,
+      }).catch(() => {
+        // ignore deleted row races
+      }),
+    ),
+  );
 }
 
 async function listAnalysisHistoryRows(
