@@ -76,6 +76,9 @@ export function ResultStep({
             try {
                 const canvas = await html2canvas(exportRef.current, { backgroundColor: '#0A0F1A' });
                 const dataUrl = canvas.toDataURL('image/png');
+                if (!dataUrl.startsWith('data:image/')) {
+                    throw new Error('Security check failed: Invalid data URL');
+                }
                 const link = document.createElement('a');
                 link.download = 'draw-or-die-roast.png';
                 link.href = dataUrl;
