@@ -24,6 +24,10 @@ describe('pricing', () => {
       DEFENSE: 4,
       AI_MENTOR: 1,
       PREMIUM_RESCUE: 6,
+      DRAWING_CONSISTENCY: 3,
+      CIRCULATION_ADJACENCY: 3,
+      ACCESSIBILITY_EGRESS: 4,
+      SKILL_ROADMAP: 3,
     });
     expect(RAPIDO_COSTS.SINGLE_JURY).toBe(4);
     expect(RAPIDO_COSTS.REVISION_SAME).toBe(1);

@@ -8,6 +8,11 @@ import type { Badge } from '@/types';
 import { logServerError } from '@/lib/logger';
 import { ensureAtLeastTwoParagraphs, normalizeCritiqueText } from '@/lib/critique';
 import {
+  DESIGN_INSIGHT_RESPONSE_FORMAT,
+  buildDesignInsightPrompt,
+  isDesignInsightOperation,
+} from '@/lib/design-insights';
+import {
   MENTOR_TOKEN_LIMITS,
   estimateTokenCount,
 } from '@/lib/mentor-limits';
@@ -80,7 +85,10 @@ function resolveAiModelForOperation(operation: string): string {
     operation === 'MATERIAL_BOARD' ||
     operation === 'SINGLE_JURY' ||
     operation === 'MULTI_JURY' ||
-    operation === 'REVISION_SAME'
+    operation === 'REVISION_SAME' ||
+    operation === 'DRAWING_CONSISTENCY' ||
+    operation === 'CIRCULATION_ADJACENCY' ||
+    operation === 'ACCESSIBILITY_EGRESS'
   ) {
     return analysisModel;
   }
@@ -89,7 +97,12 @@ function resolveAiModelForOperation(operation: string): string {
     return readFirstCleanEnv(['AI_MODEL_MENTOR', 'AI_MODEL_MENTOR_VISION']) || defaultModel;
   }
 
-  if (operation === 'DEFENSE' || operation === 'AUTO_CONCEPT' || operation === 'AUTO_FILL_FORM') {
+  if (
+    operation === 'DEFENSE' ||
+    operation === 'AUTO_CONCEPT' ||
+    operation === 'AUTO_FILL_FORM' ||
+    operation === 'SKILL_ROADMAP'
+  ) {
     return lowCostModel;
   }
 
@@ -306,6 +319,10 @@ const IMAGE_REQUIRED_OPERATIONS = new Set([
   'AUTO_CONCEPT',
   'MATERIAL_BOARD',
   'AUTO_FILL_FORM',
+  'DRAWING_CONSISTENCY',
+  'CIRCULATION_ADJACENCY',
+  'ACCESSIBILITY_EGRESS',
+  'SKILL_ROADMAP',
 ]);
 const FILE_CACHE_ELIGIBLE_OPERATIONS = new Set(
   Array.from(IMAGE_REQUIRED_OPERATIONS).filter((operation) => operation !== 'AI_MENTOR'),
@@ -407,6 +424,7 @@ async function callAI(
   fileMimeType?: string,
   additionalFiles: PromptFileInput[] = [],
   language: SupportedLanguage = 'tr',
+  responseFormat?: Record<string, unknown>,
 ): Promise<AICompletionResult> {
   const content: ContentPart[] = [];
 
@@ -438,14 +456,16 @@ async function callAI(
   const endpoint = `${validatedBaseUrl}/chat/completions`;
   const isVercelGateway = aiHostname === 'ai-gateway.vercel.sh';
   const isGoogleDirect = aiHostname === 'generativelanguage.googleapis.com';
-  const responseFormatApplied = !isVercelGateway && !isGoogleDirect;
+  const responseFormatApplied = Boolean(responseFormat) || (!isVercelGateway && !isGoogleDirect);
 
   const buildRequestBody = (model: string): Record<string, unknown> => {
     const requestBody: Record<string, unknown> = {
       model,
       messages: [{ role: 'user', content }],
     };
-    if (responseFormatApplied) {
+    if (responseFormat) {
+      requestBody.response_format = responseFormat;
+    } else if (responseFormatApplied) {
       requestBody.response_format = { type: 'json_object' };
     }
     return requestBody;
@@ -3591,6 +3611,53 @@ export async function POST(request: NextRequest) {
         status: nextStatus,
         chatId,
         quickActions: finalQuickActions,
+      });
+    } else if (isDesignInsightOperation(operation)) {
+      const prompt = buildDesignInsightPrompt(operation, promptPayload);
+      const rawResult = (
+        await callAI(
+          cfg,
+          prompt,
+          aiPrimaryFileBase64,
+          aiPrimaryFileMimeType,
+          aiAdditionalPromptFiles,
+          requestLanguage,
+          DESIGN_INSIGHT_RESPONSE_FORMAT,
+        )
+      ).content;
+      const parsed = safeParseJson<{ critique?: unknown; score?: unknown }>(rawResult, {});
+      const critique = ensureAtLeastTwoParagraphs(
+        normalizeCritiqueText(typeof parsed.critique === 'string' ? parsed.critique : ''),
+        'en',
+      );
+
+      if (!critique) {
+        return respond(
+          {
+            error: pickLocalized(
+              requestLanguage,
+              'Tasarım denetimi doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Design diagnostic could not be validated. Rapido was not charged; try again.',
+            ),
+            code: 'INVALID_AI_RESULT',
+          },
+          502,
+        );
+      }
+
+      const score = typeof parsed.score === 'number' && Number.isFinite(parsed.score)
+        ? Math.max(0, Math.min(100, parsed.score))
+        : 0;
+      const finalCritique = operation === 'ACCESSIBILITY_EGRESS'
+        ? `> Preliminary visual check only; not a code-compliance certification.\n\n${critique}`
+        : critique;
+
+      result = JSON.stringify({ critique: finalCritique, score });
+      cacheSummaryForUpsert = finalCritique;
+      cacheTitleForUpsert = typeof payload.topic === 'string' ? payload.topic.trim().substring(0, 120) : '';
+      gameStateResult = await applyGameStateUpdate(user.id, typedProfile, {
+        progressionDelta: 3,
+        critiqueText: finalCritique,
       });
     } else if (operation === 'AUTO_CONCEPT' || operation === 'MATERIAL_BOARD') {
       const prompt = operation === 'AUTO_CONCEPT'

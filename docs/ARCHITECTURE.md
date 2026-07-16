@@ -145,6 +145,10 @@ All AI interactions enforce structured JSON outputs from the LLM. The system dyn
    - `MULTI_JURY`: Instructs the LLM to output three distinct critique nodes representing different sub-personas.
    - `PREMIUM_RESCUE`: Requires bounding-box spatial reasoning. The LLM must return an array of flaws with relative `x, y, width, height` coordinates and practical repair solutions.
    - `DEFENSE`: A stateful, multi-turn chat where the LLM argues back against the user's defense of their project.
+   - `DRAWING_CONSISTENCY`: Compares plans, sections, elevations, labels, grids, dimensions, and levels across uploaded files.
+   - `CIRCULATION_ADJACENCY`: Reviews route hierarchy, dead ends, vertical circulation, wayfinding, and program adjacencies.
+   - `ACCESSIBILITY_EGRESS`: Performs an advisory visual pre-check without claiming regulatory certification.
+   - `SKILL_ROADMAP`: Builds a 30-day practice plan from the current critique and recent analysis-memory snippets.
 4. **Validation**: The Edge Function relies on the LLM's JSON mode but parses and validates the payload before passing it to the frontend.
 
 ---

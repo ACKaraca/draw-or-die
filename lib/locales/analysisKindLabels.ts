@@ -15,6 +15,14 @@ export function analysisKindLabel(kind: string, language: SupportedLanguage): st
       return pickLocalized(language, 'Konsept Üretimi', 'Concept generation');
     case 'MATERIAL_BOARD':
       return pickLocalized(language, 'Malzeme Paftası', 'Material board');
+    case 'DRAWING_CONSISTENCY':
+      return pickLocalized(language, 'Çizim Tutarlılığı', 'Drawing consistency');
+    case 'CIRCULATION_ADJACENCY':
+      return pickLocalized(language, 'Dolaşım ve Komşuluk', 'Circulation and adjacency');
+    case 'ACCESSIBILITY_EGRESS':
+      return pickLocalized(language, 'Erişilebilirlik ve Kaçış Ön Kontrolü', 'Accessibility and egress pre-check');
+    case 'SKILL_ROADMAP':
+      return pickLocalized(language, 'Kişisel Beceri Rotası', 'Personal skill roadmap');
     default:
       return kind.replace(/_/g, ' ');
   }

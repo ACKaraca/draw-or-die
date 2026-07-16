@@ -290,7 +290,7 @@ Core AI jury analysis endpoint. Handles authentication, Rapido deduction, LLM pr
 **Body:**
 ```json
 {
-  "operation": "SINGLE_JURY" | "PREMIUM_RESCUE" | "REVISION_SAME" | "REVISION_DIFFERENT" | "MULTI_JURY" | "MULTI_JURY_REVISION" | "DEFENSE" | "AI_MENTOR" | "AUTO_CONCEPT" | "MATERIAL_BOARD",
+  "operation": "SINGLE_JURY" | "PREMIUM_RESCUE" | "REVISION_SAME" | "REVISION_DIFFERENT" | "MULTI_JURY" | "MULTI_JURY_REVISION" | "DEFENSE" | "AI_MENTOR" | "AUTO_CONCEPT" | "MATERIAL_BOARD" | "DRAWING_CONSISTENCY" | "CIRCULATION_ADJACENCY" | "ACCESSIBILITY_EGRESS" | "SKILL_ROADMAP",
   "imageBase64": "base64_encoded_image_data",
   "imageMimeType": "image/jpeg" | "image/png" | "application/pdf",
   "params": {
@@ -302,6 +302,7 @@ Core AI jury analysis endpoint. Handles authentication, Rapido deduction, LLM pr
     "userMessage": "string",
     "chatHistory": "string",
     "turnCount": 0-3,
+    "currentCritique": "string",
     "analysisLength": "SHORT" | "MEDIUM" | "LONG" | "WORD_TARGET",
     "singlePersonaId": "constructive" | "structural" | "conceptual" | "grumpy" | "contextualist" | "sustainability",
     "multiPersonaIds": ["string"]
@@ -317,6 +318,8 @@ Core AI jury analysis endpoint. Handles authentication, Rapido deduction, LLM pr
 5. Calls the LLM with strict `application/json` response mode.
 6. Updates `game_state` (progression score, badges) if applicable.
 7. Deducts Rapido and returns the result.
+
+Design insight operations return `{ "critique": "string", "score": number }`. `ACCESSIBILITY_EGRESS` is an advisory visual pre-check, not a code-compliance certification. `SKILL_ROADMAP` combines `currentCritique` with the authenticated user's recent analysis-memory snippets.
 
 **Response (200):**
 ```json

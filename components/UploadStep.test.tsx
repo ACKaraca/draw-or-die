@@ -34,6 +34,7 @@ describe('UploadStep', () => {
         handleMultiAnalyze={jest.fn()}
         handleAutoConcept={jest.fn()}
         handleMaterialBoard={jest.fn()}
+        handleDesignInsight={jest.fn()}
         image={null}
         imageBase64={null}
         additionalUploads={[]}
@@ -60,6 +61,7 @@ describe('UploadStep', () => {
     const handleMultiAnalyze = jest.fn();
     const handleAutoConcept = jest.fn();
     const handleMaterialBoard = jest.fn();
+    const handleDesignInsight = jest.fn();
 
     render(
       <UploadStep
@@ -74,6 +76,7 @@ describe('UploadStep', () => {
         handleMultiAnalyze={handleMultiAnalyze}
         handleAutoConcept={handleAutoConcept}
         handleMaterialBoard={handleMaterialBoard}
+        handleDesignInsight={handleDesignInsight}
         image={new File(['x'], 'design.png', { type: 'image/png' })}
         imageBase64={'encoded-image'}
         additionalUploads={[]}
@@ -93,11 +96,17 @@ describe('UploadStep', () => {
     fireEvent.click(screen.getByRole('button', { name: /çoklu jüri \(3 persona\)/i }));
     fireEvent.click(screen.getByRole('button', { name: /konsept analizi ve önerisi|concept analysis/i }));
     fireEvent.click(screen.getByRole('button', { name: /malzeme analizi/i }));
+    fireEvent.click(screen.getByRole('button', { name: /çizim tutarlılığını denetle|check drawing consistency/i }));
+    fireEvent.click(screen.getByRole('button', { name: /dolaşımı denetle|check circulation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /erişilebilirliği ön kontrol et|pre-check accessibility/i }));
 
     expect(handleAnalyze).toHaveBeenCalledTimes(1);
     expect(handleMultiAnalyze).toHaveBeenCalledTimes(1);
     expect(handleAutoConcept).toHaveBeenCalledTimes(1);
     expect(handleMaterialBoard).toHaveBeenCalledTimes(1);
+    expect(handleDesignInsight).toHaveBeenNthCalledWith(1, 'DRAWING_CONSISTENCY');
+    expect(handleDesignInsight).toHaveBeenNthCalledWith(2, 'CIRCULATION_ADJACENCY');
+    expect(handleDesignInsight).toHaveBeenNthCalledWith(3, 'ACCESSIBILITY_EGRESS');
   });
 
   it('keeps analysis disabled while upload payload is still processing', () => {
@@ -116,6 +125,7 @@ describe('UploadStep', () => {
         handleMultiAnalyze={jest.fn()}
         handleAutoConcept={jest.fn()}
         handleMaterialBoard={jest.fn()}
+        handleDesignInsight={jest.fn()}
         image={new File(['x'], 'design.pdf', { type: 'application/pdf' })}
         imageBase64={null}
         additionalUploads={[]}

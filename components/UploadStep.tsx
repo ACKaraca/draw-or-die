@@ -11,6 +11,9 @@ import {
   Sparkles,
   Wand2,
   X,
+  ScanLine,
+  Route,
+  Accessibility,
 } from 'lucide-react';
 import { AnalysisLengthOption, FormData, JuryPersonaId } from '@/types';
 import { RAPIDO_COSTS, TIER_DEFAULTS } from '@/lib/pricing';
@@ -28,6 +31,7 @@ import {
 } from '@/lib/locales/uploadForm';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import type { AdditionalUpload } from '@/stores/drawOrDieStore';
+import type { DesignInsightOperation } from '@/lib/design-insights';
 
 type AutoFillFields = {
   topic: boolean;
@@ -59,6 +63,7 @@ interface UploadStepProps {
   handleMultiAnalyze: () => void;
   handleAutoConcept: () => void;
   handleMaterialBoard: () => void;
+  handleDesignInsight: (operation: DesignInsightOperation) => void;
   image: File | null;
   imageBase64: string | null;
   additionalUploads: Array<{ name: string; mimeType: string; sizeBytes: number; base64?: string }>;
@@ -140,6 +145,7 @@ export function UploadStep({
   handleMultiAnalyze,
   handleAutoConcept,
   handleMaterialBoard,
+  handleDesignInsight,
   image,
   imageBase64,
   additionalUploads,
@@ -1130,6 +1136,53 @@ export function UploadStep({
                     </>
                   )}
                 </button>
+              </div>
+            )}
+
+            {!isRevisionMode && (
+              <div className="mt-3 border-t border-white/10 pt-3">
+                <div className="mb-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em] text-slate-400">
+                  <span>◇</span>
+                  {pickLocalized(language, 'Tasarım Denetimleri', 'Design checks')}
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={() => isAuthenticated ? handleDesignInsight('DRAWING_CONSISTENCY') : onAuthRequired()}
+                    disabled={isAuthenticated ? !canRunAnalysis : false}
+                    className="min-h-20 rounded-lg border border-white/10 bg-black/20 px-3 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200 transition-colors hover:border-white/20 hover:bg-white/5 disabled:cursor-not-allowed disabled:text-white/30"
+                  >
+                    <ScanLine className="mx-auto mb-2" size={16} strokeWidth={1.5} />
+                    {pickLocalized(language, 'Çizim Tutarlılığını Denetle', 'Check Drawing Consistency')}
+                    <span className="mt-1 block text-neon-red">
+                      ({RAPIDO_COSTS.DRAWING_CONSISTENCY} Rapido)
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => isAuthenticated ? handleDesignInsight('CIRCULATION_ADJACENCY') : onAuthRequired()}
+                    disabled={isAuthenticated ? !canRunAnalysis : false}
+                    className="min-h-20 rounded-lg border border-white/10 bg-black/20 px-3 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200 transition-colors hover:border-white/20 hover:bg-white/5 disabled:cursor-not-allowed disabled:text-white/30"
+                  >
+                    <Route className="mx-auto mb-2" size={16} strokeWidth={1.5} />
+                    {pickLocalized(language, 'Dolaşımı Denetle', 'Check Circulation')}
+                    <span className="mt-1 block text-neon-red">
+                      ({RAPIDO_COSTS.CIRCULATION_ADJACENCY} Rapido)
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => isAuthenticated ? handleDesignInsight('ACCESSIBILITY_EGRESS') : onAuthRequired()}
+                    disabled={isAuthenticated ? !canRunAnalysis : false}
+                    className="min-h-20 rounded-lg border border-white/10 bg-black/20 px-3 py-3 font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-200 transition-colors hover:border-white/20 hover:bg-white/5 disabled:cursor-not-allowed disabled:text-white/30"
+                  >
+                    <Accessibility className="mx-auto mb-2" size={16} strokeWidth={1.5} />
+                    {pickLocalized(language, 'Erişilebilirliği Ön Kontrol Et', 'Pre-check Accessibility')}
+                    <span className="mt-1 block text-neon-red">
+                      ({RAPIDO_COSTS.ACCESSIBILITY_EGRESS} Rapido)
+                    </span>
+                  </button>
+                </div>
               </div>
             )}
 
