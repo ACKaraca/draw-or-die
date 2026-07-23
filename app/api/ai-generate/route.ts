@@ -3326,7 +3326,7 @@ export async function POST(request: NextRequest) {
         tableId: APPWRITE_TABLE_MENTOR_MESSAGES_ID,
         queries: [
           Query.equal('chat_id', chatId),
-          Query.orderDesc('createdAt'),
+          Query.orderDesc('$createdAt'),
           Query.limit(14),
         ],
       });
