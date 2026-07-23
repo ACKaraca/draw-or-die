@@ -45,10 +45,14 @@ Kullanıcı yolculuğu:
 | `MULTI_JURY` | 3 persona eş zamanlı analiz (Premium) | 10 |
 | `MULTI_JURY_REVISION` | Çoklu jüri revizyon (Premium) | 2 |
 | `PREMIUM_RESCUE` | Pafta üzerinde kusur tespiti + çözüm | 6 |
-| `AUTO_CONCEPT` | Otomatik konsept üretimi | 5 |
+| `AUTO_CONCEPT` | Otomatik konsept üretimi | 2 |
 | `MATERIAL_BOARD` | Malzeme analizi (Premium) | 3 |
 | `DEFENSE` | Jüri savunması chat (Premium) | 4/tur |
 | `AI_MENTOR` | AI Mentor mesajı (Premium) | 1/mesaj |
+| `DRAWING_CONSISTENCY` | Plan-kesit-görünüş tutarlılık denetimi | 3 |
+| `CIRCULATION_ADJACENCY` | Dolaşım ve program komşuluğu analizi | 3 |
+| `ACCESSIBILITY_EGRESS` | Erişilebilirlik ve kaçış görsel ön kontrolü | 4 |
+| `SKILL_ROADMAP` | Kritik geçmişinden 30 günlük beceri rotası | 3 |
 
 ### Jüri Personaları
 - **Constructive** — Yapıcı, gelişim odaklı
@@ -274,6 +278,12 @@ AI, pafta üzerindeki problemleri bounding-box koordinatlarıyla işaretler ve h
 
 ### AI Mentor (`AI_MENTOR`) — Premium
 Serbest format mimarlık danışmanı. Token bazlı Rapido faturalandırması.
+
+### Tasarım Denetimleri
+Studio Desk; çoklu paftalarda plan-kesit-görünüş tutarlılığını, dolaşım ve program komşuluklarını, ayrıca görünür erişilebilirlik ve kaçış risklerini ayrı Rapido operasyonlarıyla inceler. Erişilebilirlik çıktısı yalnızca görsel ön kontroldür; resmî mevzuat uygunluk belgesi değildir.
+
+### Kişisel Beceri Rotası (`SKILL_ROADMAP`)
+Mevcut rapor ile son analiz hafızasını birleştirerek üç odak alanına ayrılmış, ölçülebilir 30 günlük çalışma planı üretir.
 
 ---
 

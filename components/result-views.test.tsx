@@ -47,6 +47,8 @@ function baseResultProps(overrides: Partial<React.ComponentProps<typeof ResultSt
     defenseInput: '',
     setDefenseInput: jest.fn(),
     handleDefenseSubmit: jest.fn(),
+    latestAnalysisKind: 'SINGLE_JURY',
+    handleDesignInsight: jest.fn(),
     isAnonymous: true,
     guestDrawingCount: 0,
     showGuestUpgradePrompt: false,
@@ -165,6 +167,26 @@ describe('result views', () => {
 
     fireEvent.click(screen.getByText('Analizi Koru (1.5 Rapido)'));
     expect(handlePreserveAnalysis).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a focused diagnostic report and can build a skill roadmap', () => {
+    const handleDesignInsight = jest.fn();
+
+    render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+          latestAnalysisKind: 'ACCESSIBILITY_EGRESS',
+          handleDesignInsight,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Erişilebilirlik ve Kaçış Ön Kontrolü')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-defense')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /beceri rotamı oluştur/i }));
+    expect(handleDesignInsight).toHaveBeenCalledWith('SKILL_ROADMAP');
   });
 
   it('calls preserve handler from multi result step action', () => {

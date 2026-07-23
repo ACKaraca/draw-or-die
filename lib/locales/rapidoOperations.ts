@@ -23,6 +23,14 @@ export function rapidoCostOperationLabel(key: string, language: SupportedLanguag
       return pickLocalized(language, 'AI Mentor', 'AI Mentor');
     case 'PREMIUM_RESCUE':
       return pickLocalized(language, 'Premium Rescue', 'Premium Rescue');
+    case 'DRAWING_CONSISTENCY':
+      return pickLocalized(language, 'Çizim tutarlılığı', 'Drawing consistency');
+    case 'CIRCULATION_ADJACENCY':
+      return pickLocalized(language, 'Dolaşım ve komşuluk', 'Circulation and adjacency');
+    case 'ACCESSIBILITY_EGRESS':
+      return pickLocalized(language, 'Erişilebilirlik ve kaçış', 'Accessibility and egress');
+    case 'SKILL_ROADMAP':
+      return pickLocalized(language, 'Kişisel beceri rotası', 'Personal skill roadmap');
     default:
       return key.replace(/_/g, ' ');
   }
