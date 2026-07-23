@@ -2351,7 +2351,7 @@ async function applyGameStateUpdate(
   const critiqueLC = (updates.critiqueText ?? '').toLowerCase();
   const conceptLC = (updates.conceptText ?? '').toLowerCase();
 
-  if ((conceptLC.includes('beton') || critiqueLC.includes('beton')) && !hasBadge('concrete_lover')) {
+  if ((conceptLC.includes('beton') || critiqueLC.includes('beton') || conceptLC.includes('concrete') || critiqueLC.includes('concrete')) && !hasBadge('concrete_lover')) {
     const badge: Badge = {
       id: 'concrete_lover',
       name: 'Betonarme Asigi',
@@ -2363,7 +2363,7 @@ async function applyGameStateUpdate(
     awardedNow.push(badge);
   }
 
-  if ((conceptLC.includes('sirkulasyon') || critiqueLC.includes('sirkulasyon')) && !hasBadge('circulation_master')) {
+  if ((conceptLC.includes('sirkulasyon') || critiqueLC.includes('sirkulasyon') || conceptLC.includes('circulation') || critiqueLC.includes('circulation') || conceptLC.includes('flow') || critiqueLC.includes('flow')) && !hasBadge('circulation_master')) {
     const badge: Badge = {
       id: 'circulation_master',
       name: 'Sirkulasyon Ustasi',
@@ -3618,9 +3618,9 @@ export async function POST(request: NextRequest) {
         await callAI(
           cfg,
           prompt,
-          aiPrimaryFileBase64,
-          aiPrimaryFileMimeType,
-          aiAdditionalPromptFiles,
+          operation === 'SKILL_ROADMAP' ? undefined : aiPrimaryFileBase64,
+          operation === 'SKILL_ROADMAP' ? undefined : aiPrimaryFileMimeType,
+          operation === 'SKILL_ROADMAP' ? [] : aiAdditionalPromptFiles,
           requestLanguage,
           DESIGN_INSIGHT_RESPONSE_FORMAT,
         )
