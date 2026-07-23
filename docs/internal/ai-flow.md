@@ -11,7 +11,7 @@ This document outlines the end-to-end lifecycle of an AI analysis request in the
 
 ## 2. Hash Cache Behavior (`analysis_file_cache`)
 - **Deduplication:** The server computes a unique `file_hash` (often derived from base64 content and mimeType).
-- **Cache Lookup:** It checks the `analysis_file_cache` table using `Query.equal('file_hash', hashes)` to see if the file has been processed before.
+- **Cache Lookup:** It checks the `analysis_file_cache` table using `Query.equal('file_hash', uniqueHashes)` to see if the file has been processed before.
 - **Optimization:** If a file is known, the system reuses its extracted summary/context instead of forcing the AI to re-analyze the raw image from scratch, saving time and tokens.
 - **Cache Write:** After a new file is analyzed, its summary and hash are written back to the cache table for future use.
 
@@ -33,6 +33,6 @@ This document outlines the end-to-end lifecycle of an AI analysis request in the
 ## 5. Result & Persistence
 - The AI returns a structured JSON critique.
 - The server parses and validates this response.
-- **Persistence:** The result is saved to the `analysis_history` table.
+- **Persistence:** The structured result is returned to the frontend and persisted to the `analysis_history` table (and recovery endpoints).
 - **Gamification/Economy:** Rapido balance is deducted, and relevant stats (like progression score, Wall of Death count) are updated.
 - The JSON is returned to the frontend for display in the Result steps, where the user can read the feedback and optionally start a defense chat.

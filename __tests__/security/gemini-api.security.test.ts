@@ -42,13 +42,13 @@ describe('Gemini API Security - Draw-or-Die', () => {
       // Remove common prompt injection markers
       let sanitized = input
         .replace(/__(system|assistant|user)__/gi, '') // Remove marker tags
-        .replace(/[Ii]gnore\s+(all\s+)?previous\s+instructions?/gi, '') // Remove ignore patterns
+        .replace(/[Ii]gnore\s+(?:all\s+)?previous\s+instructions?/gi, '') // Remove ignore patterns
         .replace(/[Pp]retend\s+(you|I|we)\s+(are|is)/gi, '')
         .trim();
 
       // Limit length to prevent excessively long injection attempts
       if (sanitized.length > 5000) {
-        sanitized = sanitized.substring(0, 5000) + '...';
+        sanitized = `${sanitized.substring(0, 5000)}...`;
       }
 
       return sanitized;
@@ -161,7 +161,7 @@ __user__`;
    */
   it('should enforce timeout on Gemini API responses', async () => {
     const GEMINI_TIMEOUT_MS = 30000; // 30 seconds
-    const WARN_THRESHOLD_MS = 15000; // Warn if > 15 seconds
+    const _WARN_THRESHOLD_MS = 15000; // Warn if > 15 seconds
 
     const callGeminiWithTimeout = async (
       prompt: string,

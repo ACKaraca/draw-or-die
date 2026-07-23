@@ -115,7 +115,7 @@ describe('Gallery Data Privacy - Draw-or-Die', () => {
     const generatePaginationCursor = (
       submissionId: string,
       createdAt: Date,
-      salt: string
+      _salt: string
     ): string => {
       // Create opaque cursor from submission data, not user ID
       const data = `${submissionId}|${createdAt.getTime()}`;
@@ -244,7 +244,7 @@ describe('Gallery Data Privacy - Draw-or-Die', () => {
     const canModifySubmission = (
       submission: any,
       requestingUserId: string,
-      operation: 'read' | 'update' | 'delete'
+      _operation: 'read' | 'update' | 'delete'
     ): boolean => {
       // Unauthenticated users can't modify anything
       if (!requestingUserId) return false;

@@ -392,9 +392,9 @@ function canvasToConstrainedJpegBase64(source: HTMLCanvasElement): string | null
 
 function stripFence(value: string): string {
   return value
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/```$/i, '')
+    .replace(/^\s*```json\s*/i, '')
+    .replace(/^\s*```\s*/i, '')
+    .replace(/\s*```\s*$/i, '')
     .trim();
 }
 
