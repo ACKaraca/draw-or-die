@@ -42,8 +42,13 @@ These are used by `/api/ai-generate` to call the LLM.
 | `AI_API_KEY` | API key for the AI provider | — |
 | `AI_BASE_URL` | OpenAI-compatible endpoint base URL | `https://ai-gateway.vercel.sh/v1` |
 | `AI_MODEL` | Model identifier string | `google/gemini-3.1-flash-lite-preview` |
+| `AI_MODEL_ANALYSIS` | Shared model for `MATERIAL_BOARD`, `SINGLE_JURY`, `MULTI_JURY`, and `REVISION_SAME` | falls back to `AI_MODEL` |
+| `AI_MODEL_MENTOR` | Model for `AI_MENTOR`, including file-attached mentor requests | falls back to `AI_MODEL` |
+| `AI_MODEL_LOW_COST` | Lower-cost model for `DEFENSE`, `AUTO_CONCEPT`, and `AUTO_FILL_FORM` | falls back to `AI_MODEL` |
+| `AI_MODEL_PREMIUM_RESCUE` | Optional stronger model for `PREMIUM_RESCUE` coordinate rescue analysis | falls back to `AI_MODEL_ANALYSIS` |
 | `AI_MODEL_FALLBACKS` | Comma-separated fallback models when primary model is temporarily unavailable | `google/gemini-2.5-flash-lite` |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.ackaraca.me,https://drawordie.app` |
+| `NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED` | Enables the future client-side image-editing rescue path. Keep `false` until manually tested. | `false` |
 
 ## Security Rules
 

@@ -1,12 +1,14 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
 
 type LanguageEventDetail = {
   language?: string;
 };
+
+export const UI_LANGUAGE_STORAGE_KEY = 'dod_ui_language';
+export const LEGACY_LANGUAGE_STORAGE_KEY = 'dod_preferred_language';
 
 const LanguageContext = createContext<SupportedLanguage>('tr');
 
@@ -16,14 +18,31 @@ export function useLanguage(): SupportedLanguage {
 
 function resolveStoredLanguage(): SupportedLanguage {
   if (typeof window !== 'undefined') {
-    const fromStorage = normalizeLanguage(window.localStorage.getItem('dod_preferred_language'), undefined);
-    if (fromStorage) return fromStorage;
+    const storedLanguage = window.localStorage.getItem(UI_LANGUAGE_STORAGE_KEY);
+    if (storedLanguage) return normalizeLanguage(storedLanguage, 'tr');
 
-    const fromNavigator = normalizeLanguage(window.navigator.language, undefined);
-    if (fromNavigator) return fromNavigator;
+    const legacyStoredLanguage = window.localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
+    if (legacyStoredLanguage) {
+      const fromLegacyStorage = normalizeLanguage(legacyStoredLanguage, 'tr');
+      window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, fromLegacyStorage);
+      window.localStorage.removeItem(LEGACY_LANGUAGE_STORAGE_KEY);
+      return fromLegacyStorage;
+    }
+
+    return normalizeLanguage(window.navigator.language, 'tr');
   }
 
   return 'tr';
+}
+
+export function setStoredUiLanguage(language: SupportedLanguage): void {
+  if (typeof window === 'undefined') return;
+
+  const nextLanguage = normalizeLanguage(language, 'tr');
+  window.localStorage.setItem(UI_LANGUAGE_STORAGE_KEY, nextLanguage);
+  window.dispatchEvent(new CustomEvent<LanguageEventDetail>('dod-language-change', {
+    detail: { language: nextLanguage },
+  }));
 }
 
 interface RuntimeTextLocalizerProps {
@@ -31,15 +50,14 @@ interface RuntimeTextLocalizerProps {
 }
 
 export function RuntimeTextLocalizer({ children }: RuntimeTextLocalizerProps) {
-  const { profile } = useAuth();
   const [clientLanguage, setClientLanguage] = useState<SupportedLanguage>(() => resolveStoredLanguage());
-  const language = normalizeLanguage(profile?.preferred_language, clientLanguage);
+  const language = clientLanguage;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== 'dod_preferred_language') return;
+      if (event.key !== UI_LANGUAGE_STORAGE_KEY) return;
       setClientLanguage(normalizeLanguage(event.newValue, 'tr'));
     };
 

@@ -243,6 +243,7 @@ export function StepRouter({
           previewUrl={previewUrl}
           mimeType={mimeType}
           handleNewProject={startNewProject}
+          handlePremium={handlePremium}
           handlePreserveAnalysis={handlePreserveAnalysis}
           handleShareToCommunity={handleShareToCommunity}
         />
