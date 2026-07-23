@@ -11,9 +11,13 @@ import {
   getAdminTables,
   getAuthenticatedUserFromRequest,
 } from '@/lib/appwrite/server';
-import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
-import { getProfileStatsCache, setProfileStatsCache } from '@/lib/profile-stats-cache';
+import {
+  getProfileStatsCache,
+  getProfileStatsInflight,
+  setProfileStatsCache,
+  setProfileStatsInflight,
+} from '@/lib/profile-stats-cache';
 
 const BILLING_SUMMARY_SCAN_LIMIT = 500;
 const MEMORY_SNIPPET_LIMIT = 24;
@@ -62,84 +66,92 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(cached);
     }
 
-    await ensureCoreAppwriteResources();
-    const tables = getAdminTables();
+    const inflight = getProfileStatsInflight<Record<string, unknown>>(user.id);
+    if (inflight) {
+      return NextResponse.json(await inflight);
+    }
 
-    const [historyTotal, approvedTotal, archivedTotal, pendingTotal, billingResult, memoryResult] = await Promise.all([
-      countRowsByUser(tables, APPWRITE_TABLE_ANALYSIS_HISTORY_ID, user.id),
-      countRowsByUser(tables, APPWRITE_TABLE_GALLERY_ID, user.id, [Query.equal('status', 'approved')]),
-      countRowsByUser(tables, APPWRITE_TABLE_GALLERY_ID, user.id, [Query.equal('status', 'archived')]),
-      countRowsByUser(tables, APPWRITE_TABLE_GALLERY_ID, user.id, [Query.equal('status', 'pending')]),
-      tables.listRows<BillingEventRow>({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_BILLING_EVENTS_ID,
-        queries: [
-          Query.equal('user_id', user.id),
-          Query.limit(BILLING_SUMMARY_SCAN_LIMIT),
-        ],
-      }),
-      tables.listRows<MemorySnippetRow>({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
-        queries: [
-          Query.equal('user_id', user.id),
-          Query.equal('visible_to_user', true),
-          Query.equal('deleted_by_user', false),
-          Query.limit(MEMORY_SNIPPET_LIMIT),
-        ],
-      }),
-    ]);
+    const payloadPromise = (async () => {
+      const tables = getAdminTables();
 
-    const billingSummary = billingResult.rows.reduce(
-      (acc, row) => {
-        const amount = Number.isFinite(row.amount_cents) ? Number(row.amount_cents) : 0;
-        const rapidoDelta = Number.isFinite(row.rapido_delta) ? Number(row.rapido_delta) : 0;
+      const [historyTotal, approvedTotal, archivedTotal, pendingTotal, billingResult, memoryResult] = await Promise.all([
+        countRowsByUser(tables, APPWRITE_TABLE_ANALYSIS_HISTORY_ID, user.id),
+        countRowsByUser(tables, APPWRITE_TABLE_GALLERY_ID, user.id, [Query.equal('status', 'approved')]),
+        countRowsByUser(tables, APPWRITE_TABLE_GALLERY_ID, user.id, [Query.equal('status', 'archived')]),
+        countRowsByUser(tables, APPWRITE_TABLE_GALLERY_ID, user.id, [Query.equal('status', 'pending')]),
+        tables.listRows<BillingEventRow>({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_BILLING_EVENTS_ID,
+          queries: [
+            Query.equal('user_id', user.id),
+            Query.limit(BILLING_SUMMARY_SCAN_LIMIT),
+          ],
+        }),
+        tables.listRows<MemorySnippetRow>({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
+          queries: [
+            Query.equal('user_id', user.id),
+            Query.equal('visible_to_user', true),
+            Query.equal('deleted_by_user', false),
+            Query.limit(MEMORY_SNIPPET_LIMIT),
+          ],
+        }),
+      ]);
 
-        acc.totalAmountCents += amount;
+      const billingSummary = billingResult.rows.reduce(
+        (acc, row) => {
+          const amount = Number.isFinite(row.amount_cents) ? Number(row.amount_cents) : 0;
+          const rapidoDelta = Number.isFinite(row.rapido_delta) ? Number(row.rapido_delta) : 0;
 
-        if (rapidoDelta > 0) {
-          acc.totalRapidoPurchased += rapidoDelta;
-          acc.rapidoPurchaseCount += 1;
-        }
+          acc.totalAmountCents += amount;
 
-        if (row.event_type === 'premium_monthly' || row.event_type === 'premium_yearly') {
-          acc.membershipPurchaseCount += 1;
-        }
+          if (rapidoDelta > 0) {
+            acc.totalRapidoPurchased += rapidoDelta;
+            acc.rapidoPurchaseCount += 1;
+          }
 
-        return acc;
-      },
-      {
-        totalAmountCents: 0,
-        totalRapidoPurchased: 0,
-        rapidoPurchaseCount: 0,
-        membershipPurchaseCount: 0,
-      },
-    );
+          if (row.event_type === 'premium_monthly' || row.event_type === 'premium_yearly') {
+            acc.membershipPurchaseCount += 1;
+          }
 
-    const memorySnippets = memoryResult.rows
-      .map((row) => ({
-        id: row.$id,
-        category: normalizeCategory(row.category || ''),
-        snippet: row.snippet,
-        updatedFromOperation: row.updated_from_operation || null,
-        updatedAt: row.$updatedAt,
-      }))
-      .filter((row) => row.snippet && row.category);
+          return acc;
+        },
+        {
+          totalAmountCents: 0,
+          totalRapidoPurchased: 0,
+          rapidoPurchaseCount: 0,
+          membershipPurchaseCount: 0,
+        },
+      );
 
-    const responsePayload = {
-      stats: {
-        historyTotal,
-        approvedTotal,
-        archivedTotal,
-        pendingTotal,
-      },
-      billingSummary,
-      billingCurrency: (billingResult.rows[0]?.currency || 'try').toLowerCase(),
-      memorySnippets,
-    };
+      const memorySnippets = memoryResult.rows
+        .map((row) => ({
+          id: row.$id,
+          category: normalizeCategory(row.category || ''),
+          snippet: row.snippet,
+          updatedFromOperation: row.updated_from_operation || null,
+          updatedAt: row.$updatedAt,
+        }))
+        .filter((row) => row.snippet && row.category);
 
-    setProfileStatsCache(user.id, responsePayload);
-    return NextResponse.json(responsePayload);
+      const responsePayload = {
+        stats: {
+          historyTotal,
+          approvedTotal,
+          archivedTotal,
+          pendingTotal,
+        },
+        billingSummary,
+        billingCurrency: (billingResult.rows[0]?.currency || 'try').toLowerCase(),
+        memorySnippets,
+      };
+
+      setProfileStatsCache(user.id, responsePayload);
+      return responsePayload;
+    })();
+
+    return NextResponse.json(await setProfileStatsInflight(user.id, payloadPromise));
   } catch (error) {
     logServerError('api.profile.stats.GET', error);
     return NextResponse.json({ error: 'Profil istatistikleri alınamadı.' }, { status: 500 });

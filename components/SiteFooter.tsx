@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronDown, Globe2, MessageSquare, Send } from 'lucide-react';
-import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { setStoredUiLanguage, useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 import { useAuth } from '@/hooks/useAuth';
 import { account } from '@/lib/appwrite';
@@ -21,7 +21,7 @@ const LANGUAGE_OPTIONS: Array<{ value: SupportedLanguage; label: string }> = [
 export function SiteFooter() {
   const year = new Date().getFullYear();
   const pathname = usePathname();
-  const { user, setPreferredLanguage } = useAuth();
+  const { user } = useAuth();
   const language = useLanguage();
   const currentLanguage = LANGUAGE_OPTIONS.find((option) => option.value === language) ?? LANGUAGE_OPTIONS[0];
 
@@ -32,7 +32,6 @@ export function SiteFooter() {
   const [rating, setRating] = useState<number>(5);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [languageSaving, setLanguageSaving] = useState(false);
 
   useEffect(() => {
     if (user?.email) {
@@ -40,13 +39,8 @@ export function SiteFooter() {
     }
   }, [user?.email]);
 
-  const handleLanguageChange = async (nextLanguage: SupportedLanguage) => {
-    setLanguageSaving(true);
-    try {
-      await setPreferredLanguage(nextLanguage);
-    } finally {
-      setLanguageSaving(false);
-    }
+  const handleLanguageChange = (nextLanguage: SupportedLanguage) => {
+    setStoredUiLanguage(nextLanguage);
   };
 
   const handleSubmitFeedback = async () => {
@@ -129,10 +123,9 @@ export function SiteFooter() {
               <span className="sr-only">Language</span>
               <select
                 value={currentLanguage.value}
-                onChange={(event) => void handleLanguageChange(event.target.value as SupportedLanguage)}
-                disabled={languageSaving}
-                className="bg-transparent text-[11px] uppercase tracking-wider text-slate-200 outline-none disabled:opacity-60"
-                aria-label={pickLocalized(language, 'Dil seçimi', 'Language selection')}
+                onChange={(event) => handleLanguageChange(event.target.value as SupportedLanguage)}
+                className="bg-transparent text-[11px] uppercase tracking-wider text-slate-200 outline-none"
+                aria-label={pickLocalized(language, 'Arayuz dili', 'UI language')}
               >
                 {LANGUAGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value} className="bg-[#0A0F1A] text-white">
