@@ -22,6 +22,8 @@ import type { AppUser } from '@/hooks/useAuth';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
 import { deriveAspectRatio } from '@/lib/aspect-ratio';
+import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
+import type { DesignInsightOperation } from '@/lib/design-insights';
 
 const PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const PREVIEW_JPEG_QUALITIES = [0.82, 0.74, 0.66, 0.58, 0.5, 0.42];
@@ -1937,6 +1939,100 @@ export function useAnalysis({
     }
   }, [store, isPremiumUser, rapidoPens, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
+  const handleDesignInsight = useCallback(async (operation: DesignInsightOperation) => {
+    const {
+      imageBase64,
+      mimeType,
+      additionalUploads,
+      formData,
+      pdfText,
+      critique: currentCritique,
+    } = store;
+    const readyPayload = getReadyImagePayload(imageBase64, mimeType);
+    if (!readyPayload) return;
+
+    const cost = RAPIDO_COSTS[operation];
+    if (rapidoPens < cost) {
+      handleInsufficientRapido(cost, analysisKindLabel(operation, uiLanguage));
+      return;
+    }
+
+    const additionalFiles = (additionalUploads ?? []).map((entry) => ({
+      name: entry.name,
+      mimeType: entry.mimeType,
+      base64: entry.base64,
+    }));
+    const fallbackStep = operation === 'SKILL_ROADMAP' ? 'result' : 'upload';
+
+    void trackConversionEvent('critique_started', {
+      type: operation.toLowerCase(),
+      isPremium: isPremiumUser,
+    });
+    store.setStep('analyzing');
+
+    try {
+      const aiResponse = await generateAIResponse({
+        locale: uiLanguage,
+        operation,
+        imageBase64: readyPayload.imageBase64,
+        imageMimeType: readyPayload.mimeType,
+        params: withLanguage({
+          category: formData.category,
+          topic: formData.topic,
+          concept: formData.concept,
+          defense: formData.defense,
+          pdfText: pdfText?.substring(0, 1200),
+          currentCritique: currentCritique?.substring(0, 6000),
+          additionalFiles,
+        }),
+      });
+
+      if (!aiResponse) {
+        store.addToast(t('Tasarım denetimi sonuç üretmedi. Tekrar deneyin.', 'Design diagnostic returned no result. Try again.'), 'error');
+        store.setStep(fallbackStep);
+        return;
+      }
+
+      const { critique } = parseCritiqueResult(aiResponse.result);
+      applyGameState(aiResponse.game_state);
+      await refreshProfile();
+      store.setLastProgression(null);
+      store.setCritique(critique);
+      store.setGalleryPlacement('NONE');
+      store.setGalleryConsent(null);
+      store.setLatestAnalysisKind(operation);
+      store.setStep('result');
+
+      void trackConversionEvent('critique_completed', {
+        type: operation.toLowerCase(),
+        isPremium: isPremiumUser,
+      });
+    } catch (error) {
+      void reportClientError({
+        scope: 'analysis.design_insight',
+        message: 'Design insight request failed',
+        details: {
+          operation,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      store.addToast(toUserErrorMessage(error), 'error');
+      store.setStep(fallbackStep);
+    }
+  }, [
+    applyGameState,
+    getReadyImagePayload,
+    handleInsufficientRapido,
+    isPremiumUser,
+    rapidoPens,
+    refreshProfile,
+    store,
+    t,
+    toUserErrorMessage,
+    uiLanguage,
+    withLanguage,
+  ]);
+
   // -------------------------------------------------------------------------
   // handleDefenseSubmit — DEFENSE (Premium, up to 3 turns)
   // -------------------------------------------------------------------------
@@ -2037,6 +2133,7 @@ export function useAnalysis({
     handlePremium,
     handleAutoConcept,
     handleMaterialBoard,
+    handleDesignInsight,
     handleDefenseSubmit,
     handleGalleryConsent,
     handlePreserveAnalysis,

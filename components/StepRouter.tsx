@@ -28,6 +28,7 @@ import { AccountDetailsStep } from '@/components/AccountDetailsStep';
 import { ArchBuilderStep } from '@/components/ArchBuilderStep';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import type { SupportedLanguage } from '@/lib/i18n';
+import type { DesignInsightOperation } from '@/lib/design-insights';
 
 interface StepRouterProps {
   // Dropzone bindings (computed in page.tsx via useDropHandler)
@@ -53,6 +54,7 @@ interface StepRouterProps {
   handlePremium: () => void;
   handleAutoConcept: () => void;
   handleMaterialBoard: () => void;
+  handleDesignInsight: (operation: DesignInsightOperation) => void;
   handleDefenseSubmit: () => void;
   handleGalleryConsent: (val: boolean) => void;
   handlePreserveAnalysis?: () => void;
@@ -78,6 +80,7 @@ export function StepRouter({
   handlePremium,
   handleAutoConcept,
   handleMaterialBoard,
+  handleDesignInsight,
   handleDefenseSubmit,
   handleGalleryConsent,
   handlePreserveAnalysis,
@@ -101,6 +104,7 @@ export function StepRouter({
     critique,
     premiumData,
     multiData,
+    latestAnalysisKind,
     previousProject,
     lastProgression,
     isRevisionMode,
@@ -147,6 +151,7 @@ export function StepRouter({
           handleMultiAnalyze={handleMultiAnalyze}
           handleAutoConcept={handleAutoConcept}
           handleMaterialBoard={handleMaterialBoard}
+          handleDesignInsight={handleDesignInsight}
           image={image}
           imageBase64={imageBase64}
           additionalUploads={additionalUploads}
@@ -211,6 +216,8 @@ export function StepRouter({
           handlePreserveAnalysis={handlePreserveAnalysis}
           handleShareToCommunity={handleShareToCommunity}
           handleAutoConcept={handleAutoConcept}
+          handleDesignInsight={handleDesignInsight}
+          latestAnalysisKind={latestAnalysisKind}
         />
       )}
 

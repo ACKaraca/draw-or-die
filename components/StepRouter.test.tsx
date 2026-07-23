@@ -116,6 +116,7 @@ describe('StepRouter', () => {
         handlePremium={handle}
         handleAutoConcept={handle}
         handleMaterialBoard={handle}
+        handleDesignInsight={handle}
         handleDefenseSubmit={handle}
         handleGalleryConsent={handle}
       />
@@ -181,6 +182,7 @@ describe('StepRouter', () => {
         handlePremium={handle}
         handleAutoConcept={handle}
         handleMaterialBoard={handle}
+        handleDesignInsight={handle}
         handleDefenseSubmit={handle}
         handleGalleryConsent={handle}
       />

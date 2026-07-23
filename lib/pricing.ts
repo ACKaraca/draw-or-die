@@ -12,6 +12,10 @@ export const RAPIDO_COSTS = {
     PREMIUM_RESCUE: 6,       // Premium kurtarma analizi (3x artirildi)
     PEER_REVIEW_OPEN: 2,     // Öğrenci jürisine aç (projeni akranlara sun)
     PORTFOLIO_PAGE: 4,       // AI portfolyo sayfası düzeni
+    DRAWING_CONSISTENCY: 3,  // Plan-kesit-görünüş tutarlılık denetimi
+    CIRCULATION_ADJACENCY: 3,// Dolaşım ve komşuluk analizi
+    ACCESSIBILITY_EGRESS: 4, // Erişilebilirlik ve kaçış ön kontrolü
+    SKILL_ROADMAP: 3,        // Önceki kritiklerden kişisel gelişim rotası
 } as const;
 
 // Rapido rewards (earned, not spent)

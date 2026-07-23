@@ -236,6 +236,7 @@ export default function Home() {
     handlePremium,
     handleAutoConcept,
     handleMaterialBoard,
+    handleDesignInsight,
     handleDefenseSubmit,
     handleGalleryConsent,
     handlePreserveAnalysis,
@@ -317,6 +318,7 @@ export default function Home() {
         handlePremium={handlePremium}
         handleAutoConcept={handleAutoConcept}
         handleMaterialBoard={handleMaterialBoard}
+        handleDesignInsight={handleDesignInsight}
         handleDefenseSubmit={handleDefenseSubmit}
         handleGalleryConsent={handleGalleryConsent}
         handlePreserveAnalysis={handlePreserveAnalysis}

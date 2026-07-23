@@ -1,7 +1,7 @@
 import { useLanguage } from "@/components/RuntimeTextLocalizer";
 import { pickLocalized } from "@/lib/i18n";
 import { motion } from 'framer-motion';
-import { Crown, AlertTriangle, RefreshCw, TrendingUp, Lightbulb } from 'lucide-react';
+import { Crown, AlertTriangle, RefreshCw, TrendingUp, Lightbulb, Route } from 'lucide-react';
 import Markdown from 'react-markdown';
 import html2canvas from 'html2canvas';
 import { useRef, useState, useEffect } from 'react';
@@ -10,6 +10,8 @@ import { SimplePdfPreview } from '@/components/SimplePdfPreview';
 import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
 import { FormData, DefenseMessage, GalleryPlacementType } from '@/types';
 import { RAPIDO_COSTS } from '@/lib/pricing';
+import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
+import { isDesignInsightOperation, type DesignInsightOperation } from '@/lib/design-insights';
 
 interface ResultStepProps {
     previewUrl: string | null;
@@ -43,6 +45,8 @@ interface ResultStepProps {
     handlePreserveAnalysis?: () => void;
     handleShareToCommunity?: () => void;
     handleAutoConcept?: () => void;
+    latestAnalysisKind: string | null;
+    handleDesignInsight: (operation: DesignInsightOperation) => void;
 }
 
 export function ResultStep({
@@ -55,13 +59,20 @@ export function ResultStep({
     handlePreserveAnalysis,
     handleShareToCommunity,
     handleAutoConcept,
+    latestAnalysisKind,
+    handleDesignInsight,
 }: ResultStepProps) {
     const language = useLanguage();
     const exportRef = useRef<HTMLDivElement>(null);
     const [showCompare, setShowCompare] = useState(false);
+    const normalizedAnalysisKind = (latestAnalysisKind ?? 'SINGLE_JURY').toUpperCase();
+    const isFocusedReport = isDesignInsightOperation(normalizedAnalysisKind);
+    const reportTitle = isFocusedReport
+        ? analysisKindLabel(normalizedAnalysisKind, language)
+        : pickLocalized(language, 'Jüri Raporu', 'Jury Report');
 
     // P0.3: Track guest completion on first result view
-    const isGuestFirstCompletion = isAnonymous && !isPremiumUser && guestDrawingCount === 0;
+    const isGuestFirstCompletion = !isFocusedReport && isAnonymous && !isPremiumUser && guestDrawingCount === 0;
     
     useEffect(() => {
         if (isGuestFirstCompletion) {
@@ -77,7 +88,7 @@ export function ResultStep({
                 const canvas = await html2canvas(exportRef.current, { backgroundColor: '#0A0F1A' });
                 const dataUrl = canvas.toDataURL('image/png');
                 const link = document.createElement('a');
-                link.download = 'draw-or-die-roast.png';
+                link.download = `draw-or-die-${normalizedAnalysisKind.toLowerCase()}.png`;
                 link.href = dataUrl;
                 link.click();
             } catch (err) {
@@ -217,14 +228,16 @@ export function ResultStep({
                     >
                         {pickLocalized(language, 'Analizi Koru', 'Preserve analysis')} (1.5 Rapido)
                     </button>
-                    <button
-                        onClick={handleShareToCommunity}
-                        disabled={!handleShareToCommunity}
-                        className="min-h-12 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:opacity-50"
-                    >
-                        {pickLocalized(language, "Community'de Paylaş", 'Share on Community')}
-                    </button>
-                    {handleAutoConcept && (
+                    {!isFocusedReport && (
+                        <button
+                            onClick={handleShareToCommunity}
+                            disabled={!handleShareToCommunity}
+                            className="min-h-12 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:opacity-50"
+                        >
+                            {pickLocalized(language, "Community'de Paylaş", 'Share on Community')}
+                        </button>
+                    )}
+                    {!isFocusedReport && handleAutoConcept && (
                         <button
                             onClick={handleAutoConcept}
                             className="min-h-12 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-sky-100 transition-colors hover:bg-sky-500/20"
@@ -239,7 +252,18 @@ export function ResultStep({
                     >
                         <RefreshCw size={16} /> {pickLocalized(language, 'Yeni Proje', 'New Project')}
                     </button>
-                    {previousProject && (
+                    {normalizedAnalysisKind !== 'SKILL_ROADMAP' && (
+                        <button
+                            type="button"
+                            onClick={() => handleDesignInsight('SKILL_ROADMAP')}
+                            className="min-h-12 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20"
+                        >
+                            <Route size={16} strokeWidth={1.5} />
+                            {pickLocalized(language, 'Beceri Rotamı Oluştur', 'Build My Skill Roadmap')}{' '}
+                            <span className="text-neon-red">({RAPIDO_COSTS.SKILL_ROADMAP} Rapido)</span>
+                        </button>
+                    )}
+                    {!isFocusedReport && previousProject && (
                         <button
                             onClick={handleRevision}
                             className="min-h-12 rounded-lg border border-neon-red/30 bg-neon-red/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-neon-red transition-colors hover:bg-neon-red/20"
@@ -256,15 +280,17 @@ export function ResultStep({
                     <div className="absolute top-0 left-0 w-1 h-full bg-neon-red"></div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-6 border-b border-white/10 pb-4">
                         <AlertTriangle className="text-neon-red" size={28} />
-                        <h2 className="font-display text-2xl font-bold uppercase tracking-wider text-white">{pickLocalized(language, 'Jüri Raporu', 'Jury Report')}</h2>
+                        <h2 className="font-display text-2xl font-bold uppercase tracking-wider text-white">{reportTitle}</h2>
                         {lastProgression !== null && (
                             <span className="ml-4 px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 rounded text-xs font-mono text-emerald-400 flex items-center gap-1">
                                 <TrendingUp size={14} /> +{lastProgression} {pickLocalized(language, 'Gelişim', 'Progression')}
                             </span>
                         )}
-                        <span className="ml-auto px-3 py-1 bg-white/5 border border-white/10 rounded text-xs font-mono text-slate-400">
-                            {pickLocalized(language, 'Sertlik', 'Harshness')}: {formData.harshness}/5
-                        </span>
+                        {!isFocusedReport && (
+                            <span className="ml-auto px-3 py-1 bg-white/5 border border-white/10 rounded text-xs font-mono text-slate-400">
+                                {pickLocalized(language, 'Sertlik', 'Harshness')}: {formData.harshness}/5
+                            </span>
+                        )}
                         <button
                             onClick={handleExport}
                             className="ml-2 hover:bg-white/10 p-2 rounded transition-colors text-slate-400 hover:text-white"
@@ -273,6 +299,16 @@ export function ResultStep({
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                         </button>
                     </div>
+
+                    {normalizedAnalysisKind === 'ACCESSIBILITY_EGRESS' && (
+                        <div className="mb-4 rounded-lg border border-cyan-400/20 bg-cyan-400/5 p-3 font-mono text-[11px] leading-relaxed text-cyan-100">
+                            {pickLocalized(
+                                language,
+                                'Bu çıktı yalnızca görsel ön kontroldür; resmî mevzuat uygunluk belgesi değildir.',
+                                'This is a visual pre-check only; it is not an official code-compliance certification.',
+                            )}
+                        </div>
+                    )}
 
                     <div className="prose prose-invert prose-slate max-w-none font-sans text-slate-300 overflow-y-auto max-h-[42vh] sm:max-h-[500px] pr-2 sm:pr-4 custom-scrollbar">
                         <Markdown>{critique || ''}</Markdown>
@@ -328,20 +364,22 @@ export function ResultStep({
                 </div>
 
                 {/* Defense UI */}
-                <ChatDefense
-                    isPremiumUser={isPremiumUser}
-                    isDefending={isDefending}
-                    setIsDefending={setIsDefending}
-                    defenseTurnCount={defenseTurnCount}
-                    defenseMessages={defenseMessages}
-                    isDefenseLoading={isDefenseLoading}
-                    defenseInput={defenseInput}
-                    setDefenseInput={setDefenseInput}
-                    handleDefenseSubmit={handleDefenseSubmit}
-                />
+                {!isFocusedReport && (
+                    <ChatDefense
+                        isPremiumUser={isPremiumUser}
+                        isDefending={isDefending}
+                        setIsDefending={setIsDefending}
+                        defenseTurnCount={defenseTurnCount}
+                        defenseMessages={defenseMessages}
+                        isDefenseLoading={isDefenseLoading}
+                        defenseInput={defenseInput}
+                        setDefenseInput={setDefenseInput}
+                        handleDefenseSubmit={handleDefenseSubmit}
+                    />
+                )}
 
                 {/* Premium Upsell */}
-                <div className="mt-6 rounded-xl border border-neon-red/30 bg-neon-red/10 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                {!isFocusedReport && <div className="mt-6 rounded-xl border border-neon-red/30 bg-neon-red/10 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <h3 className="font-display font-bold text-xl text-white flex items-center gap-2 mb-1">
                             <Crown className="text-yellow-500" size={20} /> {pickLocalized(language, 'Projeyi Kurtar (Premium)', 'Rescue the project (Premium)')}
@@ -360,7 +398,7 @@ export function ResultStep({
                     >
                         {pickLocalized(language, 'Kilidi Aç', 'Unlock')} ({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)
                     </button>
-                </div>
+                </div>}
             </div>
         </motion.div>
     );

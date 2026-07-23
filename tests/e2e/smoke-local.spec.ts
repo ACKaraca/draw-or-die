@@ -14,9 +14,8 @@ test.describe('Smoke - Local Critical Path', () => {
     });
 
     await page.goto('/');
-
-    await expect(page.getByRole('heading', { name: /juriyle yuzles|jüriyle yüzleş/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /studio desk'e gec|studio desk'e geç/i })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: /j.riyle y.zle.|face the jury/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /studio desk.*ge.|open studio desk/i })).toBeVisible();
 
     expect(stripeCalls).toHaveLength(0);
   });
