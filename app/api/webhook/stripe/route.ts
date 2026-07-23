@@ -1,23 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { randomBytes } from 'crypto';
 import { TIER_DEFAULTS } from '@/lib/pricing';
 import {
-    APPWRITE_DATABASE_ID,
-    APPWRITE_TABLE_BILLING_EVENTS_ID,
     findProfileBySubscriptionId,
     getAdminTables,
     getOrCreateProfile,
     markStripeEventProcessed,
+    recordBillingEvent,
     updateProfileById,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
-
-function createRowId(): string {
-    const uuid = globalThis.crypto?.randomUUID?.();
-    if (uuid) return uuid;
-    return randomBytes(16).toString('hex');
-}
 
 let _stripe: Stripe | null = null;
 function getStripe() {
@@ -309,38 +301,4 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
         });
         console.warn(`Payment failed for user ${profile.id}, subscription ${subscriptionId}`);
     }
-}
-
-type RecordBillingEventInput = {
-    userId: string;
-    eventType: string;
-    amountCents: number;
-    currency: string;
-    rapidoDelta: number;
-    rapidoBalanceAfter: number;
-    stripeSessionId: string | null;
-    stripeCustomerId: string | null;
-    stripeSubscriptionId: string | null;
-    metadata?: Record<string, unknown>;
-};
-
-async function recordBillingEvent(input: RecordBillingEventInput): Promise<void> {
-    const tables = getAdminTables();
-    await tables.createRow({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_BILLING_EVENTS_ID,
-        rowId: createRowId(),
-        data: {
-            user_id: input.userId,
-            event_type: input.eventType,
-            amount_cents: Math.max(0, Math.floor(input.amountCents || 0)),
-            currency: (input.currency || 'try').toLowerCase(),
-            rapido_delta: Math.floor(input.rapidoDelta || 0),
-            rapido_balance_after: Math.max(0, Math.floor(input.rapidoBalanceAfter || 0)),
-            stripe_session_id: input.stripeSessionId || '',
-            stripe_customer_id: input.stripeCustomerId || '',
-            stripe_subscription_id: input.stripeSubscriptionId || '',
-            metadata_json: JSON.stringify(input.metadata ?? {}),
-        },
-    });
 }
