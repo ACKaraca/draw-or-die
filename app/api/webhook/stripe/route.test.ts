@@ -43,6 +43,7 @@ jest.mock('@/lib/appwrite/server', () => ({
   getOrCreateProfile: (...args: unknown[]) => mockGetOrCreateProfile(...args),
   updateProfileById: (...args: unknown[]) => mockUpdateProfileById(...args),
   findProfileBySubscriptionId: (...args: unknown[]) => mockFindProfileBySubscriptionId(...args),
+  recordBillingEvent: (...args: unknown[]) => mockCreateRow(...args),
   getAdminTables: () => ({
     createRow: (...args: unknown[]) => mockCreateRow(...args),
   }),
