@@ -17,19 +17,23 @@ Authoritative instructions for all AI coding agents (Claude, Codex, Copilot, Cur
 
 ## 2. Branch & Release Strategy (CRITICAL)
 
-| Branch | Site | Purpose | Version bumps |
-|---|---|---|---|
-| `main` | `drawordie.app` | Production. Major releases only. | `V.1 → V.2` (major) |
-| `dev-main` | `dev.drawordie.app` | Active development, default workspace. | `V.x.1 → V.x.2` (minor/patch) |
-| `feat/*`, `fix/*`, `chore/*` | preview | Short-lived, branched from `dev-main`, merged via PR. | — |
+
+| Branch                       | Site                | Purpose                                               | Version bumps                 |
+| ---------------------------- | ------------------- | ----------------------------------------------------- | ----------------------------- |
+| `main`                       | `drawordie.app`     | Production. Major releases only.                      | `V.1 → V.2` (major)           |
+| `dev-main`                   | `dev.drawordie.app` | Active development, default workspace.                | `V.x.1 → V.x.2` (minor/patch) |
+| `feat/`*, `fix/*`, `chore/*` | preview             | Short-lived, branched from `dev-main`, merged via PR. | —                             |
+
 
 ### Working Rules
+
 - **Default to `dev-main` for ~90% of work.** Only touch `main` for big-picture releases or hotfixes the owner explicitly approves.
 - Never push directly to `main`. Always go via PR from `dev-main` or a release branch.
 - Branch names: kebab-case, prefixed (`feat/`, `fix/`, `chore/`, `refactor/`, `docs/`).
 - Commits: Conventional Commits (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `perf:`, `ci:`).
 
 ### 🚨 Version-Bump Nudge (MANDATORY OUTPUT BLOCK)
+
 At the **end of every response** that touches `dev-main` or any branch downstream of it, count uncommitted+unmerged work since last `main` merge. If **any** of the following is true, append the block below to your reply:
 
 - ≥ 8 commits on `dev-main` since last sync to `main`, OR
@@ -69,17 +73,20 @@ The owner may send prompts that are **contradictory, switch direction mid-messag
 Different models write different styles. To keep the codebase coherent regardless of which AI wrote a file, **follow these conventions verbatim**:
 
 ### Imports
+
 - Always use `@/` path alias. Never relative `../../`.
 - Group order: (1) node/builtin, (2) external packages, (3) `@/` internal, (4) types (`import type`). Blank line between groups.
 - No inline `require()` or dynamic `import()` unless needed for code-splitting.
 
 ### Types & TS
+
 - `tsconfig` is `strict`. Never widen with `any`. Use `unknown` + narrowing if the shape is unknown.
 - Public functions: explicit return type. Internal helpers: inferred OK.
 - Discriminated unions for state machines (`type Step = { kind: 'hero' } | { kind: 'upload', file: File }`).
 - All exhaustive `switch` on a union must end with `default: const _exhaustive: never = value; throw new Error(...)`.
 
 ### React / Next
+
 - Functional components + hooks only. No class components.
 - Server components by default in `app/`; add `'use client'` only when needed (state, refs, browser APIs).
 - One component per file. Filename = component name (`PascalCase.tsx`).
@@ -87,20 +94,24 @@ Different models write different styles. To keep the codebase coherent regardles
 - No inline `useEffect` for data fetching when a server component or `useSWR`/route handler suffices.
 
 ### Naming
+
 - Variables/functions: `camelCase`. Types/components: `PascalCase`. Constants: `SCREAMING_SNAKE_CASE`. Files: kebab-case for non-components, PascalCase for components.
-- Boolean names: `is*`, `has*`, `can*`, `should*`. Never negative (`isNotReady` ❌ → `isReady` ✅).
+- Boolean names: `is`*, `has*`, `can*`, `should*`. Never negative (`isNotReady` ❌ → `isReady` ✅).
 
 ### Style
+
 - 2-space indent, single quotes, trailing commas, semicolons. ESLint + Prettier defaults — let the linter format, don't fight it.
 - Max line length: 120. Break long JSX onto multiple lines.
 - Comments only for **non-obvious intent / trade-offs**. Never narrate code (`// loop over users` ❌).
 
 ### Errors
+
 - Throw `Error` subclasses, not strings. Server routes return `NextResponse.json({ error: '...' }, { status })`.
 - Always `try/catch` around: external API calls, `JSON.parse`, file I/O, Stripe/Appwrite SDK calls.
 - Log via `lib/logger.ts`, never `console.log` in shipped code (only allowed in scripts/).
 
 ### File-shape template (TS module)
+
 ```ts
 import { something } from '@/lib/something';
 import type { Foo } from '@/types';
@@ -116,18 +127,20 @@ function internalHelper() { /* ... */ }
 
 ## 5. Tech Stack
 
-| Layer | Tech |
-|---|---|
-| Framework | Next.js 15 (App Router) |
-| Language | TypeScript strict |
-| Styling | Tailwind CSS + Framer Motion |
-| State | Zustand (`stores/drawOrDieStore.ts`) |
-| Auth/DB/Storage | Appwrite |
-| AI | Google Gemini via OpenAI-compatible REST |
-| Payments | Stripe (subs + token packs) |
-| PDF | `pdfjs-dist` |
-| Tests | Jest + Playwright |
-| Deploy | Vercel |
+
+| Layer           | Tech                                     |
+| --------------- | ---------------------------------------- |
+| Framework       | Next.js 15 (App Router)                  |
+| Language        | TypeScript strict                        |
+| Styling         | Tailwind CSS + Framer Motion             |
+| State           | Zustand (`stores/drawOrDieStore.ts`)     |
+| Auth/DB/Storage | Appwrite                                 |
+| AI              | Google Gemini via OpenAI-compatible REST |
+| Payments        | Stripe (subs + token packs)              |
+| PDF             | `pdfjs-dist`                             |
+| Tests           | Jest + Playwright                        |
+| Deploy          | Vercel                                   |
+
 
 ---
 
@@ -152,13 +165,15 @@ scripts/     Build, deploy, validation scripts (allowed to use console)
 
 ## 7. Language Policy
 
-| Layer | Language |
-|---|---|
-| LLM responses (jury critique, mentor) | **English** |
-| Source code, comments, identifiers | **English** |
-| Docs (AGENTS.md, docs/, README) | **English** |
-| User-facing UI strings | **Turkish first, then English** via `lib/i18n.ts` (`pickLocalized`) |
-| Chat replies to the owner | **Turkish, concise** |
+
+| Layer                                 | Language                                                            |
+| ------------------------------------- | ------------------------------------------------------------------- |
+| LLM responses (jury critique, mentor) | **English**                                                         |
+| Source code, comments, identifiers    | **English**                                                         |
+| Docs (AGENTS.md, docs/, README)       | **English**                                                         |
+| User-facing UI strings                | **Turkish first, then English** via `lib/i18n.ts` (`pickLocalized`) |
+| Chat replies to the owner             | **Turkish, concise**                                                |
+
 
 Never hardcode locale strings outside `lib/i18n.ts` or translation data. Always provide both `tr` + `en` for new UI strings.
 
@@ -198,7 +213,7 @@ All costs live **only** in `lib/pricing.ts`. Never hardcode values elsewhere.
 - **JSON mode mandatory:** every LLM call sends `responseMimeType: "application/json"` + strict JSON schema.
 - Inject **harshness 1–5** into prompt. `5/5` = brutal tone.
 - Specify **persona ID** (`constructive | structural | conceptual | grumpy | contextualist | sustainability`).
-- Append **`pdfText`** (extracted via `pdfjs-dist`) to prompts so vision model reads labels.
+- Append `**pdfText`** (extracted via `pdfjs-dist`) to prompts so vision model reads labels.
 - `PREMIUM_RESCUE` returns relative bbox coords (`x, y, width, height`).
 - `DEFENSE` is multi-turn (`turnCount` ≤ 3); send full chat history every call.
 - LLM output is always English regardless of user locale.
@@ -214,7 +229,7 @@ All costs live **only** in `lib/pricing.ts`. Never hardcode values elsewhere.
 - Stripe webhook verifies `stripe-signature` against `STRIPE_WEBHOOK_SECRET`. Idempotency via `stripe_events` table.
 - File uploads: validate MIME, size, magic bytes.
 - CORS: no `*` in `ALLOWED_ORIGINS`.
-- Never write secrets in code or comments. Use `process.env.*` and document in `docs/ENVIRONMENT.md`.
+- Never write secrets in code or comments. Use `process.env.`* and document in `docs/ENVIRONMENT.md`.
 
 ---
 
@@ -222,11 +237,13 @@ All costs live **only** in `lib/pricing.ts`. Never hardcode values elsewhere.
 
 Tier auto-resolved by email in `lib/pricing.ts → resolveStripeTierForUser`:
 
-| Tier | Criteria | Monthly | Yearly |
-|---|---|---|---|
+
+| Tier              | Criteria          | Monthly | Yearly    |
+| ----------------- | ----------------- | ------- | --------- |
 | `AKDENIZ_STUDENT` | `@akdeniz.edu.tr` | 149 TRY | 1,249 TRY |
-| `TR_STUDENT` | `.edu.tr` | 299 TRY | 2,499 TRY |
-| `GLOBAL` | other | $15 | $129 |
+| `TR_STUDENT`      | `.edu.tr`         | 299 TRY | 2,499 TRY |
+| `GLOBAL`          | other             | $15     | $129      |
+
 
 Rapido packs: same per-unit price (`RAPIDO_UNIT`), min 5 units.
 
@@ -250,6 +267,7 @@ npm run test        # Jest
 ```
 
 For risky changes (auth, payments, AI route, schema):
+
 ```bash
 npm run test:e2e:smoke
 npm run check:secrets
@@ -286,8 +304,46 @@ If any command fails → fix before declaring done. Never silence a lint rule wi
 
 ---
 
-## 17. References
+## 17. Domain Rule Files (`AGENTS_*.md`)
+
+Alongside this master `AGENTS.md`, the repo carries **focused domain rule files** named `AGENTS_<DOMAIN>.md` (uppercase). Each file owns the deep rules for one slice of the product so that the master file stays short and authoritative. **Always check whether a domain rule file exists for the area you are about to touch and read it FIRST.**
+
+### Currently active
+
+| File | Read it BEFORE you... | One-line summary |
+|---|---|---|
+| [`AGENTS_DESIGN.md`](./AGENTS_DESIGN.md) | touch any visual layer (components, layouts, `globals.css`, navigation, marketing pages, copy, icons, motion, tier-gating UI, Rapido cost UI). | Single source of truth for the Draw or Die design system — colors, typography, spacing, components, patterns, voice. References the visual artifacts `docs/internal/Draw or Die Design System (1).html` (token/component catalog) and `docs/internal/Draw or Die Redesign (1).html` (interactive screen reference). |
+
+### Rules for creating a new `AGENTS_*.md`
+
+The owner adds new domain files when a recurring topic starts producing inconsistent AI output (e.g. Stripe, Appwrite schema, AI prompting, growth/analytics). Follow these rules **strictly** when creating one:
+
+1. **Filename:** `AGENTS_<DOMAIN>.md` at the **repo root**, where `<DOMAIN>` is a single uppercase word or `SNAKE_CASE`. Examples: `AGENTS_DESIGN.md`, `AGENTS_STRIPE.md`, `AGENTS_APPWRITE.md`, `AGENTS_AI_PROMPTING.md`, `AGENTS_GROWTH.md`.
+2. **Trigger:** create one only when (a) the owner explicitly asks, OR (b) the same class of mistake has repeated ≥ 3 times across recent agent turns. **Do not** create a file proactively on a single bug fix.
+3. **Required sections** (in this order):
+   1. **Purpose + "When to read this file"** — exact list of files / actions / keywords that should make a future agent open it first.
+   2. **Source-of-truth references** — link the upstream artifacts (HTML, JSON, lib files, external docs) the rules are derived from, and state which wins on conflict.
+   3. **Hard rules / tokens / contracts** — concrete, copy-pasteable rules. No vague "be consistent" advice.
+   4. **Implementation checklist** — bullet list to run through before declaring a task done in this domain.
+   5. **References** — links back to `AGENTS.md` and to other related `AGENTS_*.md` files.
+4. **Tone:** terse, declarative, English. Use tables, code blocks, ✅/❌ rows. No filler prose.
+5. **Register it in `AGENTS.md`:** add a one-row entry to the table above with the file name + when to read it + 1-line summary. The master file is how agents discover domain files — never leave a domain file unregistered.
+6. **Master ↔ domain split:** keep cross-cutting rules (branching, security, language policy, version-bump nudge, ADHD protocol) in `AGENTS.md`. Move deep, file-specific or topic-specific rules into the domain file. Master should remain ~300 lines, domain files can be longer.
+7. **Conflict resolution:** if `AGENTS.md` and an `AGENTS_*.md` disagree, the **domain file wins** for its scope (it is more specific). For everything else, master wins.
+8. **Versioning:** when you make a non-trivial change to a domain file, append a 1-line note to its bottom under a `## Changelog` section (date + summary). Do not maintain a global changelog.
+
+### Reading order at the start of a task
+
+1. `AGENTS.md` (this file) — every session.
+2. The matching `AGENTS_<DOMAIN>.md` for the area you will touch — before any edit in that area.
+3. Linked source-of-truth artifacts (e.g. the design HTMLs for UI work).
+4. The actual code file being edited.
+
+---
+
+## 18. References
 
 - Architecture: `docs/ARCHITECTURE.md`
 - API contracts: `docs/API.md`
 - Env vars: `docs/ENVIRONMENT.md`
+- Design system: [`AGENTS_DESIGN.md`](./AGENTS_DESIGN.md) + `docs/internal/Draw or Die Design System (1).html` + `docs/internal/Draw or Die Redesign (1).html`

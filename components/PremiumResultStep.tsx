@@ -1,12 +1,14 @@
-import { useLanguage } from "@/components/RuntimeTextLocalizer";
-import { pickLocalized } from "@/lib/i18n";
-import { motion } from 'framer-motion';
-import { PenTool, X, ShieldAlert, CheckCircle2, GraduationCap, Layers3, FileImage } from 'lucide-react';
-import { DefenseMessage, PremiumData } from '@/types';
-import html2canvas from 'html2canvas';
 import { useMemo, useRef, useState } from 'react';
-import { ChatDefense } from './ChatDefense';
-import { InteractiveImagePreview } from './InteractiveImagePreview';
+import { motion } from 'framer-motion';
+import html2canvas from 'html2canvas';
+import { PenTool, X, ShieldAlert, CheckCircle2, GraduationCap, Layers3, FileImage } from 'lucide-react';
+
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { pickLocalized } from '@/lib/i18n';
+import { ChatDefense } from '@/components/ChatDefense';
+import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
+import { DefenseMessage, PremiumData } from '@/types';
+import type { SupportedLanguage } from '@/lib/i18n';
 
 interface PremiumResultStepProps {
   premiumData: PremiumData;
@@ -40,6 +42,27 @@ type DisplayPage = {
   mimeType: string;
   sourceName?: string;
 };
+
+const severityStyles = {
+  LOW: 'border-cyan-400/40 bg-cyan-500/10 text-cyan-100',
+  MEDIUM: 'border-amber-400/40 bg-amber-500/10 text-amber-100',
+  HIGH: 'border-neon-red/40 bg-neon-red/10 text-neon-red',
+  CRITICAL: 'border-neon-red bg-neon-red/20 text-white',
+} as const;
+
+function getSeverityLabel(severity: string | undefined, language: SupportedLanguage): string {
+  switch (severity) {
+    case 'LOW':
+      return pickLocalized(language, 'Dusuk', 'Low');
+    case 'HIGH':
+      return pickLocalized(language, 'Yuksek', 'High');
+    case 'CRITICAL':
+      return pickLocalized(language, 'Kritik', 'Critical');
+    case 'MEDIUM':
+    default:
+      return pickLocalized(language, 'Orta', 'Medium');
+  }
+}
 
 export function PremiumResultStep({
   premiumData,
@@ -266,6 +289,9 @@ export function PremiumResultStep({
                           <div className="pointer-events-auto absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 sm:w-72 bg-black border border-yellow-500 p-3 text-sm text-white z-30 shadow-2xl rounded-lg cursor-auto">
                             <div className="flex justify-between items-start mb-1 gap-2">
                               <span className="font-bold text-yellow-500">Sorun #{index + 1}</span>
+                              <span className={`rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${severityStyles[flaw.severity ?? 'MEDIUM']}`}>
+                                {getSeverityLabel(flaw.severity, language)}
+                              </span>
                               <button onClick={(e) => { e.stopPropagation(); setSelectedFlawIndex(null); }} className="text-slate-400 hover:text-white p-1 -m-1">
                                 <X size={14} />
                               </button>
@@ -348,7 +374,10 @@ export function PremiumResultStep({
                     {index + 1}
                   </span>
                   <span className="leading-relaxed text-sm">
-                    {flaw.reason}
+                    <span className={`mb-2 inline-flex rounded border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${severityStyles[flaw.severity ?? 'MEDIUM']}`}>
+                      {getSeverityLabel(flaw.severity, language)}
+                    </span>
+                    <span className="block">{flaw.reason}</span>
                     {flaw.page ? <span className="block text-[11px] text-slate-400 mt-1">{flaw.pageLabel || `Pafta ${flaw.page}`}</span> : null}
                     {flaw.drawingGuide ? <span className="block text-[11px] text-yellow-100 mt-1">Çizim: {flaw.drawingGuide}</span> : null}
                   </span>
