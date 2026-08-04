@@ -232,7 +232,20 @@ Returns the authenticated user's Stripe invoice history.
 
 ### GET /api/health
 
-Basic health check. Returns `200 OK` when the service is operational. Used by uptime monitors.
+Basic health check. Returns `200 OK` when the service is operational. Used by uptime monitors and release-parity checks.
+
+**Response (200):**
+```json
+{
+  "status": "ok",
+  "service": "draw-or-die",
+  "release": {
+    "sha": "provider, runtime, or embedded 40-character commit SHA; otherwise unknown",
+    "deploymentId": "provider deployment ID or unknown"
+  },
+  "timestamp": "ISO-8601 timestamp"
+}
+```
 
 ---
 

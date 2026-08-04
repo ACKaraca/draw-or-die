@@ -3,11 +3,6 @@ name: Release Gate - Appwrite Verification & Production Deployment
 on:
   push:
     branches: [main]
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/release-gate.yml'
-      - 'scripts/**'
   workflow_dispatch:
     inputs:
       environment:
@@ -35,10 +30,6 @@ jobs:
     environment: staging
     timeout-minutes: 45
 
-    strategy:
-      matrix:
-        node-version: [20.x]
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4.2.2
@@ -46,8 +37,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version-file: '.nvmrc'
           cache: 'npm'
+
+      - name: Check conflict markers
+        run: npm run check:conflicts
 
       - name: Install dependencies
         run: npm ci
@@ -94,7 +88,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install dependencies
@@ -108,6 +102,9 @@ jobs:
         timeout-minutes: 20
         env:
           TEST_ENV: staging
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_DEPLOYMENT_ID: github-${{ github.run_id }}-${{ github.run_attempt }}
+          EXPECTED_RELEASE_SHA: ${{ github.sha }}
           STRIPE_TEST_KEY: ${{ secrets.STRIPE_TEST_KEY }}
 
       - name: Upload test results
@@ -138,7 +135,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install dependencies
@@ -190,7 +187,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Check hardcoded secrets (final)
@@ -237,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     needs: [staging-verification, smoke-e2e-tests, appwrite-integration-check, security-final-check, pre-deployment-check]
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
       APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
@@ -251,51 +248,101 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24.x
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Stamp release identity
+        run: npm run stamp:release
+        env:
+          RELEASE_SHA: ${{ github.sha }}
+
       - name: Create source archive
-        run: git archive --format=tar.gz -o appwrite-site.tar.gz HEAD
+        run: |
+          changed_files="$(git diff --name-only HEAD)"
+          if [ "$changed_files" != "lib/release-manifest.ts" ]; then
+            echo "Unexpected tracked changes before archive: $changed_files"
+            exit 1
+          fi
+          git ls-files -z | tar --null --files-from=- --create --gzip --file=appwrite-site.tar.gz
 
       - name: Deploy to Appwrite production site
+        id: deploy
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
           import { Client, InputFile, Sites } from 'node-appwrite';
 
-          const endpoint = process.env.APPWRITE_ENDPOINT?.trim();
-          const projectId = process.env.APPWRITE_PROJECT_ID?.trim();
-          const apiKey = process.env.APPWRITE_API_KEY?.trim();
-          const siteId = process.env.APPWRITE_SITE_ID?.trim();
+          const TERMINAL_STATUSES = new Set(['ready', 'failed', 'canceled']);
+          const POLL_INTERVAL_MS = 10_000;
+          const DEPLOYMENT_TIMEOUT_MS = 15 * 60_000;
 
-          for (const [name, value] of Object.entries({ endpoint, projectId, apiKey, siteId })) {
-            if (!value) {
-              throw new Error(`Missing required Appwrite value: ${name}`);
+          async function deploySite() {
+            const endpoint = process.env.APPWRITE_ENDPOINT?.trim();
+            const projectId = process.env.APPWRITE_PROJECT_ID?.trim();
+            const apiKey = process.env.APPWRITE_API_KEY?.trim();
+            const siteId = process.env.APPWRITE_SITE_ID?.trim();
+
+            for (const [name, value] of Object.entries({ endpoint, projectId, apiKey, siteId })) {
+              if (!value) {
+                throw new Error(`Missing required Appwrite value: ${name}`);
+              }
             }
+
+            const archivePath = 'appwrite-site.tar.gz';
+            if (!fs.existsSync(archivePath)) {
+              throw new Error(`Archive not found: ${archivePath}`);
+            }
+
+            const outputPath = process.env.GITHUB_OUTPUT?.trim();
+            if (!outputPath) {
+              throw new Error('GITHUB_OUTPUT is not available.');
+            }
+
+            const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+            const sites = new Sites(client);
+            let deployment = await sites.createDeployment({
+              siteId,
+              code: InputFile.fromPath(archivePath, 'appwrite-site.tar.gz'),
+              activate: true,
+            });
+
+            console.log(`Created Appwrite deployment: ${deployment.$id}`);
+            const deadline = Date.now() + DEPLOYMENT_TIMEOUT_MS;
+
+            while (!TERMINAL_STATUSES.has(deployment.status) && Date.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+              deployment = await sites.getDeployment({ siteId, deploymentId: deployment.$id });
+              console.log(`Deployment ${deployment.$id} status: ${deployment.status}`);
+            }
+
+            if (deployment.status !== 'ready') {
+              throw new Error(
+                `Deployment ${deployment.$id} did not become ready ` +
+                  `(status=${deployment.status}, buildId=${deployment.buildId || 'unknown'}).`,
+              );
+            }
+
+            fs.appendFileSync(outputPath, `deployment_id=${deployment.$id}\n`, 'utf8');
           }
 
-          const archivePath = 'appwrite-site.tar.gz';
-          if (!fs.existsSync(archivePath)) {
-            throw new Error(`Archive not found: ${archivePath}`);
+          try {
+            await deploySite();
+          } catch (error) {
+            console.error('Appwrite deployment failed:', error instanceof Error ? error.message : String(error));
+            process.exit(1);
           }
-
-          const client = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
-          const sites = new Sites(client);
-          const deployment = await sites.createDeployment({
-            siteId,
-            code: InputFile.fromPath(archivePath, 'appwrite-site.tar.gz'),
-            activate: true,
-          });
-
-          console.log(`Created Appwrite deployment: ${deployment.$id}`);
           NODE
 
       - name: Post-Deploy Health Check
         run: npm run validate:health-check
-        timeout-minutes: 5
+        timeout-minutes: 8
+        env:
+          HEALTHCHECK_TARGET: production
+          EXPECTED_RELEASE_SHA: ${{ github.sha }}
+          EXPECTED_DEPLOYMENT_ID: ${{ steps.deploy.outputs.deployment_id }}
 
       - name: Verify payment system online
         run: npm run check:payment-system
