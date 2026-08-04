@@ -1,8 +1,8 @@
 # Branch Delivery Portfolio
 
-Each of the 52 directories below represents one delivery branch and contains a complete branch-level contract. Branch
-00 has merged to `dev-main`; branch 37 is ready on its delivery branch; every other portfolio branch remains planned
-and uncreated. The plans are ordered by dependency and risk, not by feature excitement.
+Each of the 52 directories below represents one delivery branch and contains a complete branch-level contract. Branches
+00 and 37 have merged to `dev-main`; every other portfolio branch remains planned and uncreated. The plans are ordered
+by dependency and risk, not by feature excitement.
 
 ## Base-branch rule
 

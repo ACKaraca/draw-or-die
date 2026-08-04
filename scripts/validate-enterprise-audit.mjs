@@ -114,7 +114,7 @@ const CANONICAL_SPECIALIST_FILES = [
   'SECURITY-PRIVACY.md',
   'TECHNOLOGY-ARCHITECTURE.md',
 ];
-const CANONICAL_POLICY_DIGEST = '26f3667197b455a779bb8360b52398a4fd097822b18d87b58b7ae2eb12cb971b';
+const CANONICAL_POLICY_DIGEST = 'fbc14c29bf9f3fd2a4887397ab167edc4dfa395b0dfd2efda8768a3f63460885';
 const DECISION_GATE_ALIASES = new Map([
   ['branch approval', [{ key: 'approval:branch', requiredAt: 'ready' }]],
   [
