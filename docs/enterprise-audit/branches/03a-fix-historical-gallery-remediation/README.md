@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P0 closure / Phase 1 decision-gated |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: product owner + privacy/security owner |
 | Target | UNSET — assign after read-only inventory and D-004 |

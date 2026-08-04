@@ -3,11 +3,11 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Phase 7 closure |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: product + privacy/security + finance + educator partner |
 | Target | UNSET — open only after two contracted pilot operations close |
-| Decision gates | D-019, D-026, D-027, D-028, D-031, signed pilot closeout, and paid renewal/expansion evidence |
+| Decision gates | D-019, D-026, D-028, D-031, signed pilot closeout, and paid renewal/expansion evidence |
 | Blocked until | Pilot protocol/controls merged, two paid pilots closed, evidence frozen, and obligations reconciled |
 | Effort / delivery risk | S–M / Medium |
 | Base | Protected `dev-main` documentation branch |

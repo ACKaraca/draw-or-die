@@ -9,7 +9,7 @@ date in this file as decisions are made.
 | ID | Decision required | Recommended default | Blocks | Status |
 |---|---|---|---|---|
 | D-001 | Intended behavior at the AI-route merge conflict | Reconstruct from both parents and contract tests; do not choose by deletion | All code branches | Implemented on `dev-main`; production release pending |
-| D-002 | Long-lived development branch reconciliation | Reconcile existing `dev-main` with the verified green baseline, then harden protection without rewriting history | Standard delivery | Required now |
+| D-002 | Long-lived development branch reconciliation | Reconcile existing `dev-main` with the verified green baseline, then harden protection without rewriting history | Standard delivery | Approved for `dev-main` recovery/validator; `main` protection pending |
 | D-003 | Deployment source of truth | Select one documented platform/artifact promotion path; remove Vercel/Appwrite ambiguity | Release automation | Required now |
 | D-004 | Historical auto-published gallery remediation | Inventory and contact/disable exposure; no destructive deletion without explicit owner approval | Trust reset | Required now |
 | D-005 | Guest public publishing | Disallow until durable ownership and revocation exist | Gallery/community | Recommended |
@@ -47,6 +47,9 @@ date in this file as decisions are made.
 
 - Date: 2026-08-04
 - Owner: Product/repository owner
+- Revision: 1
+- Disposition: implemented
+- Allowed bases: `dev-main`
 - Decision: Preserve bounded sequential batches, run each batch in parallel, isolate individual worker failures, and
   report them through the structured logger. Preserve both parent histories and add focused regression coverage.
 - Context and evidence: The audited route contained unresolved parent variants. PR
@@ -59,10 +62,33 @@ date in this file as decisions are made.
 - Review/expiry date: Review at the next approved production release or if batch semantics change.
 - Linked branch/PR: `fix/release-build-blockers`, PR #49.
 
+### D-002 — Reconcile development normally and add persistent validation
+
+- Date: 2026-08-04
+- Owner: Product/repository owner
+- Revision: 1
+- Disposition: approved
+- Allowed bases: `dev-main`
+- Decision: Preserve normal history, reconcile the verified recovery through `dev-main`, and deliver the enterprise
+  audit plus its always-reported validation workflow through scoped branches and PRs. Require the check on `dev-main`
+  only after its first successful report. Do not change `main` protection or promote production without separate
+  release approval.
+- Context and evidence: The owner authorized the planned branches, PRs, and merges. PR #49 restored the green
+  development baseline and PR #50 delivered the audit package without rewriting history or touching `main`.
+- Alternatives rejected: Force-reset either long-lived branch; bypass repository protection; make a path-filtered
+  required workflow; treat adding a workflow as proof that its status is already required.
+- Consequences and risks: Branch 37 may proceed. R-045 remains open until hosted status, required-check configuration,
+  and deliberate-failure evidence exist; production/main hardening remains a separate approval boundary.
+- Review/expiry date: Review after the first successful hosted validator report and before any `main` ruleset change.
+- Linked branch/PR: PR #49, PR #50, `chore/enterprise-audit-validation`.
+
 ### D-019 — Education pilot before institution platform
 
 - Date: 2026-08-04
 - Owner: Product owner
+- Revision: 1
+- Disposition: approved
+- Allowed bases: `dev-main`
 - Decision: Validate the school offer through successful paid, time-bounded pilots before building reusable institution
   management, cohort, role, or billing systems. D-027 remains required for the measurable `invest` threshold.
 - Context and evidence: The owner requested school-appropriate pricing and explicitly gated institution capabilities on
@@ -79,6 +105,9 @@ date in this file as decisions are made.
 
 - Date: 2026-08-04
 - Owner: Product owner
+- Revision: 1
+- Disposition: not-planned
+- Allowed bases: None — no delivery authorization
 - Decision: Do not plan, price, market, or build a paid Human Expert Add-on.
 - Context and evidence: The owner explicitly removed real architect/educator evaluation from the requested portfolio.
   Human review may remain only where required for moderation, appeals, or operational safety.
@@ -93,6 +122,9 @@ date in this file as decisions are made.
 
 - Date: 2026-08-04
 - Owner: Product owner
+- Revision: 1
+- Disposition: approved
+- Allowed bases: `dev-main`
 - Decision: A Friends Team has one owner plus up to five invited verified members, for six active accounts maximum;
   v1 roles are `owner | member`.
 - Context and evidence: The owner requested collaboration with up to five friends, shared Rapido consumption, and
@@ -122,6 +154,9 @@ specialist advice. Approval roles describe responsibility, not headcount.
 
 - Date:
 - Owner:
+- Revision:
+- Disposition:
+- Allowed bases:
 - Decision:
 - Context and evidence:
 - Alternatives rejected:

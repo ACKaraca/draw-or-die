@@ -32,6 +32,9 @@ explicitly records an edit and review boundary.
 | AI-route recovery review | Read-only | Reconstructed unresolved batch helper from Git history; selected guarded structured-logger behavior |
 | Dependency/runtime recovery review | Read-only | Selected exact React pair, corrected fence fixture intent, and proposed one supported Node/npm/release identity contract |
 | Audit-validator design review | Read-only | Specified offline links/index/metadata/DAG/decision/risk/traceability validator and docs-only CI gate |
+| Validator adversarial red-team | Read-only | Reproduced coordinated decision drift, discarded supplemental gates, revoked/future evidence, authority drift, and decision syntax false-greens |
+| Validator workflow trust review | Read-only | Added production-invocation regression, explicit repository failure, independent count comparison, source provenance, and fail-closed final enforcement |
+| Validator contract review | Read-only | Pinned specialist deliverables, structured gate timing/attestors, policy digest, and resolved decision revision/disposition/base scope |
 
 ## Incorporation policy
 

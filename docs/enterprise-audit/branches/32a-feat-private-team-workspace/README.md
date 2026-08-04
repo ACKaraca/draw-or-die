@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Phase 6 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: product + privacy/security + commerce |
 | Target | UNSET — assign after revision and tenant-isolation gates |

@@ -29,6 +29,8 @@
     "deploy:prod": "node scripts/deploy-prod.mjs",
     "deploy:supabase-functions": "node scripts/deploy-supabase-functions.mjs",
     "validate:health-check": "node scripts/validate-health-check.mjs",
+    "validate:enterprise-audit": "node scripts/validate-enterprise-audit.mjs",
+    "test:enterprise-audit-validator": "node --test tests/enterprise-audit-validator/validate-enterprise-audit.test.mjs",
     "check:payment-system": "node scripts/check-payment-system.mjs"
   },
   "dependencies": {
