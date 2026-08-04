@@ -3483,12 +3483,12 @@ export async function POST(request: NextRequest) {
       const assistantBudget = Math.max(1, Math.min(tokenBudgetByChat, tokenBudgetByBalance));
 
       const mentorAi = await callAI(cfg, prompt, fileBase64, fileMimeType, [], requestLanguage);
-      const mentorRaw = mentorAi.content;
+      const mentorRaw = String(mentorAi.content ?? '');
       const mentorData = safeParseJson<{ reply?: string; quickActions?: unknown }>(mentorRaw, {});
       const mentorReplyRaw =
         typeof mentorData.reply === 'string' && mentorData.reply.trim()
           ? mentorData.reply.trim()
-          : String(mentorRaw ?? '').trim();
+          : mentorRaw.trim();
 
       const clamped = clampReplyToTokenBudget(mentorReplyRaw, assistantBudget, requestLanguage);
       const mentorReply = clamped.text;
@@ -3902,7 +3902,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
 
 
 
