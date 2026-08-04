@@ -2,9 +2,11 @@
 // Endpoint is chosen from a fixed allow-list to prevent SSRF.
 
 const ENDPOINTS = Object.freeze({
-  production: 'https://www.draw-or-die.com/api/health',
-  staging: 'https://draw-or-die.vercel.app/api/health',
+  production: 'https://drawordie.app/api/health',
+  staging: 'https://dev.drawordie.app/api/health',
 });
+const MAX_ATTEMPTS = 20;
+const RETRY_DELAY_MS = 10_000;
 
 function resolveEndpoint() {
   const explicit = String(process.env.HEALTHCHECK_TARGET ?? '').trim().toLowerCase();
@@ -18,25 +20,60 @@ function resolveEndpoint() {
 }
 
 const endpoint = resolveEndpoint();
+const expectedReleaseSha = String(process.env.EXPECTED_RELEASE_SHA ?? '').trim().toLowerCase();
+const expectedDeploymentId = String(process.env.EXPECTED_DEPLOYMENT_ID ?? '').trim();
 
-try {
-  const response = await fetch(endpoint, { method: 'GET' });
-  if (!response.ok) {
-    console.error(`[validate:health-check] ${endpoint} yaniti hatali: ${response.status}`);
-    process.exit(1);
-  }
-
-  const payload = await response.json().catch(() => ({}));
-  if (payload.status !== 'ok') {
-    console.error('[validate:health-check] Beklenen status=ok donmedi.');
-    process.exit(1);
-  }
-
-  console.log('[validate:health-check] Health check basarili.');
-} catch (error) {
-  console.error(
-    '[validate:health-check] Istek basarisiz:',
-    error instanceof Error ? error.message : String(error),
-  );
+if (!/^[a-f0-9]{40}$/.test(expectedReleaseSha)) {
+  console.error('[validate:health-check] EXPECTED_RELEASE_SHA must be a 40-character hexadecimal commit SHA.');
   process.exit(1);
 }
+
+if (!/^[a-z0-9._:-]{1,128}$/i.test(expectedDeploymentId)) {
+  console.error('[validate:health-check] EXPECTED_DEPLOYMENT_ID is missing or malformed.');
+  process.exit(1);
+}
+
+let lastError = 'Health endpoint did not return the expected release identity.';
+
+for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) {
+      throw new Error(`${endpoint} returned HTTP ${response.status}.`);
+    }
+
+    const payload = await response.json();
+    if (payload.status !== 'ok') {
+      throw new Error('Expected status=ok.');
+    }
+
+    if (payload.release?.sha !== expectedReleaseSha) {
+      throw new Error(
+        `Release SHA mismatch: expected=${expectedReleaseSha} actual=${payload.release?.sha ?? 'missing'}.`,
+      );
+    }
+
+    if (payload.release?.deploymentId !== expectedDeploymentId) {
+      throw new Error(
+        `Deployment ID mismatch: expected=${expectedDeploymentId} actual=${payload.release?.deploymentId ?? 'missing'}.`,
+      );
+    }
+
+    console.log(
+      `[validate:health-check] Verified ${expectedReleaseSha} on deployment ${expectedDeploymentId}.`,
+    );
+    process.exit(0);
+  } catch (error) {
+    lastError = error instanceof Error ? error.message : String(error);
+    if (attempt < MAX_ATTEMPTS) {
+      console.warn(`[validate:health-check] Attempt ${attempt}/${MAX_ATTEMPTS} failed: ${lastError}`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    }
+  }
+}
+
+console.error(`[validate:health-check] Verification failed after ${MAX_ATTEMPTS} attempts: ${lastError}`);
+process.exit(1);

@@ -12,6 +12,7 @@ on:
       - 'types/**'
       - 'package.json'
       - 'package-lock.json'
+      - '.nvmrc'
       - 'next.config.ts'
       - 'tsconfig.json'
       - 'eslint.config.mjs'
@@ -27,6 +28,7 @@ on:
       - 'types/**'
       - 'package.json'
       - 'package-lock.json'
+      - '.nvmrc'
       - 'next.config.ts'
       - 'tsconfig.json'
       - 'eslint.config.mjs'
@@ -64,8 +66,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version-file: '.nvmrc'
           cache: npm
+
+      - name: Check conflict markers
+        run: npm run check:conflicts
 
       - name: Install dependencies
         run: npm ci

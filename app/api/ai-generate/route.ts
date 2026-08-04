@@ -8,6 +8,7 @@ import { RAPIDO_COSTS } from '@/lib/pricing';
 import { isMultiJuryPromoEnabled } from '@/lib/multi-jury-promo';
 import type { Badge } from '@/types';
 import { logServerError } from '@/lib/logger';
+import { runInParallelBatches } from '@/lib/run-in-parallel-batches';
 import { ensureAtLeastTwoParagraphs, normalizeCritiqueText } from '@/lib/critique';
 import {
   DESIGN_INSIGHT_RESPONSE_FORMAT,
@@ -776,33 +777,6 @@ function summarizeForFileCache(value: string): string {
   return normalized.substring(0, 3000);
 }
 
-async function runInParallelBatches<T>(
-  items: T[],
-  batchSize: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-<<<<<<< HEAD
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    await Promise.all(batch.map((item) => worker(item).catch((err) => console.error('[runInParallelBatches] item failed', err))));
-=======
-  if (!Number.isInteger(batchSize) || batchSize < 1) {
-    throw new Error(`Invalid batchSize: ${batchSize}`);
-  }
-
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    await Promise.all(
-      batch.map((item) =>
-        worker(item).catch((err) => {
-          logServerError('api.ai-generate.runInParallelBatches', err, { batchIndex: i, batchSize });
-        }),
-      ),
-    );
->>>>>>> origin/dev-main
-  }
-}
-
 async function loadAnalysisFileCacheRows(userId: string, hashes: string[]): Promise<Map<string, AnalysisFileCacheRow>> {
   const uniqueHashes = Array.from(new Set(hashes.filter(Boolean)));
   if (uniqueHashes.length === 0) return new Map();
@@ -840,37 +814,44 @@ async function upsertAnalysisFileCacheRows(params: {
   const tables = getAdminTables();
   const existing = await loadAnalysisFileCacheRows(params.userId, uniqueHashes);
 
-  await runInParallelBatches(uniqueHashes, 3, async (hash) => {
-    const row = existing.get(hash);
-    if (row) {
-      await tables.updateRow({
+  await runInParallelBatches(
+    uniqueHashes,
+    3,
+    async (hash) => {
+      const row = existing.get(hash);
+      if (row) {
+        await tables.updateRow({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
+          rowId: row.$id,
+          data: {
+            last_operation: params.operation,
+            latest_summary: cleanedSummary,
+            title_guess: (params.titleGuess || '').substring(0, 255),
+            analysis_count: Math.max(1, (Number(row.analysis_count) || 0) + 1),
+          },
+        });
+        return;
+      }
+
+      await tables.createRow<AnalysisFileCacheRow>({
         databaseId: APPWRITE_DATABASE_ID,
         tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
-        rowId: row.$id,
+        rowId: ID.unique(),
         data: {
+          user_id: params.userId,
+          file_hash: hash,
           last_operation: params.operation,
           latest_summary: cleanedSummary,
           title_guess: (params.titleGuess || '').substring(0, 255),
-          analysis_count: Math.max(1, (Number(row.analysis_count) || 0) + 1),
+          analysis_count: 1,
         },
       });
-      return;
-    }
-
-    await tables.createRow<AnalysisFileCacheRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
-      rowId: ID.unique(),
-      data: {
-        user_id: params.userId,
-        file_hash: hash,
-        last_operation: params.operation,
-        latest_summary: cleanedSummary,
-        title_guess: (params.titleGuess || '').substring(0, 255),
-        analysis_count: 1,
-      },
-    });
-  });
+    },
+    (error, context) => {
+      logServerError('api.ai-generate.runInParallelBatches', error, context);
+    },
+  );
 }
 
 function normalizeKnownFileContexts(value: unknown): KnownFileContext[] {
@@ -1073,21 +1054,42 @@ async function upsertMemorySnippets(params: {
     }
   }
 
-  await runInParallelBatches(candidates, 3, async (candidate) => {
-    const existing = byCategory.get(candidate.category);
-    if (existing) {
-      if (existing.deleted_by_user === true) {
-        const deletedAt = existing.deleted_at || existing.$updatedAt;
-        if (isDeletedSnippetStillRetained(deletedAt)) {
-          return;
+  await runInParallelBatches(
+    candidates,
+    3,
+    async (candidate) => {
+      const existing = byCategory.get(candidate.category);
+      if (existing) {
+        if (existing.deleted_by_user === true) {
+          const deletedAt = existing.deleted_at || existing.$updatedAt;
+          if (isDeletedSnippetStillRetained(deletedAt)) {
+            return;
+          }
         }
+
+        await tables.updateRow({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
+          rowId: existing.$id,
+          data: {
+            category: candidate.category,
+            snippet: candidate.snippet,
+            visible_to_user: candidate.visibleToUser,
+            deleted_by_user: false,
+            delete_reason: '',
+            deleted_at: '',
+            updated_from_operation: params.operation,
+          },
+        });
+        return;
       }
 
-      await tables.updateRow({
+      await tables.createRow<MemorySnippetRow>({
         databaseId: APPWRITE_DATABASE_ID,
         tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
-        rowId: existing.$id,
+        rowId: ID.unique(),
         data: {
+          user_id: params.userId,
           category: candidate.category,
           snippet: candidate.snippet,
           visible_to_user: candidate.visibleToUser,
@@ -1097,25 +1099,11 @@ async function upsertMemorySnippets(params: {
           updated_from_operation: params.operation,
         },
       });
-      return;
-    }
-
-    await tables.createRow<MemorySnippetRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
-      rowId: ID.unique(),
-      data: {
-        user_id: params.userId,
-        category: candidate.category,
-        snippet: candidate.snippet,
-        visible_to_user: candidate.visibleToUser,
-        deleted_by_user: false,
-        delete_reason: '',
-        deleted_at: '',
-        updated_from_operation: params.operation,
-      },
-    });
-  });
+    },
+    (error, context) => {
+      logServerError('api.ai-generate.runInParallelBatches', error, context);
+    },
+  );
 }
 
 function buildCacheSummaryFromResult(operation: string, result: string): { summary: string; titleGuess: string } {
@@ -3914,8 +3902,6 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-
 
 
 
