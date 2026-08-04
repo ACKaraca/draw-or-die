@@ -29,6 +29,27 @@ access. Every recommendation that depends on those systems is marked as a hypoth
 7. [Delivery traceability](./TRACEABILITY.md) — risk, decision, branch, ownership, PR, merge, and verification lifecycle.
 8. [Specialist review provenance](./REVIEW-PROVENANCE.md) — independent workstreams and incorporated challenge findings.
 
+## Validation
+
+Run `npm run validate:enterprise-audit` before changing this package. The
+[validation contract](./VALIDATION-CONTRACT.json) pins package counts, required structure, repository identity,
+branch-to-decision/risk mappings, structured supplemental gates, resolved-decision revision/disposition/base scope,
+canonical decision/risk/portfolio tables, specialist deliverables, and permitted operational graph edges. The reviewed
+policy subset has a validator-pinned digest, so drift against the reviewed baseline fails visibly. Pull requests to
+`dev-main` or `main` run the same production invocation plus 134 adversarial regression cases and upload a commit-bound
+machine-readable report even when validation or the fixture suite fails.
+
+The offline validator proves repository-internal structure and evidence consistency; it does not independently prove
+that a GitHub review, check result, or external approval is genuine. Hosted PR metadata, branch rules, and the immutable
+verification PR remain the authorization boundary. A supplemental gate due at `Ready`, merge, or verification requires
+a pinned attestor plus a non-zero SHA-256 record and non-future UTC attestation; operation-time gates remain declared
+holds and cannot be pre-approved by advancing the branch lifecycle.
+
+The contract, validator, and workflow still live in one repository and can be proposed together. Their internal
+digests detect accidental or unreviewed drift only while the enforcement source is trusted; branch 01 owns the external
+ruleset/required-workflow and non-author review boundary. A recorded SHA-256 value is an immutable identifier, not proof
+that the referenced external artifact exists or is authentic; hosted evidence storage and review must resolve it.
+
 ## Strategy documents
 
 | Document | Decision it supports |

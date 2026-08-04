@@ -3,10 +3,10 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P0 / Phase 0 |
-| Status | Merged to `dev-main` on 2026-08-04; production/`main` promotion not performed |
+| Status | Merged |
 | DRI | Repository owner (scope/merge authorization) + Codex (implementation) |
 | Approver | Owner delivery authorization + automated repository gates; no separate human GitHub review recorded |
-| Target | Completed on `dev-main`; production promotion requires explicit major-release approval |
+| Target | Completed on `dev-main` on 2026-08-04; production promotion requires explicit major-release approval |
 | Decision gates | D-001 |
 | Blocked until | Production closure requires an approved `main` release and exact production-SHA verification |
 | Effort / delivery risk | S–M / High |

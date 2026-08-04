@@ -3,11 +3,11 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Phase 7 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED |
 | Target | UNSET — assign before branch creation |
-| Decision gates | D-019, D-026, D-027, D-028, and D-031 |
+| Decision gates | D-019, D-026, D-028, and D-031 |
 | Blocked until | Listed dependencies, owner assignments, and approvals are complete |
 | Effort / delivery risk | M discovery/operations / Medium |
 | Base | Protected `dev-main` |

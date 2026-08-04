@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P0 / Phase 0 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED |
 | Target | UNSET — assign before branch creation |
@@ -31,6 +31,10 @@ gates.
 - Remove unsafe path-filter gaps or add an always-running gate that resolves skipped jobs safely.
 - Protect and reconcile the existing `dev-main` plus `main`; disable force-push/deletion and enforce administrators.
 - Require conversation resolution, up-to-date branches, and reviewed high-risk changes.
+- Protect validator, contract, and workflow co-changes with a ruleset or required-workflow source that the same PR cannot
+  silently weaken; require non-author review when an eligible reviewer exists.
+- Resolve content-addressed lifecycle/gate records to retained hosted artifacts; reject missing, mutable, expired, or
+  unreachable evidence instead of trusting a pasted digest.
 - Document a time-bounded, audited emergency override procedure.
 
 ## Non-goals
@@ -43,6 +47,8 @@ No application behavior or deployment-platform migration.
 - [ ] A skipped path cannot leave a required status permanently absent or falsely green.
 - [ ] Direct push, force-push, branch deletion, and merge with failed checks are rejected for both long-lived branches.
 - [ ] High-risk money/identity/privacy/schema changes require a non-author approval.
+- [ ] A PR that weakens the audit validator, contract, or workflow cannot satisfy its own enforcement requirement.
+- [ ] Every approval, rollout, rollback, exception, and verification digest resolves to a retained immutable artifact.
 - [ ] Emergency override records actor, reason, duration, and follow-up incident review.
 
 ## Approval and migration boundary

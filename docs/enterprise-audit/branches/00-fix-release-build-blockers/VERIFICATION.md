@@ -9,7 +9,8 @@
 | Base branch | `dev-main` |
 | Merge SHA | `69f65786a5d4397524818b533f62cb83b1a6c28b` |
 | Merged at | `2026-08-04T16:46:29Z` |
-| Production promotion | Not performed |
+| Review threads | Resolved |
+| Checks | Passed: [merge gates](https://github.com/ACKaraca/draw-or-die/actions/runs/30930489414) and [CodeQL](https://github.com/ACKaraca/draw-or-die/actions/runs/30930489509) |
 
 ## Local verification
 

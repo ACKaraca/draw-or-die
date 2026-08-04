@@ -3,13 +3,12 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Phase 5 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED |
 | Target | UNSET — assign before branch creation |
 | Decision gates | D-013 |
 | Blocked until | Listed dependencies, owner assignments, and approvals are complete |
-| Delivery mode | Optional; does not block the revision MVP or Phase 6 acquisition |
 | Effort / delivery risk | XL / High |
 | Base | Protected `dev-main` |
 | Depends on | `refactor/typed-analysis-state-machine`, `chore/critical-contract-harness`; does not block revision MVP |

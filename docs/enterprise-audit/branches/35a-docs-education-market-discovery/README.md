@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Parallel discovery from Phase 0 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — workstream must not start collecting data |
 | Approver | UNASSIGNED — required roles: product owner + privacy owner for research handling |
 | Target | UNSET — protocol authoring may run while technical P0 work proceeds |

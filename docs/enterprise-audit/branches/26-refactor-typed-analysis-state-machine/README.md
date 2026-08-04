@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Phase 5 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED |
 | Target | UNSET — assign before branch creation |

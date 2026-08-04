@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Phase 0 parallel evidence gate |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: product + privacy + finance |
 | Target | UNSET — open only after the approved discovery operations are complete |

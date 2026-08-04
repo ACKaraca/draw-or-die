@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P1 / Phase 6 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: commerce/finance + security + product |
 | Target | UNSET — assign after team authorization and ledger gates |

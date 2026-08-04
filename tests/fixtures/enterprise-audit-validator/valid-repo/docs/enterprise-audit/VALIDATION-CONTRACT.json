@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 2,
+  "repositorySlug": "example/repo",
+  "dependencyGraphDigest": "sha256:5496430946110314d35fc643c57559e6970453d1a7cc6dd2c4ef194b85567b1d",
+  "portfolioDigest": "sha256:8afaacb98f767dfa87b2451fcf0eea6574ccbe8e8006df385c56810ea4a25eb3",
+  "decisionTableDigest": "sha256:98b225705708ad34c8c6cc4235a7406e169215943bb6edbfaaee575f25b092ac",
+  "riskTableDigest": "sha256:a2e62f8e54f6d11470829db36b7628b2a3585762c58f53cf879750b209a17ff5",
+  "declaredCounts": {
+    "markdownFiles": 22,
+    "branchPlans": 2,
+    "hardDependencies": 1,
+    "decisions": 2,
+    "risks": 2
+  },
+  "requiredBranchMetadata": [
+    "Priority / phase",
+    "Status",
+    "DRI",
+    "Approver",
+    "Target",
+    "Decision gates",
+    "Blocked until",
+    "Effort / delivery risk",
+    "Base",
+    "Depends on",
+    "Accountable roles"
+  ],
+  "requiredBranchSections": [
+    "Outcome",
+    "Evidence",
+    "Scope",
+    "Non-goals",
+    "Acceptance criteria",
+    "Approval and migration boundary",
+    "Rollout",
+    "Rollback",
+    "Metrics and required artifacts"
+  ],
+  "requiredFiles": [
+    "AI-DATA-STRATEGY.md",
+    "AUDIT-METHOD.md",
+    "DECISION-LOG.md",
+    "EMERGENCY-CHANGE-PROTOCOL.md",
+    "EVIDENCE-BASELINE.md",
+    "EXECUTIVE-BRIEF.md",
+    "MARKETING-GTM.md",
+    "METRICS-EXPERIMENTATION.md",
+    "MONETIZATION-STRATEGY.md",
+    "P0-CONTAINMENT-RUNBOOK.md",
+    "PRODUCT-STRATEGY.md",
+    "QUALITY-RELIABILITY.md",
+    "README.md",
+    "REVIEW-PROVENANCE.md",
+    "RISK-REGISTER.md",
+    "ROADMAP.md",
+    "SECURITY-PRIVACY.md",
+    "TECHNOLOGY-ARCHITECTURE.md",
+    "TRACEABILITY.md",
+    "branches/README.md"
+  ],
+  "decisionTableColumns": [
+    "ID",
+    "Decision required",
+    "Recommended default",
+    "Blocks",
+    "Status"
+  ],
+  "riskTableColumns": [
+    "ID",
+    "P",
+    "Risk and business consequence",
+    "Likelihood",
+    "Permanent control / branch",
+    "Status"
+  ],
+  "decisionRecords": {},
+  "specialistDocumentDigests": {},
+  "branchDecisionGates": {
+    "fix/foundation": { "decisions": ["D-001"], "requirements": [] },
+    "feat/follow-up": { "decisions": ["D-002"], "requirements": [] }
+  },
+  "branchRiskControls": {
+    "fix/foundation": ["R-001"],
+    "feat/follow-up": ["R-002"]
+  },
+  "unmappedRisks": [],
+  "allowedOperationalEdges": []
+}

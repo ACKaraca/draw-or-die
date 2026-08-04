@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P2 / Phase 8 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: finance/commerce + product + security + support |
 | Target | UNSET — assign after approved institution price and cohort contracts |

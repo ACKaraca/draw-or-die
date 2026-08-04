@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P1 / Phase 1 parallel foundation |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: product owner + SEO/privacy owner |
 | Target | UNSET — intended inside the first 30 days |

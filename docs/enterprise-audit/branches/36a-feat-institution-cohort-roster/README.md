@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P3 / Phase 8 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: product/education + privacy/security + QA |
 | Target | UNSET — assign only after institution tenancy and pilot investment gates |

@@ -3,11 +3,11 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P1 / Phase 7 |
-| Status | Planned; branch not created |
+| Status | Planned |
 | DRI | UNASSIGNED — branch must not start |
 | Approver | UNASSIGNED — required roles: product/education + security/privacy + finance + operations |
 | Target | UNSET — assign before any learner enrollment or institutional allowance grant |
-| Decision gates | D-019, D-026, D-027, D-028, and D-031 |
+| Decision gates | D-019, D-026, D-028, and D-031 |
 | Blocked until | Pilot protocol, listed dependencies, owners, contracts, and isolated-boundary drill are approved |
 | Effort / delivery risk | XL / High |
 | Base | Protected `dev-main` |
