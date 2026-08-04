@@ -33,7 +33,7 @@ if (!/^[a-z0-9._:-]{1,128}$/i.test(expectedDeploymentId)) {
   process.exit(1);
 }
 
-let lastError = 'Health endpoint did not return the expected release identity.';
+let isVerified = false;
 
 for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
   try {
@@ -51,29 +51,26 @@ for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     }
 
     if (payload.release?.sha !== expectedReleaseSha) {
-      throw new Error(
-        `Release SHA mismatch: expected=${expectedReleaseSha} actual=${payload.release?.sha ?? 'missing'}.`,
-      );
+      throw new Error('Release SHA mismatch.');
     }
 
     if (payload.release?.deploymentId !== expectedDeploymentId) {
-      throw new Error(
-        `Deployment ID mismatch: expected=${expectedDeploymentId} actual=${payload.release?.deploymentId ?? 'missing'}.`,
-      );
+      throw new Error('Deployment ID mismatch.');
     }
 
-    console.log(
-      `[validate:health-check] Verified ${expectedReleaseSha} on deployment ${expectedDeploymentId}.`,
-    );
-    process.exit(0);
-  } catch (error) {
-    lastError = error instanceof Error ? error.message : String(error);
+    isVerified = true;
+    break;
+  } catch {
     if (attempt < MAX_ATTEMPTS) {
-      console.warn(`[validate:health-check] Attempt ${attempt}/${MAX_ATTEMPTS} failed: ${lastError}`);
+      console.warn(`[validate:health-check] Attempt ${attempt}/${MAX_ATTEMPTS} did not match the expected release.`);
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
     }
   }
 }
 
-console.error(`[validate:health-check] Verification failed after ${MAX_ATTEMPTS} attempts: ${lastError}`);
-process.exit(1);
+if (!isVerified) {
+  console.error(`[validate:health-check] Verification failed after ${MAX_ATTEMPTS} attempts.`);
+  process.exit(1);
+}
+
+console.log('[validate:health-check] Verified the expected release identity.');

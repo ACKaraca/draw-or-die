@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 const CONFLICT_MARKER = /^(?:<<<<<<<(?: .*)?|=======|>>>>>>>(?: .*)?)$/;
 
 function listTrackedFiles() {
-  const output = execFileSync('git', ['ls-files', '-z'], { encoding: 'buffer' });
+  const output = execFileSync('/usr/bin/git', ['ls-files', '-z'], { encoding: 'buffer' });
   return output
     .toString('utf8')
     .split('\0')

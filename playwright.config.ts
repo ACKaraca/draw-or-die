@@ -11,7 +11,7 @@ function resolveLocalReleaseSha(): string {
   if (configuredSha) return configuredSha;
 
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    return execFileSync('/usr/bin/git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   } catch (error) {
     throw new Error('Unable to resolve Git HEAD for local smoke release identity.', { cause: error });
   }
