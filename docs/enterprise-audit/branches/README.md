@@ -1,16 +1,18 @@
 # Branch Delivery Portfolio
 
-Each of the 52 directories below represents one proposed Git branch and contains a complete branch-level delivery
-contract. These branches do not exist yet. The plans are ordered by dependency and risk, not by feature excitement.
+Each of the 52 directories below represents one delivery branch and contains a complete branch-level contract. Branch
+00 has merged to `dev-main`; every other portfolio branch remains planned and uncreated. The plans are ordered by
+dependency and risk, not by feature excitement.
 
 ## Base-branch rule
 
 The initial checkout falsely appeared to lack `dev-main` because its fetch refspec exposed only `main`. Direct remote
-verification found `dev-main` at `8869af1`: its tree matched audited `main`, while its history had diverged. Reconcile
-through reviewed normal history—never force-reset—then branch standard work from protected, green `dev-main`. An
-explicitly approved production hotfix may branch from `main` only when its release boundary requires it.
+verification found `dev-main` at `8869af1`: its tree matched audited `main`, while its history had diverged. Recovery PR
+[#49](https://github.com/ACKaraca/draw-or-die/pull/49) then merged normally to `dev-main` as `69f6578`, without
+rewriting history or promoting `main`. Branch standard work from the latest protected, green `dev-main`. An explicitly
+approved production hotfix may branch from `main` only when its release boundary requires it.
 
-Do not create all branches at once. Create a branch when its dependencies and phase exit gate are satisfied.
+Do not create all remaining branches at once. Create a branch when its dependencies and phase exit gate are satisfied.
 
 ## Portfolio
 
