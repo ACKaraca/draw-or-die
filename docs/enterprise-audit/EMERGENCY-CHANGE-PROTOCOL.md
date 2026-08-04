@@ -36,4 +36,3 @@ identity/reward uniqueness, kill switches, and incident evidence before Phase 2 
 The change must remain `DRAFT — DO NOT EXECUTE` until DRI, approver, target, dry-run, rollback, and verification evidence
 are filled. Any irreversible action leaves this protocol and requires the repository's explicit Turkish destructive
 confirmation immediately before execution.
-

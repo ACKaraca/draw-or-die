@@ -35,4 +35,3 @@ Applied migration files are never edited. Corrections use a new forward migratio
 
 Stop the runner, retain the ledger/lease/error, keep the application on a backward-compatible path, restore only into an
 isolated environment for verification, and fix forward. Never drop data or rewrite the ledger as a rollback.
-
