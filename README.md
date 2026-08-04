@@ -180,7 +180,7 @@ DrawOrDie/
 
 ## Hızlı Başlangıç
 
-**Gereksinimler:** Node.js 20+
+**Gereksinimler:** Node.js 22.23.1 ve npm 10.9.8 (`.nvmrc` ve `package.json` ile sabitlenmiştir)
 
 ```bash
 # Bağımlılıkları yükle
