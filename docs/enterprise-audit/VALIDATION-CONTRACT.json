@@ -6,7 +6,7 @@
   "decisionTableDigest": "sha256:c43afe0a1945f8e189e49b33723cc5a42ea584e79ea0a0bd53353990aa65f603",
   "riskTableDigest": "sha256:d7ba37449367cb4984cf4d2004576c0baa0a8c2b72e9c655feda821a148fcea2",
   "declaredCounts": {
-    "markdownFiles": 81,
+    "markdownFiles": 82,
     "branchPlans": 52,
     "hardDependencies": 148,
     "decisions": 32,

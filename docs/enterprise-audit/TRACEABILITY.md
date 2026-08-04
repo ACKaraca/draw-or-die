@@ -6,10 +6,9 @@ This register joins each proposed branch to its controlling risks and decisions 
 exists. The branch plan remains authoritative for scope/dependencies; the risk and decision registers remain
 authoritative for control/approval semantics.
 
-Branch 00 is merged and branch 37 is ready on a local delivery branch. No other planned feature branch is implied to
-exist. `Planned / unset` means DRI, target, PR, merge SHA, rollout, rollback, and post-deploy verification are all
-absent. A future branch may move forward only when its plan metadata, hard dependencies, decision gates, and approvals
-permit it.
+Branches 00 and 37 are merged to `dev-main`. No other planned feature branch is implied to exist. `Planned / unset`
+means DRI, target, PR, merge SHA, rollout, rollback, and post-deploy verification are all absent. A future branch may
+move forward only when its plan metadata, hard dependencies, decision gates, and approvals permit it.
 
 ## Lifecycle evidence contract
 
@@ -55,7 +54,7 @@ the recorded merge; merge-stage attestations must not postdate it.
 | 35A | [`docs/education-market-discovery`](./branches/35a-docs-education-market-discovery/README.md) | R-033 | D-019 plus research consent, storage, recruitment, and claims review | Planned / unset |
 | 35B | [`docs/education-discovery-evidence`](./branches/35b-docs-education-discovery-evidence/README.md) | R-033 | D-019 | Planned / unset |
 | 01 | [`fix/repository-release-gates`](./branches/01-fix-repository-release-gates/README.md) | R-002 | D-002 | Planned / unset |
-| 37 | [`chore/enterprise-audit-validation`](./branches/37-chore-enterprise-audit-validation/README.md) | R-045 | D-002 | Ready |
+| 37 | [`chore/enterprise-audit-validation`](./branches/37-chore-enterprise-audit-validation/README.md) | R-045 | D-002 | Merged to `dev-main`: [PR #51](https://github.com/ACKaraca/draw-or-die/pull/51), head `b9aa54e`, merge `7f09ec1` |
 | 02 | [`fix/staging-artifact-promotion`](./branches/02-fix-staging-artifact-promotion/README.md) | R-021, R-032 | D-003 | Planned / unset |
 | 03 | [`fix/explicit-gallery-consent`](./branches/03-fix-explicit-gallery-consent/README.md) | R-003, R-010 | D-005 | Planned / unset |
 | 03A | [`fix/historical-gallery-remediation`](./branches/03a-fix-historical-gallery-remediation/README.md) | R-003 | D-004 and explicit destructive confirmation for archive/delete targets | Planned / unset |

@@ -3,12 +3,12 @@
 | Field | Value |
 |---|---|
 | Priority / phase | P1 / Phase 0 |
-| Status | Ready |
+| Status | Merged |
 | DRI | Repository owner (accountable) + Codex (implementation) |
 | Approver | Repository owner for workflow/merge authorization; independent QA evidence required before merge |
 | Target | 2026-08-04 PR and `dev-main` merge window |
 | Decision gates | D-002 |
-| Blocked until | Hosted named check and review are green; required-check activation follows its first successful report |
+| Blocked until | `dev-main` delivery complete; verification remains blocked on deliberate-failure and rollback exercise evidence |
 | Effort / delivery risk | S–M / Low |
 | Base | Protected `dev-main` |
 | Depends on | `fix/release-build-blockers` |
@@ -22,8 +22,11 @@ graph drift, including on documentation-only pull requests.
 ## Evidence
 
 The branch portfolio requires automated missing-target and cycle rejection. The audit package and green recovery
-baseline are now on `dev-main`, but existing PR and CodeQL path filters exclude `docs/**`. The local implementation
-validates the real package and its negative fixtures; hosted status and branch-protection evidence remain pending.
+baseline are now on `dev-main`, but existing PR and CodeQL path filters excluded `docs/**`. PR #51 merged the validator,
+134-case fixture suite, and always-on workflow after the hosted worker and fresh-runner enforcement jobs passed. Ruleset
+#20409666 now requires the named GitHub Actions check on `dev-main`. SonarCloud and DeepScan reported non-required
+validator maintainability/static-analysis findings; they remain explicit follow-up evidence and are not represented as
+green checks.
 
 ## Scope
 
@@ -66,9 +69,9 @@ must not rewrite docs, create branches, call GitHub, or mutate product data.
 
 ## Rollout
 
-Local current-package pass and negative fixtures are complete. Next: PR path/status proof → required status on
-`dev-main` → deliberately broken test evidence → equivalent `main` protection only after the remaining D-002/main
-approval.
+Local and hosted current-package passes, negative fixtures, PR path/status proof, and the required `dev-main` status are
+complete. Next: deliberately broken hosted test evidence → validator static-analysis remediation → rollback exercise →
+equivalent `main` protection only after the remaining D-002/main approval.
 
 ## Rollback
 
