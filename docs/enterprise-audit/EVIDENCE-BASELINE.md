@@ -60,6 +60,19 @@ responsibilities, making changes harder to review and test independently.
 - Documentation-only changes were excluded from both PR-check and CodeQL path filters, so the audit package had no
   automated link, metadata, decision-reference, or dependency-DAG gate.
 
+## Recovery delivery record after the audited snapshot
+
+PR [#49](https://github.com/ACKaraca/draw-or-die/pull/49) repaired the reproducible development baseline and merged
+to `dev-main` at `2026-08-04T16:46:29Z` as `69f65786a5d4397524818b533f62cb83b1a6c28b`. The final head passed an
+isolated install, lint, typecheck, 217 Jest tests, production build, two real Chromium smoke tests, conflict and secret
+checks, CodeQL, SonarCloud, Snyk, DeepScan, and an Appwrite preview build. The release chain now stamps and verifies an
+exact expected SHA and deployment identifier. Detailed evidence is in the branch
+[verification record](./branches/00-fix-release-build-blockers/VERIFICATION.md).
+
+This delivery did not modify `main` or production. The original baseline above remains the authoritative audited
+snapshot, R-001 remains open for production promotion, and the separate production dependency findings remain
+unresolved.
+
 ## AI model lifecycle evidence
 
 The repository default `google/gemini-3.1-flash-lite-preview` is retired. Google records a 2026-05-25 shutdown and

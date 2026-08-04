@@ -8,7 +8,7 @@ date in this file as decisions are made.
 
 | ID | Decision required | Recommended default | Blocks | Status |
 |---|---|---|---|---|
-| D-001 | Intended behavior at the AI-route merge conflict | Reconstruct from both parents and contract tests; do not choose by deletion | All code branches | Required now |
+| D-001 | Intended behavior at the AI-route merge conflict | Reconstruct from both parents and contract tests; do not choose by deletion | All code branches | Implemented on `dev-main`; production release pending |
 | D-002 | Long-lived development branch reconciliation | Reconcile existing `dev-main` with the verified green baseline, then harden protection without rewriting history | Standard delivery | Required now |
 | D-003 | Deployment source of truth | Select one documented platform/artifact promotion path; remove Vercel/Appwrite ambiguity | Release automation | Required now |
 | D-004 | Historical auto-published gallery remediation | Inventory and contact/disable exposure; no destructive deletion without explicit owner approval | Trust reset | Required now |
@@ -42,6 +42,22 @@ date in this file as decisions are made.
 | D-032 | Institution billing authority and allowance | Billing-admin authority, organization-owned customer/ledger, exact-once funding, bounded overage, and explicit closeout | Institution billing | Required |
 
 ## Recorded owner decisions
+
+### D-001 — Recover the AI-route conflict without contract deletion
+
+- Date: 2026-08-04
+- Owner: Product/repository owner
+- Decision: Preserve bounded sequential batches, run each batch in parallel, isolate individual worker failures, and
+  report them through the structured logger. Preserve both parent histories and add focused regression coverage.
+- Context and evidence: The audited route contained unresolved parent variants. PR
+  [#49](https://github.com/ACKaraca/draw-or-die/pull/49) extracted `runInParallelBatches`, passed the complete gate suite,
+  and merged to `dev-main` as `69f6578`.
+- Alternatives rejected: Delete either parent wholesale; allow one failed worker to cancel all later work; swallow
+  failures without structured evidence; rewrite branch history.
+- Consequences and risks: The development baseline is reproducible again. R-001 remains open until an approved `main`
+  release reports the exact expected SHA; full authenticated AI-route fixtures remain in branch 10.
+- Review/expiry date: Review at the next approved production release or if batch semantics change.
+- Linked branch/PR: `fix/release-build-blockers`, PR #49.
 
 ### D-019 — Education pilot before institution platform
 

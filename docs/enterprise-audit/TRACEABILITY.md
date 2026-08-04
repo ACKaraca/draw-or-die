@@ -6,9 +6,9 @@ This register joins each proposed branch to its controlling risks and decisions 
 exists. The branch plan remains authoritative for scope/dependencies; the risk and decision registers remain
 authoritative for control/approval semantics.
 
-No planned feature branch is implied to exist. `Planned / unset` means DRI, target, PR, merge SHA, rollout, rollback,
-and post-deploy verification are all absent. A future branch may move forward only when its plan metadata, hard
-dependencies, decision gates, and approvals permit it.
+Except for branch 00, no planned feature branch is implied to exist. `Planned / unset` means DRI, target, PR, merge
+SHA, rollout, rollback, and post-deploy verification are all absent. A future branch may move forward only when its
+plan metadata, hard dependencies, decision gates, and approvals permit it.
 
 ## Lifecycle evidence contract
 
@@ -24,7 +24,7 @@ dependencies, decision gates, and approvals permit it.
 
 | ID | Plan | Risk controls | Decision gates | Delivery state |
 |---:|---|---|---|---|
-| 00 | [`fix/release-build-blockers`](./branches/00-fix-release-build-blockers/README.md) | R-001 | D-001 | Planned / unset |
+| 00 | [`fix/release-build-blockers`](./branches/00-fix-release-build-blockers/README.md) | R-001 | D-001 | Merged to `dev-main`: [PR #49](https://github.com/ACKaraca/draw-or-die/pull/49), head `1b0292f`, merge `69f6578`; production not promoted |
 | 02A | [`fix/p0-capability-containment`](./branches/02a-fix-p0-capability-containment/README.md) | R-003–R-009, R-017 | Incident/change approval | Planned / unset |
 | 35A | [`docs/education-market-discovery`](./branches/35a-docs-education-market-discovery/README.md) | R-033 | D-019 | Planned / unset |
 | 35B | [`docs/education-discovery-evidence`](./branches/35b-docs-education-discovery-evidence/README.md) | R-033 | D-019 | Planned / unset |

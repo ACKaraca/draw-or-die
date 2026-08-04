@@ -18,4 +18,3 @@ This document provides a structured index of all repository-wide documentation f
 | [docs/ARCHBUILDER_ASSET_MANIFEST.md](../ARCHBUILDER_ASSET_MANIFEST.md) | Defines MVP furniture assets, storage metadata conventions, and seeded assets for ArchBuilder. | ArchBuilder Feature Team | When assets or placement metadata schemas are updated |
 | [docs/jules/i18n-refactor-task.md](../jules/i18n-refactor-task.md) | Jules asynchronous task prompt detailing the repo-wide i18n refactoring process. | Core Team | Once (completed/archived after refactor) |
 | [docs/prompts/x-language-i18n-prompt.md](../prompts/x-language-i18n-prompt.md) | Reusable manual prompt for extending the i18n standards to support new languages. | Core Team | When i18n guidelines or supported language requirements evolve |
-| [WHATSAPP_TANITIM.md](../../WHATSAPP_TANITIM.md) | WhatsApp marketing & promotional copy guidelines for localized communication. | Marketing Team | As promotional campaigns evolve |

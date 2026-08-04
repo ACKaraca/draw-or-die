@@ -20,7 +20,7 @@ time-bounded decision-log record and expiry. Planning a control does not change 
 
 | ID | P | Risk and business consequence | Likelihood | Primary evidence | Permanent control / branch | Status |
 |---|---:|---|---|---|---|---|
-| R-001 | P0 | `main` cannot build, blocking reproducible releases and security analysis | Certain | Conflict markers in core AI route; local and CodeQL failures | `fix/release-build-blockers` | Open |
+| R-001 | P0 | `main` cannot build, blocking reproducible production releases and security analysis | Certain on audited `main`; remediated on `dev-main` | Audited conflict markers/failures; PR #49 passed all gates and merged as `69f6578`, but `main` was not promoted | `fix/release-build-blockers` plus approved production release | Open — `dev-main` repaired; production evidence pending |
 | R-002 | P0 | Failed or insufficiently controlled code can reach long-lived branches | High | One review but no required status checks; admin bypass, force-push, and deletion allowed | `fix/repository-release-gates` | Open |
 | R-003 | P0 | Free analysis can become an auto-approved gallery record without explicit consent | High | Upload privacy promise conflicts with analysis and gallery flows | `fix/explicit-gallery-consent` plus `fix/historical-gallery-remediation` | Open |
 | R-004 | P0 | Education mailbox ownership can be bypassed by reading the OTP from the profile response | High | OTP stored in profile and broad profile DTO | `fix/security-edu-otp-secrecy` | Open |
