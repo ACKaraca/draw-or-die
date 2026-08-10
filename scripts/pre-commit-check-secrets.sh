@@ -26,7 +26,7 @@ fi
 
 FOUND=0
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
-  MATCHES=$(git diff --cached | grep -E "^\+" | grep -E "$pattern" || true)
+  MATCHES=$(git diff --cached | grep -E "^\+" | grep -E -- "$pattern" || true)
   if [ -n "$MATCHES" ]; then
     echo -e "${RED}[BLOCKED] Potential secret detected (pattern: $pattern):${NC}"
     echo "$MATCHES"

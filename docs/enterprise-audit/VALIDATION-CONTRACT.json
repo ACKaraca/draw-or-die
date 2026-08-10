@@ -1,0 +1,340 @@
+{
+  "schemaVersion": 2,
+  "repositorySlug": "ACKaraca/draw-or-die",
+  "dependencyGraphDigest": "sha256:b04c3fc5c2de7291b7e47be367f6d4b3d180d70a4b7b2301c8a299546227923f",
+  "portfolioDigest": "sha256:4f4675ea93bd03fed7c555a0a4114d1747c91fa28678403eb1c6d471f2de62c7",
+  "decisionTableDigest": "sha256:c43afe0a1945f8e189e49b33723cc5a42ea584e79ea0a0bd53353990aa65f603",
+  "riskTableDigest": "sha256:d7ba37449367cb4984cf4d2004576c0baa0a8c2b72e9c655feda821a148fcea2",
+  "declaredCounts": {
+    "markdownFiles": 82,
+    "branchPlans": 52,
+    "hardDependencies": 148,
+    "decisions": 32,
+    "risks": 45
+  },
+  "requiredBranchMetadata": [
+    "Priority / phase",
+    "Status",
+    "DRI",
+    "Approver",
+    "Target",
+    "Decision gates",
+    "Blocked until",
+    "Effort / delivery risk",
+    "Base",
+    "Depends on",
+    "Accountable roles"
+  ],
+  "requiredBranchSections": [
+    "Outcome",
+    "Evidence",
+    "Scope",
+    "Non-goals",
+    "Acceptance criteria",
+    "Approval and migration boundary",
+    "Rollout",
+    "Rollback",
+    "Metrics and required artifacts"
+  ],
+  "requiredFiles": [
+    "AI-DATA-STRATEGY.md",
+    "AUDIT-METHOD.md",
+    "DECISION-LOG.md",
+    "EMERGENCY-CHANGE-PROTOCOL.md",
+    "EVIDENCE-BASELINE.md",
+    "EXECUTIVE-BRIEF.md",
+    "MARKETING-GTM.md",
+    "METRICS-EXPERIMENTATION.md",
+    "MONETIZATION-STRATEGY.md",
+    "P0-CONTAINMENT-RUNBOOK.md",
+    "PRODUCT-STRATEGY.md",
+    "QUALITY-RELIABILITY.md",
+    "README.md",
+    "REVIEW-PROVENANCE.md",
+    "RISK-REGISTER.md",
+    "ROADMAP.md",
+    "SECURITY-PRIVACY.md",
+    "TECHNOLOGY-ARCHITECTURE.md",
+    "TRACEABILITY.md",
+    "branches/README.md"
+  ],
+  "decisionTableColumns": [
+    "ID",
+    "Decision required",
+    "Recommended default",
+    "Blocks",
+    "Status"
+  ],
+  "riskTableColumns": [
+    "ID",
+    "P",
+    "Risk and business consequence",
+    "Likelihood",
+    "Primary evidence",
+    "Permanent control / branch",
+    "Status"
+  ],
+  "decisionRecords": {
+    "D-001": {
+      "revision": 1,
+      "disposition": "implemented",
+      "allowedBases": ["dev-main"],
+      "recordDigest": "sha256:330d4a2f3abab6813291fe6b3a627640e1706c62f4a39e4fd745cfc285fabff9"
+    },
+    "D-002": {
+      "revision": 1,
+      "disposition": "approved",
+      "allowedBases": ["dev-main"],
+      "recordDigest": "sha256:78417a60811592f3e66d445c2cbee35ae3899d65b781fe03468d7744953266b0"
+    },
+    "D-019": {
+      "revision": 1,
+      "disposition": "approved",
+      "allowedBases": ["dev-main"],
+      "recordDigest": "sha256:dc8e3bd871e05cea81d1924d724400caf461839dd9c4c4264708bdfdba5f43ad"
+    },
+    "D-022": {
+      "revision": 1,
+      "disposition": "not-planned",
+      "allowedBases": [],
+      "recordDigest": "sha256:d79442a623aad58050fb6f8be647fb418a85edb13f8be3a76c6914a00d43fc07"
+    },
+    "D-023": {
+      "revision": 1,
+      "disposition": "approved",
+      "allowedBases": ["dev-main"],
+      "recordDigest": "sha256:a44229db3b1c192a0158e365a6e8fcc1cfd10b9ce82c85f6aa4909614987768e"
+    }
+  },
+  "specialistDocumentDigests": {
+    "AI-DATA-STRATEGY.md": "sha256:59b97bb3682528bb21a7287a5cee78048649bef922e6ff693bffea3490174729",
+    "AUDIT-METHOD.md": "sha256:6fb50c776b85c8d077602d0c2fe73579d01d1f0509bba92378a48f51dbc18249",
+    "EMERGENCY-CHANGE-PROTOCOL.md": "sha256:3bb5508d7d7844a5660ae787eb34ab23ed9eb58e5df6f09a85146ac7292d6a98",
+    "EVIDENCE-BASELINE.md": "sha256:c9731bf209d3e1ddba604c7fc394af4f168505039dcfd03e726c24fcbcc5954f",
+    "EXECUTIVE-BRIEF.md": "sha256:01e7a85fbd8a8a75048fded40e33985423a15c3b4d710a61e474bee5dba158cf",
+    "MARKETING-GTM.md": "sha256:75fff56c5738510b709a9bceec7a6cb1684fb2a025571027b0f9c1f890c95751",
+    "METRICS-EXPERIMENTATION.md": "sha256:55ae576ededb02407feccc10d3a77d3a962f7fbc64b7d8f58027e6607fb8fea5",
+    "MONETIZATION-STRATEGY.md": "sha256:7967c13faa47c89e6042cf3bce38f93ebb69cd5c15888ff0385a994d0c9568c2",
+    "P0-CONTAINMENT-RUNBOOK.md": "sha256:c5896a6dd02a22eb2febd2940df3c0b34d9c11ecb93913bdc3cfdde483f06ca6",
+    "PRODUCT-STRATEGY.md": "sha256:0d406c06f4405d76abd544b6caeed0af0e78a5767e1683e6872ad1881e90a11f",
+    "QUALITY-RELIABILITY.md": "sha256:9058def41faaaaf73c76df63ff0e4c58ba60547e720f083f305c31d8289a369b",
+    "REVIEW-PROVENANCE.md": "sha256:9dc522fc6a000cb01abb0e5715c32e71d3ac1526f4c585c2b33721dd853b9088",
+    "ROADMAP.md": "sha256:188ebeddfe280868451b1161a86840842b8ea3ce9c8f9f233369f539ced79f8c",
+    "SECURITY-PRIVACY.md": "sha256:6d1c756f7e8c180ef6b7baa79af3994fedc085f2d91cd79bb731341fdac7590b",
+    "TECHNOLOGY-ARCHITECTURE.md": "sha256:6708bd502014447b6b7f2ab6023769913a593737afe0b9801ad02151a0d181c3"
+  },
+  "branchDecisionGates": {
+    "fix/release-build-blockers": { "decisions": ["D-001"], "requirements": [] },
+    "fix/p0-capability-containment": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:incident-change", "requiredAt": "ready" },
+        { "attestor": null, "key": "evidence:live-hold-inventory", "requiredAt": "ready" }
+      ]
+    },
+    "docs/education-market-discovery": {
+      "decisions": ["D-019"],
+      "requirements": [
+        { "attestor": null, "key": "approval:research-protocol", "requiredAt": "ready" }
+      ]
+    },
+    "docs/education-discovery-evidence": { "decisions": ["D-019"], "requirements": [] },
+    "fix/repository-release-gates": { "decisions": ["D-002"], "requirements": [] },
+    "chore/enterprise-audit-validation": { "decisions": ["D-002"], "requirements": [] },
+    "fix/staging-artifact-promotion": { "decisions": ["D-003"], "requirements": [] },
+    "fix/explicit-gallery-consent": { "decisions": ["D-005"], "requirements": [] },
+    "fix/historical-gallery-remediation": {
+      "decisions": ["D-004"],
+      "requirements": [
+        { "attestor": null, "key": "approval:destructive-confirmation", "requiredAt": "operation" }
+      ]
+    },
+    "fix/security-edu-otp-secrecy": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" },
+        { "attestor": null, "key": "approval:emergency-change", "requiredAt": "operation" }
+      ]
+    },
+    "fix/guest-account-conversion": { "decisions": ["D-006"], "requirements": [] },
+    "fix/security-verified-identity-rewards": { "decisions": ["D-007"], "requirements": [] },
+    "fix/ai-model-lifecycle": { "decisions": ["D-010"], "requirements": [] },
+    "fix/search-identity": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" },
+        { "attestor": null, "key": "evidence:domain-redirect-ownership", "requiredAt": "ready" }
+      ]
+    },
+    "refactor/versioned-appwrite-migrations": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" },
+        { "attestor": null, "key": "approval:migration", "requiredAt": "operation" }
+      ]
+    },
+    "feat/server-enforced-kill-switches": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" }
+      ]
+    },
+    "chore/critical-contract-harness": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" }
+      ]
+    },
+    "chore/security-runtime-dependencies": {
+      "decisions": [],
+      "requirements": [
+        {
+          "attestor": null,
+          "key": "approval:branch",
+          "requiredAt": "ready"
+        }
+      ]
+    },
+    "fix/http-security-boundaries": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" }
+      ]
+    },
+    "feat/operational-observability": { "decisions": ["D-015", "D-017"], "requirements": [] },
+    "docs/incident-dr-release-runbooks": { "decisions": ["D-017", "D-018"], "requirements": [] },
+    "fix/atomic-rapido-ledger": { "decisions": ["D-008", "D-014"], "requirements": [] },
+    "fix/stripe-webhook-idempotency": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" },
+        { "attestor": null, "key": "evidence:event-change-record", "requiredAt": "operation" }
+      ]
+    },
+    "fix/stripe-entitlement-reconciliation": { "decisions": ["D-008", "D-009"], "requirements": [] },
+    "fix/security-storage-tenant-isolation": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" },
+        { "attestor": null, "key": "approval:migration", "requiredAt": "operation" }
+      ]
+    },
+    "fix/privacy-data-lifecycle": { "decisions": ["D-011", "D-016"], "requirements": [] },
+    "feat/product-funnel-instrumentation": { "decisions": ["D-015"], "requirements": [] },
+    "fix/ai-request-lifecycle": { "decisions": ["D-010"], "requirements": [] },
+    "refactor/ai-operation-registry": { "decisions": ["D-010"], "requirements": [] },
+    "chore/ai-evaluation-gates": { "decisions": ["D-010"], "requirements": [] },
+    "fix/ai-memory-cache-semantics": { "decisions": ["D-011"], "requirements": [] },
+    "fix/ai-moderation-boundaries": { "decisions": ["D-005", "D-021"], "requirements": [] },
+    "feat/ai-trust-disclosure": { "decisions": ["D-011"], "requirements": [] },
+    "refactor/typed-analysis-state-machine": { "decisions": ["D-013"], "requirements": [] },
+    "fix/revision-continuity": { "decisions": ["D-014"], "requirements": [] },
+    "fix/core-flow-accessibility": {
+      "decisions": [],
+      "requirements": [
+        { "attestor": null, "key": "approval:branch", "requiredAt": "ready" }
+      ]
+    },
+    "feat/revision-learning-loop": { "decisions": ["D-013", "D-014"], "requirements": [] },
+    "refactor/app-router-boundaries": { "decisions": ["D-013"], "requirements": [] },
+    "fix/acquisition-foundation": { "decisions": ["D-012", "D-020"], "requirements": [] },
+    "feat/premium-packaging": { "decisions": ["D-008", "D-009", "D-014"], "requirements": [] },
+    "feat/private-team-workspace": { "decisions": ["D-023"], "requirements": [] },
+    "feat/shared-team-rapido-pool": { "decisions": ["D-024", "D-029"], "requirements": [] },
+    "feat/team-packaging": { "decisions": ["D-023", "D-024", "D-025", "D-029"], "requirements": [] },
+    "feat/portfolio-season": { "decisions": ["D-014"], "requirements": [] },
+    "docs/education-studio-pilot": {
+      "decisions": ["D-019", "D-026", "D-028", "D-031"],
+      "requirements": []
+    },
+    "docs/education-pilot-evidence": {
+      "decisions": ["D-019", "D-026", "D-028", "D-031"],
+      "requirements": [
+        { "attestor": null, "key": "evidence:paid-renewal-expansion", "requiredAt": "verify" },
+        { "attestor": null, "key": "evidence:signed-pilot-closeout", "requiredAt": "verify" }
+      ]
+    },
+    "feat/education-pilot-cohort-controls": {
+      "decisions": ["D-019", "D-026", "D-028", "D-031"],
+      "requirements": []
+    },
+    "feat/institution-foundation": {
+      "decisions": ["D-019", "D-027", "D-028", "D-030"],
+      "requirements": []
+    },
+    "feat/institution-cohort-roster": {
+      "decisions": ["D-027", "D-028", "D-030"],
+      "requirements": []
+    },
+    "feat/institution-billing-rapido": {
+      "decisions": ["D-026", "D-027", "D-030", "D-032"],
+      "requirements": []
+    },
+    "feat/institution-educator-reporting": { "decisions": ["D-027", "D-028"], "requirements": [] },
+    "feat/institution-recovery-offboarding": {
+      "decisions": ["D-016", "D-018", "D-027", "D-032"],
+      "requirements": []
+    }
+  },
+  "branchRiskControls": {
+    "fix/release-build-blockers": ["R-001"],
+    "fix/p0-capability-containment": ["R-003", "R-004", "R-005", "R-006", "R-007", "R-008", "R-009", "R-017"],
+    "docs/education-market-discovery": ["R-033"],
+    "docs/education-discovery-evidence": ["R-033"],
+    "fix/repository-release-gates": ["R-002"],
+    "chore/enterprise-audit-validation": ["R-045"],
+    "fix/staging-artifact-promotion": ["R-021", "R-032"],
+    "fix/explicit-gallery-consent": ["R-003", "R-010"],
+    "fix/historical-gallery-remediation": ["R-003"],
+    "fix/security-edu-otp-secrecy": ["R-004"],
+    "fix/guest-account-conversion": ["R-005"],
+    "fix/security-verified-identity-rewards": ["R-008"],
+    "fix/ai-model-lifecycle": ["R-017"],
+    "fix/search-identity": ["R-024"],
+    "refactor/versioned-appwrite-migrations": ["R-016"],
+    "feat/server-enforced-kill-switches": ["R-022"],
+    "chore/critical-contract-harness": ["R-020"],
+    "chore/security-runtime-dependencies": ["R-015"],
+    "fix/http-security-boundaries": ["R-009", "R-029"],
+    "feat/operational-observability": ["R-021", "R-025"],
+    "docs/incident-dr-release-runbooks": ["R-021", "R-032"],
+    "fix/atomic-rapido-ledger": ["R-006", "R-011"],
+    "fix/stripe-webhook-idempotency": ["R-007"],
+    "fix/stripe-entitlement-reconciliation": ["R-013", "R-014"],
+    "fix/security-storage-tenant-isolation": ["R-009"],
+    "fix/privacy-data-lifecycle": ["R-019", "R-029"],
+    "feat/product-funnel-instrumentation": ["R-023"],
+    "fix/ai-request-lifecycle": ["R-018"],
+    "refactor/ai-operation-registry": ["R-026", "R-035"],
+    "chore/ai-evaluation-gates": ["R-035"],
+    "fix/ai-memory-cache-semantics": ["R-019", "R-036"],
+    "fix/ai-moderation-boundaries": ["R-012"],
+    "feat/ai-trust-disclosure": ["R-029", "R-035"],
+    "refactor/typed-analysis-state-machine": ["R-027"],
+    "fix/revision-continuity": ["R-030"],
+    "fix/core-flow-accessibility": ["R-030"],
+    "feat/revision-learning-loop": ["R-030"],
+    "refactor/app-router-boundaries": ["R-028"],
+    "fix/acquisition-foundation": ["R-024", "R-034"],
+    "feat/premium-packaging": ["R-014", "R-031"],
+    "feat/private-team-workspace": ["R-037"],
+    "feat/shared-team-rapido-pool": ["R-038", "R-042"],
+    "feat/team-packaging": ["R-039", "R-042"],
+    "feat/portfolio-season": ["R-030", "R-031"],
+    "docs/education-studio-pilot": ["R-033", "R-039", "R-040", "R-043"],
+    "feat/education-pilot-cohort-controls": ["R-040", "R-043"],
+    "docs/education-pilot-evidence": ["R-033", "R-040"],
+    "feat/institution-foundation": ["R-041", "R-044"],
+    "feat/institution-cohort-roster": ["R-041", "R-043", "R-044"],
+    "feat/institution-billing-rapido": ["R-041", "R-044"],
+    "feat/institution-educator-reporting": ["R-041", "R-043"],
+    "feat/institution-recovery-offboarding": ["R-021", "R-041"]
+  },
+  "unmappedRisks": [],
+  "allowedOperationalEdges": [
+    "b35a->discoveryOps",
+    "discoveryOps->b35b",
+    "b35d->pilotOps",
+    "pilotOps->b35c"
+  ]
+}
