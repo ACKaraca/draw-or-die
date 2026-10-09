@@ -6,9 +6,9 @@ describe('safeParseJsonObject', () => {
   });
 
   it('strips markdown code fences before parsing', () => {
-    expect(safeParseJsonObject('```json\\n{\"b\": 2}\\n```')).toEqual({ b: 2 });
-    expect(safeParseJsonObject('```\\n{\"c\": 3}\\n```')).toEqual({ c: 3 });
-    expect(safeParseJsonObject('  \\n```json\\n{\"d\": 4}\\n```\\n  ')).toEqual({ d: 4 });
+    expect(safeParseJsonObject('```json\n{"b": 2}\n```')).toEqual({ b: 2 });
+    expect(safeParseJsonObject('```\n{"c": 3}\n```')).toEqual({ c: 3 });
+    expect(safeParseJsonObject('  \n```json\n{"d": 4}\n```\n  ')).toEqual({ d: 4 });
   });
 
   it('returns empty object for invalid json', () => {

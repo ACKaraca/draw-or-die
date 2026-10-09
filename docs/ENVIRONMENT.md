@@ -50,6 +50,20 @@ These are used by `/api/ai-generate` to call the LLM.
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.ackaraca.me,https://drawordie.app` |
 | `NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED` | Enables the future client-side image-editing rescue path. Keep `false` until manually tested. | `false` |
 
+## Release Verification Variables
+
+These values are controlled by CI/CD and are not application secrets.
+
+| Variable | Description | Required in |
+|---|---|---|
+| `RELEASE_SHA` | Runtime fallback for a 40-character commit SHA. Manual Appwrite archives also embed this value at build time. | Local smoke and release archive stamping |
+| `RELEASE_DEPLOYMENT_ID` | Runtime fallback when the hosting provider does not inject a deployment ID. | Local smoke only |
+| `EXPECTED_RELEASE_SHA` | Exact commit SHA that health verification must observe. | Smoke and post-deploy verification |
+| `EXPECTED_DEPLOYMENT_ID` | Exact deployment ID that health verification must observe. | Smoke and post-deploy verification |
+| `HEALTHCHECK_TARGET` | Fixed health-check target: `staging` or `production`. | Post-deploy verification |
+
+Appwrite's injected `APPWRITE_VCS_COMMIT_HASH` and `APPWRITE_SITE_DEPLOYMENT` values take precedence when present.
+
 ## Security Rules
 
 1. **Never** store API keys in source code, commits, chat messages, or screen shares.

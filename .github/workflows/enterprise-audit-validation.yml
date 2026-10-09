@@ -1,0 +1,179 @@
+name: Enterprise Audit Validation
+
+on:
+  pull_request:
+    branches: [main, dev-main]
+  push:
+    branches: [main, dev-main]
+  merge_group:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  enterprise-audit-validation:
+    name: Enterprise Audit Validation / Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - name: Initialize validation report
+        run: |
+          cat > "$RUNNER_TEMP/enterprise-audit-validation.json" <<'JSON'
+          {
+            "ok": false,
+            "summary": {
+              "markdownFiles": 0,
+              "branchPlans": 0,
+              "hardDependencies": 0,
+              "decisions": 0,
+              "risks": 0
+            },
+            "errors": [
+              {
+                "code": "WORKFLOW_INCOMPLETE",
+                "file": "",
+                "line": 1,
+                "message": "Validation did not complete."
+              }
+            ]
+          }
+          JSON
+
+      - name: Verify repository identity
+        id: repository_identity
+        run: test "$GITHUB_REPOSITORY" = 'ACKaraca/draw-or-die'
+
+      - name: Checkout repository
+        id: checkout
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        id: setup_node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Validate enterprise audit
+        id: audit
+        run: |
+          set +e
+          node scripts/validate-enterprise-audit.mjs --repository "$GITHUB_REPOSITORY" --format json \
+            > "$RUNNER_TEMP/enterprise-audit-candidate.json"
+          validation_status=$?
+          set -e
+          set +e
+          VALIDATION_STATUS="$validation_status" \
+            VALIDATION_CANDIDATE="$RUNNER_TEMP/enterprise-audit-candidate.json" \
+            node <<'NODE'
+          const fs = require('node:fs');
+          const report = JSON.parse(fs.readFileSync(process.env.VALIDATION_CANDIDATE, 'utf8'));
+          const contract = JSON.parse(fs.readFileSync('docs/enterprise-audit/VALIDATION-CONTRACT.json', 'utf8'));
+          const summaryKeys = ['markdownFiles', 'branchPlans', 'hardDependencies', 'decisions', 'risks'];
+          const hasSummary = summaryKeys.every(
+            (key) => Number.isInteger(report.summary?.[key]) && report.summary[key] >= 0,
+          );
+          const matchesContract = summaryKeys.every(
+            (key) => report.summary?.[key] === contract.declaredCounts?.[key],
+          );
+          const isConsistent = (Number(process.env.VALIDATION_STATUS) === 0) === report.ok;
+          const hasConsistentErrors = Array.isArray(report.errors) && report.ok === (report.errors.length === 0);
+          if (
+            typeof report.ok !== 'boolean' ||
+            !hasSummary ||
+            !matchesContract ||
+            !hasConsistentErrors ||
+            !isConsistent
+          ) {
+            process.exit(1);
+          }
+          NODE
+          report_status=$?
+          set -e
+          if [ "$report_status" -eq 0 ]; then
+            mv "$RUNNER_TEMP/enterprise-audit-candidate.json" "$RUNNER_TEMP/enterprise-audit-validation.json"
+          fi
+          if [ "$validation_status" -eq 0 ] && [ "$report_status" -ne 0 ]; then
+            exit 2
+          fi
+          exit "$validation_status"
+
+      - name: Test validator contracts
+        id: validator_tests
+        if: always()
+        run: npm run test:enterprise-audit-validator
+
+      - name: Record validator test failure
+        if: always() && steps.validator_tests.outcome == 'failure'
+        env:
+          VALIDATION_REPORT: ${{ runner.temp }}/enterprise-audit-validation.json
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const file = process.env.VALIDATION_REPORT;
+          const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+          report.ok = false;
+          report.errors.push({
+            code: 'VALIDATOR_TEST_FAILURE',
+            file: 'tests/enterprise-audit-validator',
+            line: 1,
+            message: 'Validator contract tests failed.',
+          });
+          fs.writeFileSync(file, JSON.stringify(report));
+          NODE
+
+      - name: Bind validation report to workflow provenance
+        if: always()
+        env:
+          VALIDATION_REPORT: ${{ runner.temp }}/enterprise-audit-validation.json
+        run: |
+          node <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const file = process.env.VALIDATION_REPORT;
+          const hashFile = (candidate) => {
+            if (!fs.existsSync(candidate)) return null;
+            return `sha256:${crypto.createHash('sha256').update(fs.readFileSync(candidate)).digest('hex')}`;
+          };
+          const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+          report.provenance = {
+            repository: process.env.GITHUB_REPOSITORY,
+            sha: process.env.GITHUB_SHA,
+            ref: process.env.GITHUB_REF,
+            event: process.env.GITHUB_EVENT_NAME,
+            runId: process.env.GITHUB_RUN_ID,
+            runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            contractDigest: hashFile('docs/enterprise-audit/VALIDATION-CONTRACT.json'),
+            validatorDigest: hashFile('scripts/validate-enterprise-audit.mjs'),
+          };
+          fs.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
+          NODE
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-audit-validation
+          path: ${{ runner.temp }}/enterprise-audit-validation.json
+          if-no-files-found: error
+          retention-days: 90
+
+  enterprise-audit-enforcement:
+    name: Enterprise Audit Validation
+    needs: enterprise-audit-validation
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Enforce worker result on a fresh runner
+        if: always()
+        env:
+          WORKER_RESULT: ${{ needs.enterprise-audit-validation.result }}
+        run: test "$WORKER_RESULT" = 'success'

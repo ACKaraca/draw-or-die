@@ -9,6 +9,7 @@ This folder contains architecture, deployment, setup, and API documentation for 
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | System architecture, components, and data flow |
 | [ENVIRONMENT.md](./ENVIRONMENT.md) | Environment variables and secret keys |
 | [API.md](./API.md) | API endpoints and route contracts |
+| [enterprise-audit/](./enterprise-audit/README.md) | 2026 enterprise product, security, revenue, GTM, AI, and branch delivery program |
 
 ## Quick Start
 

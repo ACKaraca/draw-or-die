@@ -1,7 +1,29 @@
+import { execFileSync } from 'node:child_process';
+
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.STAGING_URL || 'http://localhost:3000';
 const useExternalBaseURL = Boolean(process.env.STAGING_URL);
+const LOCAL_DEPLOYMENT_ID = 'playwright-local';
+
+function resolveLocalReleaseSha(): string {
+  const configuredSha = process.env.RELEASE_SHA?.trim();
+  if (configuredSha) return configuredSha;
+
+  try {
+    return execFileSync('/usr/bin/git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  } catch (error) {
+    throw new Error('Unable to resolve Git HEAD for local smoke release identity.', { cause: error });
+  }
+}
+
+if (!useExternalBaseURL) {
+  const localReleaseSha = resolveLocalReleaseSha();
+  process.env.RELEASE_SHA = localReleaseSha;
+  process.env.RELEASE_DEPLOYMENT_ID ??= LOCAL_DEPLOYMENT_ID;
+  process.env.EXPECTED_RELEASE_SHA ??= localReleaseSha;
+  process.env.EXPECTED_DEPLOYMENT_ID ??= process.env.RELEASE_DEPLOYMENT_ID;
+}
 
 /**
  * See https://playwright.dev/docs/test-configuration.

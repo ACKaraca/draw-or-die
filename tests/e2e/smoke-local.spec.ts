@@ -25,6 +25,13 @@ test.describe('Smoke - Local Critical Path', () => {
     expect(response.ok()).toBeTruthy();
 
     const payload = await response.json();
+    const expectedReleaseSha = process.env.EXPECTED_RELEASE_SHA?.trim().toLowerCase();
+    const expectedDeploymentId = process.env.EXPECTED_DEPLOYMENT_ID?.trim();
+
+    expect(expectedReleaseSha).toMatch(/^[a-f0-9]{40}$/);
+    expect(expectedDeploymentId).toBeTruthy();
     expect(payload.status).toBe('ok');
+    expect(payload.release.sha).toBe(expectedReleaseSha);
+    expect(payload.release.deploymentId).toBe(expectedDeploymentId);
   });
 });

@@ -8,6 +8,7 @@ import { RAPIDO_COSTS } from '@/lib/pricing';
 import { isMultiJuryPromoEnabled } from '@/lib/multi-jury-promo';
 import type { Badge } from '@/types';
 import { logServerError } from '@/lib/logger';
+import { runInParallelBatches } from '@/lib/run-in-parallel-batches';
 import { ensureAtLeastTwoParagraphs, normalizeCritiqueText } from '@/lib/critique';
 import {
   DESIGN_INSIGHT_RESPONSE_FORMAT,
@@ -116,7 +117,7 @@ function resolveAiModelForOperation(operation: string): string {
 }
 
 // Maps allowed AI provider hostnames to their canonical base URLs.
-// The hostname from the env var is used ONLY as a lookup key — the returned value
+// The hostname from the env var is used ONLY as a lookup key â€” the returned value
 // is our own hardcoded constant, never the user-provided URL (prevents SSRF).
 const AI_PROVIDER_BASE_URLS = new Map<string, string>([
   ['ai-gateway.vercel.sh', 'https://ai-gateway.vercel.sh/v1'],
@@ -129,7 +130,7 @@ const AI_PROVIDER_BASE_URLS = new Map<string, string>([
 /**
  * Resolves the canonical base URL for an AI provider.
  * The env var URL is parsed ONLY to extract its hostname as a lookup key.
- * The returned href is our own constant — never derived from user input.
+ * The returned href is our own constant â€” never derived from user input.
  */
 function resolveAiBaseUrl(rawUrl: string): { href: string; hostname: string } {
   let hostname: string;
@@ -142,7 +143,7 @@ function resolveAiBaseUrl(rawUrl: string): { href: string; hostname: string } {
   if (!href) {
     throw new Error(`AI provider not in allowlist: ${hostname}`);
   }
-  // href is our hardcoded constant — not derived from user input
+  // href is our hardcoded constant â€” not derived from user input
   return { href, hostname };
 }
 
@@ -777,27 +778,6 @@ function summarizeForFileCache(value: string): string {
   return normalized.substring(0, 3000);
 }
 
-async function runInParallelBatches<T>(
-  items: T[],
-  batchSize: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  if (!Number.isInteger(batchSize) || batchSize < 1) {
-    throw new Error(`Invalid batchSize: ${batchSize}`);
-  }
-
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    await Promise.all(
-      batch.map((item) =>
-        worker(item).catch((err) => {
-          logServerError('api.ai-generate.runInParallelBatches', err, { batchIndex: i, batchSize });
-        }),
-      ),
-    );
-  }
-}
-
 async function loadAnalysisFileCacheRows(userId: string, hashes: string[]): Promise<Map<string, AnalysisFileCacheRow>> {
   const uniqueHashes = Array.from(new Set(hashes.filter(Boolean)));
   if (uniqueHashes.length === 0) return new Map();
@@ -835,37 +815,44 @@ async function upsertAnalysisFileCacheRows(params: {
   const tables = getAdminTables();
   const existing = await loadAnalysisFileCacheRows(params.userId, uniqueHashes);
 
-  await runInParallelBatches(uniqueHashes, 3, async (hash) => {
-    const row = existing.get(hash);
-    if (row) {
-      await tables.updateRow({
+  await runInParallelBatches(
+    uniqueHashes,
+    3,
+    async (hash) => {
+      const row = existing.get(hash);
+      if (row) {
+        await tables.updateRow({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
+          rowId: row.$id,
+          data: {
+            last_operation: params.operation,
+            latest_summary: cleanedSummary,
+            title_guess: (params.titleGuess || '').substring(0, 255),
+            analysis_count: Math.max(1, (Number(row.analysis_count) || 0) + 1),
+          },
+        });
+        return;
+      }
+
+      await tables.createRow<AnalysisFileCacheRow>({
         databaseId: APPWRITE_DATABASE_ID,
         tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
-        rowId: row.$id,
+        rowId: ID.unique(),
         data: {
+          user_id: params.userId,
+          file_hash: hash,
           last_operation: params.operation,
           latest_summary: cleanedSummary,
           title_guess: (params.titleGuess || '').substring(0, 255),
-          analysis_count: Math.max(1, (Number(row.analysis_count) || 0) + 1),
+          analysis_count: 1,
         },
       });
-      return;
-    }
-
-    await tables.createRow<AnalysisFileCacheRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_ANALYSIS_FILE_CACHE_ID,
-      rowId: ID.unique(),
-      data: {
-        user_id: params.userId,
-        file_hash: hash,
-        last_operation: params.operation,
-        latest_summary: cleanedSummary,
-        title_guess: (params.titleGuess || '').substring(0, 255),
-        analysis_count: 1,
-      },
-    });
-  });
+    },
+    (error, context) => {
+      logServerError('api.ai-generate.runInParallelBatches', error, context);
+    },
+  );
 }
 
 function normalizeKnownFileContexts(value: unknown): KnownFileContext[] {
@@ -1068,21 +1055,42 @@ async function upsertMemorySnippets(params: {
     }
   }
 
-  await runInParallelBatches(candidates, 3, async (candidate) => {
-    const existing = byCategory.get(candidate.category);
-    if (existing) {
-      if (existing.deleted_by_user === true) {
-        const deletedAt = existing.deleted_at || existing.$updatedAt;
-        if (isDeletedSnippetStillRetained(deletedAt)) {
-          return;
+  await runInParallelBatches(
+    candidates,
+    3,
+    async (candidate) => {
+      const existing = byCategory.get(candidate.category);
+      if (existing) {
+        if (existing.deleted_by_user === true) {
+          const deletedAt = existing.deleted_at || existing.$updatedAt;
+          if (isDeletedSnippetStillRetained(deletedAt)) {
+            return;
+          }
         }
+
+        await tables.updateRow({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
+          rowId: existing.$id,
+          data: {
+            category: candidate.category,
+            snippet: candidate.snippet,
+            visible_to_user: candidate.visibleToUser,
+            deleted_by_user: false,
+            delete_reason: '',
+            deleted_at: '',
+            updated_from_operation: params.operation,
+          },
+        });
+        return;
       }
 
-      await tables.updateRow({
+      await tables.createRow<MemorySnippetRow>({
         databaseId: APPWRITE_DATABASE_ID,
         tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
-        rowId: existing.$id,
+        rowId: ID.unique(),
         data: {
+          user_id: params.userId,
           category: candidate.category,
           snippet: candidate.snippet,
           visible_to_user: candidate.visibleToUser,
@@ -1092,25 +1100,11 @@ async function upsertMemorySnippets(params: {
           updated_from_operation: params.operation,
         },
       });
-      return;
-    }
-
-    await tables.createRow<MemorySnippetRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_MEMORY_SNIPPETS_ID,
-      rowId: ID.unique(),
-      data: {
-        user_id: params.userId,
-        category: candidate.category,
-        snippet: candidate.snippet,
-        visible_to_user: candidate.visibleToUser,
-        deleted_by_user: false,
-        delete_reason: '',
-        deleted_at: '',
-        updated_from_operation: params.operation,
-      },
-    });
-  });
+    },
+    (error, context) => {
+      logServerError('api.ai-generate.runInParallelBatches', error, context);
+    },
+  );
 }
 
 function buildCacheSummaryFromResult(operation: string, result: string): { summary: string; titleGuess: string } {
@@ -1577,9 +1571,9 @@ function buildMultiJuryPrompt(
 ): string {
   const category = clampCategory(payload.category);
   const userContext = toPromptJson({
-    topic: payload.topic ?? pickLocalized(language, 'Belirtilmemiş', 'Not specified'),
-    site: payload.site ?? pickLocalized(language, 'Belirtilmemiş', 'Not specified'),
-    concept: payload.concept ?? pickLocalized(language, 'Belirtilmemiş', 'Not specified'),
+    topic: payload.topic ?? pickLocalized(language, 'BelirtilmemiÅŸ', 'Not specified'),
+    site: payload.site ?? pickLocalized(language, 'BelirtilmemiÅŸ', 'Not specified'),
+    concept: payload.concept ?? pickLocalized(language, 'BelirtilmemiÅŸ', 'Not specified'),
     defense: payload.defense ?? pickLocalized(language, 'Yok', 'None'),
     category,
     pdfText: String(payload.pdfText ?? '').substring(0, 1200) || pickLocalized(language, 'Yok', 'None'),
@@ -1649,9 +1643,9 @@ function buildSingleJuryPrompt(
 ): string {
   const category = clampCategory(payload.category);
   const userContext = toPromptJson({
-    topic: payload.topic ?? pickLocalized(language, 'Belirtilmemiş', 'Not specified'),
+    topic: payload.topic ?? pickLocalized(language, 'BelirtilmemiÅŸ', 'Not specified'),
     category,
-    concept: payload.concept ?? pickLocalized(language, 'Belirtilmemiş', 'Not specified'),
+    concept: payload.concept ?? pickLocalized(language, 'BelirtilmemiÅŸ', 'Not specified'),
     defense: payload.defense ?? pickLocalized(language, 'Yok', 'None'),
     pdfText: String(payload.pdfText ?? '').substring(0, 1200) || pickLocalized(language, 'Yok', 'None'),
     knownFileContexts: normalizeKnownFileContexts(payload.knownFileContexts),
@@ -1769,7 +1763,7 @@ function buildRevisionPrompt(
   const category = clampCategory(payload.category);
   const userContext = toPromptJson({
     previousCritique: payload.previousCritique ?? pickLocalized(language, 'Yok', 'None'),
-    concept: payload.concept ?? pickLocalized(language, 'Belirtilmemiş', 'Not specified'),
+    concept: payload.concept ?? pickLocalized(language, 'BelirtilmemiÅŸ', 'Not specified'),
     defense: payload.defense ?? pickLocalized(language, 'Yok', 'None'),
     pdfText: String(payload.pdfText ?? '').substring(0, 1200) || pickLocalized(language, 'Yok', 'None'),
     knownFileContexts: normalizeKnownFileContexts(payload.knownFileContexts),
@@ -2415,7 +2409,7 @@ export async function POST(request: NextRequest) {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
       return respond(
-        { error: pickLocalized(headerLangFallback, 'Yetkisiz. Giriş yapın.', 'Unauthorized. Please sign in.') },
+        { error: pickLocalized(headerLangFallback, 'Yetkisiz. GiriÅŸ yapÄ±n.', 'Unauthorized. Please sign in.') },
         401,
       );
     }
@@ -2482,7 +2476,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Ek dosya formatı geçersiz.',
+              'Ek dosya formatÄ± geÃ§ersiz.',
               'Invalid additional file format.',
             ),
           },
@@ -2495,7 +2489,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              `En fazla ${MAX_ADDITIONAL_FILES + 1} dosya yükleyebilirsiniz.`,
+              `En fazla ${MAX_ADDITIONAL_FILES + 1} dosya yÃ¼kleyebilirsiniz.`,
               `You can upload at most ${MAX_ADDITIONAL_FILES + 1} files.`,
             ),
             code: 'TOO_MANY_FILES',
@@ -2511,7 +2505,7 @@ export async function POST(request: NextRequest) {
             {
               error: pickLocalized(
                 requestLanguage,
-                `Ek dosya #${index + 1} formatı bozuk.`,
+                `Ek dosya #${index + 1} formatÄ± bozuk.`,
                 `Additional file #${index + 1} has an invalid format.`,
               ),
             },
@@ -2616,7 +2610,7 @@ export async function POST(request: NextRequest) {
         {
           error: pickLocalized(
             requestLanguage,
-            'AI Mentor misafir hesaplarda kapalı. Lütfen kayıt olarak devam edin.',
+            'AI Mentor misafir hesaplarda kapalÄ±. LÃ¼tfen kayÄ±t olarak devam edin.',
             'AI Mentor is disabled for guest accounts. Please sign up to continue.',
           ),
           code: 'GUEST_MENTOR_DISABLED',
@@ -2650,7 +2644,7 @@ export async function POST(request: NextRequest) {
         {
           error: pickLocalized(
             requestLanguage,
-            `Çok fazla istek. Lütfen ${waitSeconds} sn bekleyiniz.`,
+            `Ã‡ok fazla istek. LÃ¼tfen ${waitSeconds} sn bekleyiniz.`,
             `Too many requests. Please wait ${waitSeconds} seconds.`,
           ),
           code: 'RATE_LIMITED',
@@ -2666,7 +2660,7 @@ export async function POST(request: NextRequest) {
         {
           error: pickLocalized(
             requestLanguage,
-            'AI yapılandırması eksik (AI_API_KEY).',
+            'AI yapÄ±landÄ±rmasÄ± eksik (AI_API_KEY).',
             'AI configuration is missing (AI_API_KEY).',
           ),
         },
@@ -2743,7 +2737,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Desteklenmeyen dosya türü. Sadece JPG, PNG veya PDF yükleyebilirsiniz.',
+              'Desteklenmeyen dosya tÃ¼rÃ¼. Sadece JPG, PNG veya PDF yÃ¼kleyebilirsiniz.',
               'Unsupported file type. Only JPG, PNG, or PDF are allowed.',
             ),
             code: 'UNSUPPORTED_FILE_TYPE',
@@ -2758,7 +2752,7 @@ export async function POST(request: NextRequest) {
         {
           error: pickLocalized(
             requestLanguage,
-            'Bu analiz tipi için görsel veya PDF zorunludur.',
+            'Bu analiz tipi iÃ§in gÃ¶rsel veya PDF zorunludur.',
             'This analysis type requires an image or PDF.',
           ),
           code: 'FILE_REQUIRED',
@@ -2772,7 +2766,7 @@ export async function POST(request: NextRequest) {
         {
           error: pickLocalized(
             requestLanguage,
-            'Mentor modunda aynı anda tek dosya yükleyebilirsiniz.',
+            'Mentor modunda aynÄ± anda tek dosya yÃ¼kleyebilirsiniz.',
             'In mentor mode you can upload only one file at a time.',
           ),
           code: 'TOO_MANY_FILES',
@@ -2787,7 +2781,7 @@ export async function POST(request: NextRequest) {
         {
           error: pickLocalized(
             requestLanguage,
-            'Dosya verisi çözümlenemedi.',
+            'Dosya verisi Ã§Ã¶zÃ¼mlenemedi.',
             'Could not decode file data.',
           ),
         },
@@ -2809,7 +2803,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              `Dosya boyutu limiti aşıldı. Mentor eki için en fazla ${toMb(maxBytes)} MB yükleyebilirsiniz.`,
+              `Dosya boyutu limiti aÅŸÄ±ldÄ±. Mentor eki iÃ§in en fazla ${toMb(maxBytes)} MB yÃ¼kleyebilirsiniz.`,
               `File size limit exceeded. Mentor attachments may be at most ${toMb(maxBytes)} MB.`,
             ),
             code: 'FILE_TOO_LARGE',
@@ -2825,7 +2819,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              `Toplam dosya boyutu limiti aşıldı. Studio Desk için en fazla ${toMb(maxBytes)} MB yükleyebilirsiniz.`,
+              `Toplam dosya boyutu limiti aÅŸÄ±ldÄ±. Studio Desk iÃ§in en fazla ${toMb(maxBytes)} MB yÃ¼kleyebilirsiniz.`,
               `Total file size limit exceeded. Studio Desk allows at most ${toMb(maxBytes)} MB.`,
             ),
             code: 'FILE_TOO_LARGE',
@@ -2935,7 +2929,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'AI analiz sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'AI analiz sonucu doÄŸrulanamadÄ±. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'AI analysis could not be validated. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3033,7 +3027,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Premium analiz sonucu boş döndü. Rapido düşülmedi, tekrar deneyin.',
+              'Premium analiz sonucu boÅŸ dÃ¶ndÃ¼. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'Premium analysis returned empty. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3079,7 +3073,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Revizyon sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Revizyon sonucu doÄŸrulanamadÄ±. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'Revision result could not be validated. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3157,7 +3151,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Çoklu jüri sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Ã‡oklu jÃ¼ri sonucu doÄŸrulanamadÄ±. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'Multi-jury result could not be validated. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3196,7 +3190,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Savunma yanıtı doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Savunma yanÄ±tÄ± doÄŸrulanamadÄ±. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'Defense response could not be validated. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3230,7 +3224,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Mentor için sohbet kimliği ve mesaj zorunludur.',
+              'Mentor iÃ§in sohbet kimliÄŸi ve mesaj zorunludur.',
               'Chat ID and message are required for the mentor.',
             ),
           },
@@ -3251,7 +3245,7 @@ export async function POST(request: NextRequest) {
         if (typed?.code === 404) {
           return respond(
             {
-              error: pickLocalized(requestLanguage, 'Mentor sohbeti bulunamadı.', 'Mentor chat not found.'),
+              error: pickLocalized(requestLanguage, 'Mentor sohbeti bulunamadÄ±.', 'Mentor chat not found.'),
             },
             404,
           );
@@ -3264,7 +3258,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Bu mentor sohbeti size ait değil.',
+              'Bu mentor sohbeti size ait deÄŸil.',
               'This mentor chat does not belong to you.',
             ),
           },
@@ -3292,7 +3286,7 @@ export async function POST(request: NextRequest) {
             {
               error: pickLocalized(
                 requestLanguage,
-                `Bu sohbet ${tokenLimit} token limitine ulaştı. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam edebilir veya yeni sohbet açabilirsin.`,
+                `Bu sohbet ${tokenLimit} token limitine ulaÅŸtÄ±. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam edebilir veya yeni sohbet aÃ§abilirsin.`,
                 `This chat hit the ${tokenLimit} token limit. Continue with ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido or start a new chat.`,
               ),
               code: 'CHAT_TOKEN_LIMIT_REACHED',
@@ -3308,7 +3302,7 @@ export async function POST(request: NextRequest) {
             {
               error: pickLocalized(
                 requestLanguage,
-                'Premium limit uzatması için yeterli Rapido yok.',
+                'Premium limit uzatmasÄ± iÃ§in yeterli Rapido yok.',
                 'Not enough Rapido to extend the premium limit.',
               ),
               code: 'INSUFFICIENT_RAPIDO',
@@ -3361,7 +3355,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Bu mentor isteği mevcut Rapido bakiyesi için fazla büyük. Mesajı veya eki küçültüp tekrar deneyin.',
+              'Bu mentor isteÄŸi mevcut Rapido bakiyesi iÃ§in fazla bÃ¼yÃ¼k. MesajÄ± veya eki kÃ¼Ã§Ã¼ltÃ¼p tekrar deneyin.',
               'This mentor request is too large for your Rapido balance. Shorten the message or attachment.',
             ),
             code: 'INSUFFICIENT_RAPIDO',
@@ -3378,7 +3372,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Bu mentor isteği için bakiye yetersiz. Mesajı kısaltıp tekrar deneyin.',
+              'Bu mentor isteÄŸi iÃ§in bakiye yetersiz. MesajÄ± kÄ±saltÄ±p tekrar deneyin.',
               'Insufficient balance for this mentor request. Shorten the message and try again.',
             ),
             code: 'INSUFFICIENT_RAPIDO',
@@ -3395,7 +3389,7 @@ export async function POST(request: NextRequest) {
             {
               error: pickLocalized(
                 requestLanguage,
-                `Bu sohbet ${tokenLimit} token limitinde. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam ederek limiti artırabilir veya yeni sohbet açabilirsin.`,
+                `Bu sohbet ${tokenLimit} token limitinde. ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido ile devam ederek limiti artÄ±rabilir veya yeni sohbet aÃ§abilirsin.`,
                 `This chat is at the ${tokenLimit} token limit. Increase it with ${MENTOR_PREMIUM_EXTENSION_RAPIDO} Rapido or open a new chat.`,
               ),
               code: 'CHAT_TOKEN_LIMIT_REACHED',
@@ -3411,7 +3405,7 @@ export async function POST(request: NextRequest) {
             {
               error: pickLocalized(
                 requestLanguage,
-                'Premium limit uzatması için yeterli Rapido yok.',
+                'Premium limit uzatmasÄ± iÃ§in yeterli Rapido yok.',
                 'Not enough Rapido to extend the premium limit.',
               ),
               code: 'INSUFFICIENT_RAPIDO',
@@ -3435,7 +3429,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Bu mentor isteği mevcut Rapido bakiyesi için fazla büyük. Mesajı kısaltıp tekrar deneyin.',
+              'Bu mentor isteÄŸi mevcut Rapido bakiyesi iÃ§in fazla bÃ¼yÃ¼k. MesajÄ± kÄ±saltÄ±p tekrar deneyin.',
               'This mentor request is too large for your Rapido balance. Shorten the message and try again.',
             ),
             code: 'INSUFFICIENT_RAPIDO',
@@ -3475,7 +3469,7 @@ export async function POST(request: NextRequest) {
             {
               error: pickLocalized(
                 requestLanguage,
-                'Mentor eki yüklenemedi. Lütfen dosyayı tekrar deneyin.',
+                'Mentor eki yÃ¼klenemedi. LÃ¼tfen dosyayÄ± tekrar deneyin.',
                 'Could not upload mentor attachment. Please try the file again.',
               ),
               code: 'MENTOR_ATTACHMENT_UPLOAD_FAILED',
@@ -3490,12 +3484,12 @@ export async function POST(request: NextRequest) {
       const assistantBudget = Math.max(1, Math.min(tokenBudgetByChat, tokenBudgetByBalance));
 
       const mentorAi = await callAI(cfg, prompt, fileBase64, fileMimeType, [], requestLanguage);
-      const mentorRaw = mentorAi.content;
+      const mentorRaw = String(mentorAi.content ?? '');
       const mentorData = safeParseJson<{ reply?: string; quickActions?: unknown }>(mentorRaw, {});
       const mentorReplyRaw =
         typeof mentorData.reply === 'string' && mentorData.reply.trim()
           ? mentorData.reply.trim()
-          : String(mentorRaw ?? '').trim();
+          : mentorRaw.trim();
 
       const clamped = clampReplyToTokenBudget(mentorReplyRaw, assistantBudget, requestLanguage);
       const mentorReply = clamped.text;
@@ -3532,7 +3526,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Mentor yanıtı doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Mentor yanÄ±tÄ± doÄŸrulanamadÄ±. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'Mentor reply could not be validated. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3638,7 +3632,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Tasarım denetimi doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'TasarÄ±m denetimi doÄŸrulanamadÄ±. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'Design diagnostic could not be validated. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3665,27 +3659,27 @@ export async function POST(request: NextRequest) {
       const prompt = operation === 'AUTO_CONCEPT'
           ? pickLocalized(
       requestLanguage,
-      `"Hocam ben bunu çizdim ama ne anlama geldiğini bilmiyorum" diyen öğrenci için, bu çizime havalı, felsefi, bol jargonlu bir MİMARİ KONSEPT METNİ UYDUR. Amaç: jüride kullanılabilecek, derin göstermesi olan, kendine güvenli bir anlatı. ${lengthInstruction} En az 2 paragraf zorunlu.${knownFileContextPromptBlock}${memorySnippetsPromptBlock}
+      `"Hocam ben bunu Ã§izdim ama ne anlama geldiÄŸini bilmiyorum" diyen Ã¶ÄŸrenci iÃ§in, bu Ã§izime havalÄ±, felsefi, bol jargonlu bir MÄ°MARÄ° KONSEPT METNÄ° UYDUR. AmaÃ§: jÃ¼ride kullanÄ±labilecek, derin gÃ¶stermesi olan, kendine gÃ¼venli bir anlatÄ±. ${lengthInstruction} En az 2 paragraf zorunlu.${knownFileContextPromptBlock}${memorySnippetsPromptBlock}
 
     Zorunlu ton ve dil:
-    - Fenomenoloji, tektonik, palimpsest, liminal, Gestalt, genius loci, topografik kırılım, program-form diyalektiği gibi kavramları doğal akışla serp.
-    - Zumthor, Tadao Ando, Aldo Rossi, Juhani Pallasmaa, Kenneth Frampton refleksiyonlarını imleyebilirsin ama alıntı yapma.
-    - Birinci çoğul kullan ("tasarım önerir ki…", "kütle, zemine tutunurken…").
-    - Kesinlikle özür dileyici veya belirsiz yazma; iddialı ve kendinden emin bir ses kur.
+    - Fenomenoloji, tektonik, palimpsest, liminal, Gestalt, genius loci, topografik kÄ±rÄ±lÄ±m, program-form diyalektiÄŸi gibi kavramlarÄ± doÄŸal akÄ±ÅŸla serp.
+    - Zumthor, Tadao Ando, Aldo Rossi, Juhani Pallasmaa, Kenneth Frampton refleksiyonlarÄ±nÄ± imleyebilirsin ama alÄ±ntÄ± yapma.
+    - Birinci Ã§oÄŸul kullan ("tasarÄ±m Ã¶nerir kiâ€¦", "kÃ¼tle, zemine tutunurkenâ€¦").
+    - Kesinlikle Ã¶zÃ¼r dileyici veya belirsiz yazma; iddialÄ± ve kendinden emin bir ses kur.
 
-    İçerik planı:
-    1) Konseptin bir cümlelik "manifesto" çekirdeği.
-    2) Kütle/boşluk/dolaşım diyalektiği üzerinden kuramsal okuma (1 paragraf).
-    3) Malzeme ve ışığın fenomenolojik rolü (1 paragraf).
-    4) Kapanış: projenin bağlamla (site, program, kullanıcı) kurduğu etik-estetik pozisyon.
+    Ä°Ã§erik planÄ±:
+    1) Konseptin bir cÃ¼mlelik "manifesto" Ã§ekirdeÄŸi.
+    2) KÃ¼tle/boÅŸluk/dolaÅŸÄ±m diyalektiÄŸi Ã¼zerinden kuramsal okuma (1 paragraf).
+    3) Malzeme ve Ä±ÅŸÄ±ÄŸÄ±n fenomenolojik rolÃ¼ (1 paragraf).
+    4) KapanÄ±ÅŸ: projenin baÄŸlamla (site, program, kullanÄ±cÄ±) kurduÄŸu etik-estetik pozisyon.
 
     JSON: {"critique":"string"}`,
       `For the student saying "Teacher, I drew this but I don't know what it means", INVENT a swaggering, philosophical, jargon-heavy ARCHITECTURAL CONCEPT TEXT for this drawing. Goal: a confident, jury-ready narrative that sounds profound. ${lengthInstruction} Minimum 2 paragraphs required.${knownFileContextPromptBlock}${memorySnippetsPromptBlock}
 
     Required tone and register:
-    - Weave in terms like phenomenology, tectonics, palimpsest, liminal, Gestalt, genius loci, topographic rupture, program-form dialectic — naturally.
+    - Weave in terms like phenomenology, tectonics, palimpsest, liminal, Gestalt, genius loci, topographic rupture, program-form dialectic â€” naturally.
     - You may allude to Zumthor, Tadao Ando, Aldo Rossi, Juhani Pallasmaa, Kenneth Frampton, but do not quote.
-    - Use the first-person plural ("the design proposes…", "the mass, while anchoring to the ground…").
+    - Use the first-person plural ("the design proposesâ€¦", "the mass, while anchoring to the groundâ€¦").
     - Never hedge or apologize; hold an assertive, self-assured voice.
 
     Content plan:
@@ -3717,7 +3711,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Analiz sonucu doğrulanamadı. Rapido düşülmedi, tekrar deneyin.',
+              'Analiz sonucu doÄŸrulanamadÄ±. Rapido dÃ¼ÅŸÃ¼lmedi, tekrar deneyin.',
               'Analysis could not be validated. Rapido was not charged; try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3770,7 +3764,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               requestLanguage,
-              'Otomatik form doldurma sonucu doğrulanamadı. Tekrar deneyin.',
+              'Otomatik form doldurma sonucu doÄŸrulanamadÄ±. Tekrar deneyin.',
               'Auto-fill could not be validated. Try again.',
             ),
             code: 'INVALID_AI_RESULT',
@@ -3793,7 +3787,7 @@ export async function POST(request: NextRequest) {
     } else {
       return respond(
         {
-          error: pickLocalized(requestLanguage, 'Bilinmeyen işlem.', 'Unknown operation.'),
+          error: pickLocalized(requestLanguage, 'Bilinmeyen iÅŸlem.', 'Unknown operation.'),
         },
         400,
       );
@@ -3869,7 +3863,7 @@ export async function POST(request: NextRequest) {
           {
             error: pickLocalized(
               headerLangFallback,
-              'AI sağlayıcısının ücretsiz kredi erişimi geçici olarak kısıtlandı. Lütfen daha sonra tekrar deneyin.',
+              'AI saÄŸlayÄ±cÄ±sÄ±nÄ±n Ã¼cretsiz kredi eriÅŸimi geÃ§ici olarak kÄ±sÄ±tlandÄ±. LÃ¼tfen daha sonra tekrar deneyin.',
               'The AI provider has temporarily restricted free-credit access. Please try again later.',
             ),
             code: 'AI_PROVIDER_CREDITS_REQUIRED',
@@ -3884,7 +3878,7 @@ export async function POST(request: NextRequest) {
         {
           error: pickLocalized(
             headerLangFallback,
-            'AI sağlayıcısı geçici hata döndü. Lütfen biraz bekleyip tekrar deneyin.',
+            'AI saÄŸlayÄ±cÄ±sÄ± geÃ§ici hata dÃ¶ndÃ¼. LÃ¼tfen biraz bekleyip tekrar deneyin.',
             'The AI provider returned a temporary error. Please wait and try again.',
           ),
           code: 'AI_PROVIDER_FAILURE',
@@ -3903,15 +3897,12 @@ export async function POST(request: NextRequest) {
       {
         error: error instanceof Error
           ? error.message
-          : pickLocalized(headerLangFallback, 'Sunucu hatası.', 'Server error.'),
+          : pickLocalized(headerLangFallback, 'Sunucu hatasÄ±.', 'Server error.'),
       },
       500,
     );
   }
 }
-
-
-
 
 
 
