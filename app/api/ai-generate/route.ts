@@ -77,20 +77,21 @@ function readFirstCleanEnv(names: string[]): string {
   return '';
 }
 
+const ANALYSIS_MODEL_OPERATIONS = new Set<string>([
+  'MATERIAL_BOARD',
+  'SINGLE_JURY',
+  'MULTI_JURY',
+  'REVISION_SAME',
+  'DRAWING_CONSISTENCY',
+  'CIRCULATION_ADJACENCY',
+  'ACCESSIBILITY_EGRESS',
+]);
+
 function resolveAiModelForOperation(operation: string): string {
   const defaultModel = readCleanEnv('AI_MODEL') || DEFAULTS.model;
   const analysisModel = readFirstCleanEnv(['AI_MODEL_ANALYSIS', 'AI_MODEL_ANALYSIS_VISION']) || defaultModel;
-  const lowCostModel = readFirstCleanEnv(['AI_MODEL_LOW_COST', 'AI_MODEL_TEXT_CHEAP']) || defaultModel;
 
-  if (
-    operation === 'MATERIAL_BOARD' ||
-    operation === 'SINGLE_JURY' ||
-    operation === 'MULTI_JURY' ||
-    operation === 'REVISION_SAME' ||
-    operation === 'DRAWING_CONSISTENCY' ||
-    operation === 'CIRCULATION_ADJACENCY' ||
-    operation === 'ACCESSIBILITY_EGRESS'
-  ) {
+  if (ANALYSIS_MODEL_OPERATIONS.has(operation)) {
     return analysisModel;
   }
 
@@ -104,7 +105,7 @@ function resolveAiModelForOperation(operation: string): string {
     operation === 'AUTO_FILL_FORM' ||
     operation === 'SKILL_ROADMAP'
   ) {
-    return lowCostModel;
+    return readFirstCleanEnv(['AI_MODEL_LOW_COST', 'AI_MODEL_TEXT_CHEAP']) || defaultModel;
   }
 
   if (operation === 'PREMIUM_RESCUE') {
@@ -781,11 +782,6 @@ async function runInParallelBatches<T>(
   batchSize: number,
   worker: (item: T) => Promise<void>,
 ): Promise<void> {
-<<<<<<< HEAD
-  for (let i = 0; i < items.length; i += batchSize) {
-    const batch = items.slice(i, i + batchSize);
-    await Promise.all(batch.map((item) => worker(item).catch((err) => console.error('[runInParallelBatches] item failed', err))));
-=======
   if (!Number.isInteger(batchSize) || batchSize < 1) {
     throw new Error(`Invalid batchSize: ${batchSize}`);
   }
@@ -799,7 +795,6 @@ async function runInParallelBatches<T>(
         }),
       ),
     );
->>>>>>> origin/dev-main
   }
 }
 

@@ -1,29 +1,23 @@
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
+const ANALYSIS_KIND_LABELS: Record<string, { tr: string; en: string }> = {
+  SINGLE_JURY: { tr: 'Tek Jüri', en: 'Single jury' },
+  REVISION_SAME: { tr: 'Revizyon', en: 'Revision' },
+  MULTI_JURY: { tr: 'Çoklu Jüri', en: 'Multi jury' },
+  PREMIUM_RESCUE: { tr: 'Premium Rescue', en: 'Premium Rescue' },
+  AUTO_CONCEPT: { tr: 'Konsept Üretimi', en: 'Concept generation' },
+  MATERIAL_BOARD: { tr: 'Malzeme Paftası', en: 'Material board' },
+  DRAWING_CONSISTENCY: { tr: 'Çizim Tutarlılığı', en: 'Drawing consistency' },
+  CIRCULATION_ADJACENCY: { tr: 'Dolaşım ve Komşuluk', en: 'Circulation and adjacency' },
+  ACCESSIBILITY_EGRESS: { tr: 'Erişilebilirlik ve Kaçış Ön Kontrolü', en: 'Accessibility and egress pre-check' },
+  SKILL_ROADMAP: { tr: 'Kişisel Beceri Rotası', en: 'Personal skill roadmap' },
+};
+
 /** Labels for `analysisKind` in history and gallery cards. */
 export function analysisKindLabel(kind: string, language: SupportedLanguage): string {
-  switch (kind) {
-    case 'SINGLE_JURY':
-      return pickLocalized(language, 'Tek Jüri', 'Single jury');
-    case 'REVISION_SAME':
-      return pickLocalized(language, 'Revizyon', 'Revision');
-    case 'MULTI_JURY':
-      return pickLocalized(language, 'Çoklu Jüri', 'Multi jury');
-    case 'PREMIUM_RESCUE':
-      return pickLocalized(language, 'Premium Rescue', 'Premium Rescue');
-    case 'AUTO_CONCEPT':
-      return pickLocalized(language, 'Konsept Üretimi', 'Concept generation');
-    case 'MATERIAL_BOARD':
-      return pickLocalized(language, 'Malzeme Paftası', 'Material board');
-    case 'DRAWING_CONSISTENCY':
-      return pickLocalized(language, 'Çizim Tutarlılığı', 'Drawing consistency');
-    case 'CIRCULATION_ADJACENCY':
-      return pickLocalized(language, 'Dolaşım ve Komşuluk', 'Circulation and adjacency');
-    case 'ACCESSIBILITY_EGRESS':
-      return pickLocalized(language, 'Erişilebilirlik ve Kaçış Ön Kontrolü', 'Accessibility and egress pre-check');
-    case 'SKILL_ROADMAP':
-      return pickLocalized(language, 'Kişisel Beceri Rotası', 'Personal skill roadmap');
-    default:
-      return kind.replace(/_/g, ' ');
+  const localized = ANALYSIS_KIND_LABELS[kind];
+  if (!localized) {
+    return kind.replace(/_/g, ' ');
   }
+  return pickLocalized(language, localized.tr, localized.en);
 }

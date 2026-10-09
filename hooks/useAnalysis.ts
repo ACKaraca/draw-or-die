@@ -391,11 +391,10 @@ function canvasToConstrainedJpegBase64(source: HTMLCanvasElement): string | null
 }
 
 function stripFence(value: string): string {
-  return value
-    .replace(/^\s*```json\s*/i, '')
-    .replace(/^\s*```\s*/i, '')
-    .replace(/\s*```\s*$/i, '')
-    .trim();
+  let clean = value.trim();
+  clean = clean.replace(/^(?:\\n|[\r\n\s])*```(?:json)?(?:\\n|[\r\n\s])*/i, '');
+  clean = clean.replace(/(?:\\n|[\r\n\s])*```(?:\\n|[\r\n\s])*$/i, '');
+  return clean.trim();
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {

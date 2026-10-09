@@ -1,37 +1,27 @@
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
+const RAPIDO_OPERATION_LABELS: Record<string, { tr: string; en: string }> = {
+  SINGLE_JURY: { tr: 'Tekli jüri', en: 'Single jury' },
+  REVISION_SAME: { tr: 'Revizyon (aynı proje)', en: 'Revision (same project)' },
+  REVISION_DIFFERENT: { tr: 'Revizyon (farklı proje)', en: 'Revision (different project)' },
+  MULTI_JURY: { tr: 'Çoklu jüri', en: 'Multi jury' },
+  MULTI_JURY_REVISION: { tr: 'Çoklu jüri revizyonu', en: 'Multi-jury revision' },
+  AUTO_CONCEPT: { tr: 'Otomatik konsept', en: 'Auto concept' },
+  MATERIAL_BOARD: { tr: 'Malzeme paftası', en: 'Material board' },
+  DEFENSE: { tr: 'Jüri savunması', en: 'Jury defense' },
+  AI_MENTOR: { tr: 'AI Mentor', en: 'AI Mentor' },
+  PREMIUM_RESCUE: { tr: 'Premium Rescue', en: 'Premium Rescue' },
+  DRAWING_CONSISTENCY: { tr: 'Çizim tutarlılığı', en: 'Drawing consistency' },
+  CIRCULATION_ADJACENCY: { tr: 'Dolaşım ve komşuluk', en: 'Circulation and adjacency' },
+  ACCESSIBILITY_EGRESS: { tr: 'Erişilebilirlik ve kaçış', en: 'Accessibility and egress' },
+  SKILL_ROADMAP: { tr: 'Kişisel beceri rotası', en: 'Personal skill roadmap' },
+};
+
 /** User-facing label for a Rapido cost key (see `lib/pricing.ts` → RAPIDO_COSTS). */
 export function rapidoCostOperationLabel(key: string, language: SupportedLanguage): string {
-  switch (key) {
-    case 'SINGLE_JURY':
-      return pickLocalized(language, 'Tekli jüri', 'Single jury');
-    case 'REVISION_SAME':
-      return pickLocalized(language, 'Revizyon (aynı proje)', 'Revision (same project)');
-    case 'REVISION_DIFFERENT':
-      return pickLocalized(language, 'Revizyon (farklı proje)', 'Revision (different project)');
-    case 'MULTI_JURY':
-      return pickLocalized(language, 'Çoklu jüri', 'Multi jury');
-    case 'MULTI_JURY_REVISION':
-      return pickLocalized(language, 'Çoklu jüri revizyonu', 'Multi-jury revision');
-    case 'AUTO_CONCEPT':
-      return pickLocalized(language, 'Otomatik konsept', 'Auto concept');
-    case 'MATERIAL_BOARD':
-      return pickLocalized(language, 'Malzeme paftası', 'Material board');
-    case 'DEFENSE':
-      return pickLocalized(language, 'Jüri savunması', 'Jury defense');
-    case 'AI_MENTOR':
-      return pickLocalized(language, 'AI Mentor', 'AI Mentor');
-    case 'PREMIUM_RESCUE':
-      return pickLocalized(language, 'Premium Rescue', 'Premium Rescue');
-    case 'DRAWING_CONSISTENCY':
-      return pickLocalized(language, 'Çizim tutarlılığı', 'Drawing consistency');
-    case 'CIRCULATION_ADJACENCY':
-      return pickLocalized(language, 'Dolaşım ve komşuluk', 'Circulation and adjacency');
-    case 'ACCESSIBILITY_EGRESS':
-      return pickLocalized(language, 'Erişilebilirlik ve kaçış', 'Accessibility and egress');
-    case 'SKILL_ROADMAP':
-      return pickLocalized(language, 'Kişisel beceri rotası', 'Personal skill roadmap');
-    default:
-      return key.replace(/_/g, ' ');
+  const localized = RAPIDO_OPERATION_LABELS[key];
+  if (!localized) {
+    return key.replace(/_/g, ' ');
   }
+  return pickLocalized(language, localized.tr, localized.en);
 }
