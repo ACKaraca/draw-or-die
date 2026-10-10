@@ -18,13 +18,15 @@ describe('UploadStep', () => {
     window.localStorage.setItem('dod_studio_tutorial_seen_v1', '1');
   });
 
-  it('shows guest upgrade messaging and blocks the second submission path', () => {
+  it('shows guest sign-up messaging and blocks the second submission path', () => {
     const onGuestUpgradeRequired = jest.fn();
+    const onAuthRequired = jest.fn();
+    const onUpgradeClick = jest.fn();
 
     render(
       <UploadStep
-        getRootProps={() => ({})}
-        getInputProps={() => ({})}
+        getRootProps={(() => ({})) as never}
+        getInputProps={(() => ({})) as never}
         isDragActive={false}
         previewUrl={null}
         mimeType={null}
@@ -41,19 +43,63 @@ describe('UploadStep', () => {
         uploadValidationError={null}
         isRevisionMode={false}
         isAuthenticated={false}
-        onAuthRequired={jest.fn()}
+        onAuthRequired={onAuthRequired}
         isPremiumUser={false}
         rapidoPens={12}
-        onUpgradeClick={jest.fn()}
+        onUpgradeClick={onUpgradeClick}
         isAnonymous
         guestDrawingCount={1}
         onGuestUpgradeRequired={onGuestUpgradeRequired}
       />,
     );
 
-    expect(screen.getByRole('button', { name: /şimdi yükselt|upgrade now/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /misafir limiti|guest limit reached/i }).hasAttribute('disabled')).toBe(true);
     expect(onGuestUpgradeRequired).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hesap Oluştur' }));
+    expect(onAuthRequired).toHaveBeenCalledTimes(1);
+    expect(onUpgradeClick).not.toHaveBeenCalled();
+  });
+
+  it('links Studio Desk labels to their inputs and labels icon-only controls', () => {
+    render(
+      <UploadStep
+        getRootProps={(() => ({})) as never}
+        getInputProps={(() => ({})) as never}
+        isDragActive={false}
+        previewUrl={null}
+        mimeType={null}
+        formData={baseFormData as any}
+        setFormData={jest.fn()}
+        handleAnalyze={jest.fn()}
+        handleMultiAnalyze={jest.fn()}
+        handleAutoConcept={jest.fn()}
+        handleMaterialBoard={jest.fn()}
+        handleDesignInsight={jest.fn()}
+        image={null}
+        imageBase64={null}
+        additionalUploads={[]}
+        uploadValidationError={null}
+        isRevisionMode={false}
+        isAuthenticated
+        onAuthRequired={jest.fn()}
+        isPremiumUser
+        rapidoPens={24}
+        onUpgradeClick={jest.fn()}
+        isAnonymous={false}
+        guestDrawingCount={0}
+      />,
+    );
+
+    expect(screen.getByLabelText('Konu')).toHaveValue('Brutalist Library');
+    expect(screen.getByLabelText('Arazi')).toHaveValue('Istanbul');
+    expect(screen.getByLabelText('Konsept')).toHaveValue('Light wells and circulation');
+    expect(screen.getByLabelText('Kategori')).toBeInTheDocument();
+    expect(screen.getByLabelText('Analiz Uzunluğu')).toBeInTheDocument();
+    expect(screen.getByLabelText('Jüri Sertliği')).toHaveAttribute('type', 'range');
+    expect(screen.getByRole('button', { name: 'Önceki persona' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sonraki persona' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /önce dosya yükle/i })).toBeDisabled();
   });
 
   it('routes authenticated premium users to the main analysis actions', () => {
@@ -65,8 +111,8 @@ describe('UploadStep', () => {
 
     render(
       <UploadStep
-        getRootProps={() => ({})}
-        getInputProps={() => ({})}
+        getRootProps={(() => ({})) as never}
+        getInputProps={(() => ({})) as never}
         isDragActive={false}
         previewUrl={null}
         mimeType={null}
@@ -114,8 +160,8 @@ describe('UploadStep', () => {
 
     render(
       <UploadStep
-        getRootProps={() => ({})}
-        getInputProps={() => ({})}
+        getRootProps={(() => ({})) as never}
+        getInputProps={(() => ({})) as never}
         isDragActive={false}
         previewUrl={null}
         mimeType={null}
@@ -145,5 +191,46 @@ describe('UploadStep', () => {
     expect(button.hasAttribute('disabled')).toBe(true);
     fireEvent.click(button);
     expect(handleAnalyze).not.toHaveBeenCalled();
+  });
+
+  it('shows the first-run tutorial as an accessible dialog that closes with Escape', async () => {
+    window.localStorage.removeItem('dod_studio_tutorial_seen_v1');
+
+    render(
+      <UploadStep
+        getRootProps={(() => ({})) as never}
+        getInputProps={(() => ({})) as never}
+        isDragActive={false}
+        previewUrl={null}
+        mimeType={null}
+        formData={baseFormData as any}
+        setFormData={jest.fn()}
+        handleAnalyze={jest.fn()}
+        handleMultiAnalyze={jest.fn()}
+        handleAutoConcept={jest.fn()}
+        handleMaterialBoard={jest.fn()}
+        handleDesignInsight={jest.fn()}
+        image={null}
+        imageBase64={null}
+        additionalUploads={[]}
+        uploadValidationError={null}
+        isRevisionMode={false}
+        isAuthenticated
+        onAuthRequired={jest.fn()}
+        isPremiumUser
+        rapidoPens={24}
+        onUpgradeClick={jest.fn()}
+        isAnonymous={false}
+        guestDrawingCount={0}
+      />,
+    );
+
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(window.localStorage.getItem('dod_studio_tutorial_seen_v1')).toBe('1');
   });
 });

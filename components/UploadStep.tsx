@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { motion } from 'framer-motion';
 import {
   Upload,
@@ -15,13 +15,12 @@ import {
   Route,
   Accessibility,
 } from 'lucide-react';
-import { AnalysisLengthOption, FormData, JuryPersonaId } from '@/types';
 import { RAPIDO_COSTS, TIER_DEFAULTS } from '@/lib/pricing';
 import { generateAIResponse } from '@/lib/ai';
+import { DialogFrame } from '@/components/DialogFrame';
 import { SimplePdfPreview } from '@/components/SimplePdfPreview';
 import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
-import type { SupportedLanguage } from '@/lib/i18n';
-import { pickLocalized } from '@/lib/i18n';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import {
   STUDIO_CATEGORY_VALUES,
@@ -29,9 +28,11 @@ import {
   studioCategoryLabel,
   studioTutorialSteps,
 } from '@/lib/locales/uploadForm';
-import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
-import type { AdditionalUpload } from '@/stores/drawOrDieStore';
+import { useDrawOrDieStore, type AdditionalUpload } from '@/stores/drawOrDieStore';
+
+import type { DropzoneState } from 'react-dropzone';
 import type { DesignInsightOperation } from '@/lib/design-insights';
+import type { AnalysisLengthOption, FormData, JuryPersonaId } from '@/types';
 
 type AutoFillFields = {
   topic: boolean;
@@ -52,8 +53,8 @@ type PreviewFile = {
 };
 
 interface UploadStepProps {
-  getRootProps: any;
-  getInputProps: any;
+  getRootProps: DropzoneState['getRootProps'];
+  getInputProps: DropzoneState['getInputProps'];
   isDragActive: boolean;
   previewUrl: string | null;
   mimeType: string | null;
@@ -164,6 +165,22 @@ export function UploadStep({
   multiJuryPromoActive = false,
 }: UploadStepProps) {
   const language = useLanguage();
+  const fieldIdPrefix = useId();
+  const fieldIds = {
+    topic: `${fieldIdPrefix}-topic`,
+    site: `${fieldIdPrefix}-site`,
+    concept: `${fieldIdPrefix}-concept`,
+    defense: `${fieldIdPrefix}-defense`,
+    category: `${fieldIdPrefix}-category`,
+    analysisLength: `${fieldIdPrefix}-analysis-length`,
+    harshness: `${fieldIdPrefix}-harshness`,
+    juryMode: `${fieldIdPrefix}-jury-mode`,
+    singlePersona: `${fieldIdPrefix}-single-persona`,
+    multiPersona: `${fieldIdPrefix}-multi-persona`,
+  };
+  const tutorialTitleId = `${fieldIdPrefix}-tutorial-title`;
+  const tutorialTextId = `${fieldIdPrefix}-tutorial-text`;
+  const tutorialNextRef = useRef<HTMLButtonElement>(null);
   const tutorialSteps = useMemo(() => studioTutorialSteps(language), [language]);
   const personaOptions = useMemo(
     () =>
@@ -394,6 +411,15 @@ export function UploadStep({
     setFormData({ ...formData, singlePersonaId: ids[nextIndex] });
   };
 
+  const harshnessLabels: Record<number, string> = {
+    1: pickLocalized(language, 'Yapıcı (Acı Gerçekler)', 'Constructive (hard truths)'),
+    2: pickLocalized(language, 'Normal', 'Normal'),
+    3: pickLocalized(language, 'Sert', 'Harsh'),
+    4: pickLocalized(language, 'Roast (Göm)', 'Roast'),
+    5: pickLocalized(language, 'Brutal', 'Brutal'),
+  };
+  const harshnessLabel = harshnessLabels[formData.harshness] ?? '';
+
   const handleAutoFill = async () => {
     if (!isAuthenticated) {
       onAuthRequired();
@@ -483,62 +509,68 @@ export function UploadStep({
 
   return (
     <>
-      {showTutorial && (
-        <div className="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-xl rounded-2xl border border-neon-red/30 bg-[#0D1425] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.55)]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-widest text-neon-red/90">
-                  Studio Desk Tutorial {tutorialStep + 1}/{tutorialSteps.length}
-                </p>
-                <h3 className="mt-2 font-display text-2xl text-white">{tutorialSteps[tutorialStep].title}</h3>
-              </div>
-              <button
-                onClick={dismissTutorial}
-                className="rounded-full border border-white/20 p-2 text-slate-300 hover:text-white hover:border-white/40"
-                title={pickLocalized(language, "Tutorial'ı kapat", 'Close tutorial')}
-              >
-                <X size={16} />
-              </button>
-            </div>
+      <DialogFrame
+        isOpen={showTutorial}
+        onClose={dismissTutorial}
+        labelledBy={tutorialTitleId}
+        describedBy={tutorialTextId}
+        initialFocusRef={tutorialNextRef}
+        panelClassName="w-full max-w-xl rounded-2xl border border-white/[0.13] bg-bg-1 p-6 text-left focus:outline-none"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-widest text-neon-red/90">
+              {pickLocalized(language, 'Studio Desk Rehberi', 'Studio Desk Tutorial')} {tutorialStep + 1}/{tutorialSteps.length}
+            </p>
+            <h3 id={tutorialTitleId} className="mt-2 font-display text-2xl text-white">{tutorialSteps[tutorialStep].title}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={dismissTutorial}
+            className="rounded-full border border-white/20 p-2 text-slate-300 hover:text-white hover:border-white/40"
+            title={pickLocalized(language, 'Rehberi kapat', 'Close tutorial')}
+            aria-label={pickLocalized(language, 'Rehberi kapat', 'Close tutorial')}
+          >
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
 
-            <p className="mt-4 text-slate-300 leading-relaxed">{tutorialSteps[tutorialStep].text}</p>
+        <p id={tutorialTextId} className="mt-4 text-slate-300 leading-relaxed">{tutorialSteps[tutorialStep].text}</p>
 
-            <div className="mt-6 flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={dismissTutorial}
-                className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 text-sm font-mono"
-              >
-                {pickLocalized(language, 'Tutorial\'ı atla', 'Skip tutorial')}
-              </button>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTutorialStep((prev) => Math.max(0, prev - 1))}
-                  disabled={tutorialStep === 0}
-                  className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 text-sm font-mono disabled:opacity-40"
-                >
-                  {pickLocalized(language, 'Geri', 'Back')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (tutorialStep >= tutorialSteps.length - 1) {
-                      dismissTutorial();
-                      return;
-                    }
-                    setTutorialStep((prev) => Math.min(tutorialSteps.length - 1, prev + 1));
-                  }}
-                  className="px-4 py-2 rounded-lg bg-neon-red text-white hover:bg-[#d1002a] text-sm font-bold uppercase tracking-wider"
-                >
-                  {tutorialStep >= tutorialSteps.length - 1 ? pickLocalized(language, 'Başla', 'Start') : pickLocalized(language, 'İleri', 'Next')}
-                </button>
-              </div>
-            </div>
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={dismissTutorial}
+            className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 text-sm font-mono"
+          >
+            {pickLocalized(language, 'Rehberi atla', 'Skip tutorial')}
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setTutorialStep((prev) => Math.max(0, prev - 1))}
+              disabled={tutorialStep === 0}
+              className="px-4 py-2 rounded-lg border border-white/20 text-slate-200 hover:bg-white/10 text-sm font-mono disabled:opacity-40"
+            >
+              {pickLocalized(language, 'Geri', 'Back')}
+            </button>
+            <button
+              ref={tutorialNextRef}
+              type="button"
+              onClick={() => {
+                if (tutorialStep >= tutorialSteps.length - 1) {
+                  dismissTutorial();
+                  return;
+                }
+                setTutorialStep((prev) => Math.min(tutorialSteps.length - 1, prev + 1));
+              }}
+              className="px-4 py-2 rounded-lg bg-neon-red text-white hover:bg-neon-red/90 text-sm font-mono font-bold uppercase tracking-wider"
+            >
+              {tutorialStep >= tutorialSteps.length - 1 ? pickLocalized(language, 'Başla', 'Start') : pickLocalized(language, 'İleri', 'Next')}
+            </button>
           </div>
         </div>
-      )}
+      </DialogFrame>
 
       <motion.div
         key="upload"
@@ -557,7 +589,7 @@ export function UploadStep({
               onClick={() => setShowTutorial(true)}
               className="text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:text-white"
             >
-              Tutorial
+              {pickLocalized(language, 'Rehber', 'Tutorial')}
             </button>
           </div>
 
@@ -647,27 +679,30 @@ export function UploadStep({
                 {previewFiles.map((file, index) => {
                   const selected = index === selectedPreviewIndex;
                   return (
-                    <button
+                    <div
                       key={file.id}
-                      type="button"
-                      onClick={() => setSelectedPreviewIndex(index)}
-                      className={`min-w-[180px] text-left rounded-lg border px-3 py-2 transition-colors ${selected ? 'border-neon-red bg-neon-red/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/30'}`}
-                      title={file.name}
+                      className={`min-w-[180px] rounded-lg border px-3 py-2 transition-colors ${selected ? 'border-neon-red bg-neon-red/10 text-white' : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/30'}`}
                     >
-                      <p className="text-[10px] font-mono uppercase tracking-widest opacity-80">{file.badge}</p>
-                      <p className="truncate text-xs mt-1">{file.name}</p>
-                      <p className="text-[10px] text-slate-400 mt-1">{(file.sizeBytes / 1024).toFixed(0)} KB</p>
                       <button
                         type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          removePreviewFile(index);
-                        }}
+                        onClick={() => setSelectedPreviewIndex(index)}
+                        aria-pressed={selected}
+                        className="block w-full text-left"
+                        title={file.name}
+                      >
+                        <span className="block text-[10px] font-mono uppercase tracking-widest opacity-80">{file.badge}</span>
+                        <span className="block truncate text-xs mt-1">{file.name}</span>
+                        <span className="block text-[10px] text-slate-400 mt-1">{(file.sizeBytes / 1024).toFixed(0)} KB</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removePreviewFile(index)}
+                        aria-label={pickLocalized(language, `${file.name} dosyasını sil`, `Remove ${file.name}`)}
                         className="mt-2 inline-block rounded border border-red-400/40 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-red-200 hover:bg-red-500/15"
                       >
                         {pickLocalized(language, 'Sil', 'Remove')}
                       </button>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -702,8 +737,8 @@ export function UploadStep({
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <FileText size={14} /> {pickLocalized(language, 'Konu', 'Topic')}
+                <label htmlFor={fieldIds.topic} className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                  <FileText size={14} aria-hidden="true" /> {pickLocalized(language, 'Konu', 'Topic')}
                 </label>
                 <AutoToggle
                   enabled={autoFillFields.topic}
@@ -714,6 +749,7 @@ export function UploadStep({
                 />
               </div>
               <input
+                id={fieldIds.topic}
                 type="text"
                 value={formData.topic}
                 onChange={(e) => setFormData({ ...formData, topic: e.target.value })}
@@ -724,8 +760,8 @@ export function UploadStep({
 
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <Map size={14} /> {pickLocalized(language, 'Arazi', 'Site')}
+                <label htmlFor={fieldIds.site} className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                  <Map size={14} aria-hidden="true" /> {pickLocalized(language, 'Arazi', 'Site')}
                 </label>
                 <AutoToggle
                   enabled={autoFillFields.site}
@@ -736,6 +772,7 @@ export function UploadStep({
                 />
               </div>
               <input
+                id={fieldIds.site}
                 type="text"
                 value={formData.site}
                 onChange={(e) => setFormData({ ...formData, site: e.target.value })}
@@ -746,8 +783,8 @@ export function UploadStep({
 
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <Lightbulb size={14} /> {pickLocalized(language, 'Konsept', 'Concept')}
+                <label htmlFor={fieldIds.concept} className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                  <Lightbulb size={14} aria-hidden="true" /> {pickLocalized(language, 'Konsept', 'Concept')}
                 </label>
                 <AutoToggle
                   enabled={autoFillFields.concept}
@@ -758,6 +795,7 @@ export function UploadStep({
                 />
               </div>
               <textarea
+                id={fieldIds.concept}
                 value={formData.concept}
                 onChange={(e) => setFormData({ ...formData, concept: e.target.value })}
                 placeholder={pickLocalized(language, 'Örn: Boşlukların geçirgenliği üzerine...', 'e.g. On the permeability of voids...')}
@@ -768,8 +806,8 @@ export function UploadStep({
 
             <div>
               <div className="flex items-center justify-between gap-2 mb-1">
-                <label className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <FileText size={14} /> {pickLocalized(language, 'Jüri Önü Savunma Metni', 'Defense statement for the jury')}
+                <label htmlFor={fieldIds.defense} className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                  <FileText size={14} aria-hidden="true" /> {pickLocalized(language, 'Jüri Önü Savunma Metni', 'Defense statement for the jury')}
                 </label>
                 <AutoToggle
                   enabled={autoFillFields.defense}
@@ -780,6 +818,7 @@ export function UploadStep({
                 />
               </div>
               <textarea
+                id={fieldIds.defense}
                 value={formData.defense}
                 onChange={(e) => setFormData({ ...formData, defense: e.target.value })}
                 placeholder={pickLocalized(
@@ -795,7 +834,7 @@ export function UploadStep({
             <div className="grid grid-cols-1 gap-4">
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="block text-sm font-medium text-slate-300">
+                  <label htmlFor={fieldIds.category} className="block text-sm font-medium text-slate-300">
                     {pickLocalized(language, 'Kategori', 'Category')}
                   </label>
                   <AutoToggle
@@ -807,6 +846,7 @@ export function UploadStep({
                   />
                 </div>
                 <select
+                  id={fieldIds.category}
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                   className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors appearance-none"
@@ -821,7 +861,7 @@ export function UploadStep({
 
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="block text-sm font-medium text-slate-300">
+                  <label htmlFor={fieldIds.analysisLength} className="block text-sm font-medium text-slate-300">
                     {pickLocalized(language, 'Analiz Uzunluğu', 'Analysis length')}
                   </label>
                   <AutoToggle
@@ -833,6 +873,7 @@ export function UploadStep({
                   />
                 </div>
                 <select
+                  id={fieldIds.analysisLength}
                   value={formData.analysisLength}
                   onChange={(e) => setFormData({ ...formData, analysisLength: e.target.value as AnalysisLengthOption })}
                   className="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-neon-red transition-colors appearance-none"
@@ -850,24 +891,21 @@ export function UploadStep({
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-slate-300 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <GraduationCap size={14} /> {pickLocalized(language, 'Jüri Sertliği', 'Jury harshness')}
+                <div className="mb-2 flex items-center justify-between">
+                  <label htmlFor={fieldIds.harshness} className="flex items-center gap-1 text-sm font-medium text-slate-300">
+                    <GraduationCap size={14} aria-hidden="true" /> {pickLocalized(language, 'Jüri Sertliği', 'Jury harshness')}
+                  </label>
+                  <span className="text-neon-red font-mono text-xs" aria-hidden="true">
+                    {harshnessLabel}
                   </span>
-                  <span className="text-neon-red font-mono text-xs">
-                    {formData.harshness === 1 &&
-                      pickLocalized(language, 'Yapıcı (Acı Gerçekler)', 'Constructive (hard truths)')}
-                    {formData.harshness === 2 && pickLocalized(language, 'Normal', 'Normal')}
-                    {formData.harshness === 3 && pickLocalized(language, 'Sert', 'Harsh')}
-                    {formData.harshness === 4 && pickLocalized(language, 'Roast (Göm)', 'Roast')}
-                    {formData.harshness === 5 && pickLocalized(language, 'Brutal', 'Brutal')}
-                  </span>
-                </label>
+                </div>
                 <input
+                  id={fieldIds.harshness}
                   type="range"
                   min="1"
                   max="5"
                   step="1"
+                  aria-valuetext={`${formData.harshness}/5 — ${harshnessLabel}`}
                   value={formData.harshness}
                   onChange={(e) => setFormData({ ...formData, harshness: parseInt(e.target.value, 10) })}
                   className="w-full h-2 bg-black/50 rounded-lg appearance-none cursor-pointer accent-neon-red"
@@ -880,12 +918,17 @@ export function UploadStep({
 
               <div>
                 <div className="flex items-center justify-between gap-3 mb-2">
-                  <label className="block text-sm font-medium text-slate-300">
+                  <span id={fieldIds.juryMode} className="block text-sm font-medium text-slate-300">
                     {pickLocalized(language, 'Jüri Modu', 'Jury mode')}
-                  </label>
-                  <div className="inline-flex rounded-full border border-white/10 bg-black/40 p-1 text-[10px] font-mono uppercase tracking-wider">
+                  </span>
+                  <div
+                    role="group"
+                    aria-labelledby={fieldIds.juryMode}
+                    className="inline-flex rounded-full border border-white/10 bg-black/40 p-1 text-[10px] font-mono uppercase tracking-wider"
+                  >
                     <button
                       type="button"
+                      aria-pressed={juryMode === 'single'}
                       onClick={() => setJuryMode('single')}
                       className={`px-4 py-1.5 rounded-full transition-all ${juryMode === 'single' ? 'bg-white text-black font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
@@ -893,6 +936,7 @@ export function UploadStep({
                     </button>
                     <button
                       type="button"
+                      aria-pressed={juryMode === 'multi'}
                       onClick={() => setJuryMode('multi')}
                       className={`px-4 py-1.5 rounded-full transition-all ${juryMode === 'multi' ? 'bg-purple-500 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
@@ -904,15 +948,34 @@ export function UploadStep({
                 {juryMode === 'single' ? (
                   <div className="space-y-2 rounded-xl border border-white/10 bg-black/30 p-3">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                      <span id={fieldIds.singlePersona} className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
                         {pickLocalized(language, 'Tekli Jüri Persona', 'Single-jury persona')}
                       </span>
                       <div className="flex items-center gap-1">
-                        <button type="button" onClick={() => moveSinglePersona('left')} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">←</button>
-                        <button type="button" onClick={() => moveSinglePersona('right')} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10">→</button>
+                        <button
+                          type="button"
+                          onClick={() => moveSinglePersona('left')}
+                          aria-label={pickLocalized(language, 'Önceki persona', 'Previous persona')}
+                          className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10"
+                        >
+                          <span aria-hidden="true">←</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveSinglePersona('right')}
+                          aria-label={pickLocalized(language, 'Sonraki persona', 'Next persona')}
+                          className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-slate-200 hover:bg-white/10"
+                        >
+                          <span aria-hidden="true">→</span>
+                        </button>
                       </div>
                     </div>
-                    <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-3">
+                    <div
+                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-3"
+                      aria-live="polite"
+                      aria-labelledby={fieldIds.singlePersona}
+                      role="group"
+                    >
                       <p className="text-sm font-bold text-white">{personaMap[formData.singlePersonaId]?.label}</p>
                       <p className="mt-1 text-[10px] font-mono text-slate-400">{personaMap[formData.singlePersonaId]?.detail}</p>
                     </div>
@@ -920,14 +983,14 @@ export function UploadStep({
                 ) : (
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <label className="block text-sm font-medium text-slate-300">
+                      <span id={fieldIds.multiPersona} className="block text-sm font-medium text-slate-300">
                         {pickLocalized(language, 'Çoklu Jüri Persona Seçimi', 'Multi-jury persona selection')}
-                      </label>
+                      </span>
                       <span className="text-[10px] font-mono text-slate-400">
                         {selectedMultiPersonaIds.length}/4 {pickLocalized(language, 'seçili (min 2)', 'selected (min 2)')}
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div role="group" aria-labelledby={fieldIds.multiPersona} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {personaOptions.map((persona) => {
                         const selected = selectedMultiPersonaIds.includes(persona.id);
                         const disableSelect = !selected && selectedMultiPersonaIds.length >= 4;
@@ -936,12 +999,13 @@ export function UploadStep({
                           <button
                             key={persona.id}
                             type="button"
+                            aria-pressed={selected}
                             onClick={() => toggleMultiPersona(persona.id)}
                             disabled={disableSelect || disableUnselect}
                             className={`rounded-lg border px-3 py-2 text-left transition-colors ${selected ? 'border-purple-400/50 bg-purple-500/20 text-purple-100' : 'border-white/15 bg-white/5 text-slate-300 hover:bg-white/10'} disabled:opacity-45 disabled:cursor-not-allowed`}
                           >
-                            <p className="text-xs font-mono uppercase tracking-wider">{persona.label}</p>
-                            <p className="mt-1 text-[10px] text-slate-400 leading-relaxed">{persona.detail}</p>
+                            <span className="block text-xs font-mono uppercase tracking-wider">{persona.label}</span>
+                            <span className="mt-1 block text-[10px] text-slate-400 leading-relaxed">{persona.detail}</span>
                           </button>
                         );
                       })}
@@ -963,10 +1027,11 @@ export function UploadStep({
                   )}
                 </p>
                 <button
-                  onClick={onUpgradeClick}
+                  type="button"
+                  onClick={onAuthRequired}
                   className="w-full py-2 px-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 rounded text-amber-100 text-sm font-mono transition-colors"
                 >
-                  {pickLocalized(language, 'Şimdi Yükselt', 'Upgrade now')}
+                  {pickLocalized(language, 'Hesap Oluştur', 'Create account')}
                 </button>
               </div>
             )}
@@ -1023,29 +1088,32 @@ export function UploadStep({
                 <p className="mt-1 font-mono text-[10px] text-red-200/80">
                   {pickLocalized(
                     language,
-                    'Gönderim kapatıldı. Lütfen dosya boyutunu küçültüp yeniden yükleyin.',
-                    'Submission is blocked. Reduce file size and upload again.',
+                    'Gönderim kapatıldı. Yukarıdaki sorunu düzeltip dosyayı yeniden yükleyin.',
+                    'Submission is blocked. Fix the issue above and upload the file again.',
                   )}
                 </p>
               </div>
             )}
 
             <button
+              type="button"
               onClick={isGuestAtLimit ? onGuestUpgradeRequired : (isAuthenticated ? handleAnalyze : onAuthRequired)}
               disabled={(isAuthenticated && (!canRunAnalysis || isFileProcessing)) || isGuestAtLimit}
-              className={`w-full py-4 font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 mb-3 ${(canRunAnalysis && !isGuestAtLimit) || (!isAuthenticated && !isGuestAtLimit) ? 'bg-white text-black hover:bg-slate-200' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}
+              className={`w-full py-4 rounded-none font-mono text-[13px] font-bold uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 mb-3 ${(canRunAnalysis && !isGuestAtLimit) || (!isAuthenticated && !isGuestAtLimit) ? 'bg-neon-red text-white shadow-[0_0_24px_rgba(255,0,51,0.35)] hover:bg-neon-red/90' : 'bg-white/[0.06] text-white/25 cursor-not-allowed'}`}
             >
               {isGuestAtLimit ? (
-                pickLocalized(language, 'Misafir limiti — devam için yükselt', 'Guest limit reached — upgrade to continue')
+                pickLocalized(language, 'Misafir limiti — devam için hesap oluştur', 'Guest limit reached — create an account to continue')
               ) : isAuthenticated ? (
                 isFileProcessing ? (
                   pickLocalized(language, 'Dosya işleniyor...', 'Processing file...')
                 ) : uploadValidationError ? (
-                  pickLocalized(language, 'Dosyayı Küçült ve Yeniden Yükle', 'Shrink file and re-upload')
+                  pickLocalized(language, 'Dosyayı Düzelt ve Yeniden Yükle', 'Fix the file and re-upload')
+                ) : !image ? (
+                  pickLocalized(language, 'Jüri Karşısına Çık — önce dosya yükle', 'Face the jury — upload a file first')
                 ) : (
                   <>
                     {pickLocalized(language, 'Jüri Karşısına Çık', 'Face the jury')}{' '}
-                    <span className="text-xs font-mono opacity-70">
+                    <span className="text-[10px] font-normal opacity-60">
                       ({isRevisionMode ? RAPIDO_COSTS.REVISION_SAME : RAPIDO_COSTS.SINGLE_JURY} Rapido)
                     </span>
                   </>
@@ -1186,15 +1254,13 @@ export function UploadStep({
               </div>
             )}
 
-            {!isPremiumUser && (
-              <p className="text-[10px] text-slate-500 font-mono text-center mt-3 leading-relaxed">
-                {pickLocalized(
-                  language,
-                  'Projeler yalnızca tarayıcı oturumunda tutulur; herkese açık sergilenmez.',
-                  'Projects stay in your browser session only; they are not shown publicly.',
-                )}
-              </p>
-            )}
+            <p className="text-[10px] text-slate-500 font-mono text-center mt-3 leading-relaxed">
+              {pickLocalized(
+                language,
+                'Projelerin, sen paylaşmayı seçmedikçe herkese açık sergilenmez.',
+                'Your projects are never shown publicly unless you choose to share them.',
+              )}
+            </p>
           </div>
         </div>
       </motion.div>

@@ -109,6 +109,50 @@ describe('useDropHandler', () => {
     expect(store.setImageBase64).toHaveBeenCalledWith('encoded-png');
   });
 
+  it('reports wrong file types from the dropzone instead of failing silently', () => {
+    renderHook(() => dropHandler.useDropHandler());
+    const file = new File(['gif'], 'sketch.gif', { type: 'image/gif' });
+
+    capturedConfig?.onDropRejected?.(
+      [{ file, errors: [{ code: 'file-invalid-type', message: 'File type must be image/jpeg' }] }],
+      {} as never,
+    );
+
+    expect(store.setUploadValidationError).toHaveBeenCalledWith(
+      expect.stringContaining('Desteklenmeyen dosya türü: sketch.gif'),
+    );
+    expect(store.addToast).toHaveBeenCalledWith(expect.stringContaining('JPG, PNG veya PDF'), 'error', 6500);
+    expect(store.setImage).toHaveBeenCalledWith(null);
+  });
+
+  it('reports drops with more than 8 files', () => {
+    renderHook(() => dropHandler.useDropHandler());
+    const files = Array.from({ length: 9 }, (_, index) => new File(['x'], `sheet-${index}.png`, { type: 'image/png' }));
+
+    capturedConfig?.onDropRejected?.(
+      files.map((file) => ({ file, errors: [{ code: 'too-many-files', message: 'Too many files' }] })),
+      {} as never,
+    );
+
+    expect(store.setUploadValidationError).toHaveBeenCalledWith(
+      expect.stringContaining('en fazla 8 dosya'),
+    );
+  });
+
+  it('ignores the accepted part of a drop that also had rejected files', async () => {
+    renderHook(() => dropHandler.useDropHandler());
+    const accepted = new File(['png-data'], 'board.png', { type: 'image/png' });
+    const rejected = new File(['doc'], 'notes.docx', { type: 'application/msword' });
+
+    await capturedConfig?.onDrop?.(
+      [accepted],
+      [{ file: rejected, errors: [{ code: 'file-invalid-type', message: 'File type must be image/jpeg' }] }],
+      {} as never,
+    );
+
+    expect(store.setImage).not.toHaveBeenCalled();
+  });
+
   it('rejects pdf uploads when signature is invalid', async () => {
     renderHook(() => dropHandler.useDropHandler());
     const file = new File(['not-a-real-pdf'], 'jury.pdf', { type: 'application/pdf' });

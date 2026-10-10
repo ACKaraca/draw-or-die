@@ -7,7 +7,8 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
+import { useDropzone, type FileRejection } from 'react-dropzone';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { reportClientError } from '@/lib/logger';
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
@@ -20,7 +21,48 @@ const PDF_SECURITY_SCAN_TIMEOUT_MS = 3000;
 
 interface UseDropHandlerOptions {
   isPremiumUser?: boolean;
+  /** @deprecated Upload messages follow the runtime UI language (useLanguage); kept for API compatibility. */
   preferredLanguage?: SupportedLanguage;
+}
+
+const MAX_LISTED_REJECTED_FILES = 3;
+
+function describeRejectedFiles(rejections: FileRejection[], language: SupportedLanguage, maxTotalSizeMb: number): string {
+  const codes = new Set(rejections.flatMap((entry) => entry.errors.map((error) => error.code)));
+
+  if (codes.has('too-many-files')) {
+    return pickLocalized(
+      language,
+      `Studio Desk en fazla ${STUDIO_MAX_FILES} dosya kabul eder. Daha az dosya seçip tekrar yükleyin.`,
+      `Studio Desk accepts at most ${STUDIO_MAX_FILES} files. Select fewer files and upload again.`,
+    );
+  }
+
+  const names = rejections.slice(0, MAX_LISTED_REJECTED_FILES).map((entry) => entry.file.name).join(', ');
+  const extraCount = rejections.length - MAX_LISTED_REJECTED_FILES;
+  const fileList = extraCount > 0 ? `${names} +${extraCount}` : names;
+
+  if (codes.has('file-invalid-type')) {
+    return pickLocalized(
+      language,
+      `Desteklenmeyen dosya türü: ${fileList}. Sadece JPG, PNG veya PDF yükleyebilirsiniz.`,
+      `Unsupported file type: ${fileList}. You can only upload JPG, PNG, or PDF files.`,
+    );
+  }
+
+  if (codes.has('file-too-large')) {
+    return pickLocalized(
+      language,
+      `Dosya çok büyük: ${fileList}. Studio Desk limiti toplam ${maxTotalSizeMb} MB. Dosyayı küçültüp tekrar yükleyin.`,
+      `File is too large: ${fileList}. Studio Desk limit is ${maxTotalSizeMb} MB in total. Reduce the file and upload again.`,
+    );
+  }
+
+  return pickLocalized(
+    language,
+    `Dosya kabul edilmedi: ${fileList}. JPG, PNG veya PDF seçip tekrar yükleyin.`,
+    `File was not accepted: ${fileList}. Choose a JPG, PNG, or PDF and upload again.`,
+  );
 }
 
 async function readFileAsDataUrl(file: File): Promise<string> {
@@ -79,13 +121,30 @@ async function validatePdfMagicBytes(file: File): Promise<boolean> {
   );
 }
 
-async function detectSuspiciousPdfContent(file: File): Promise<string[]> {
+type PdfRiskFlag = 'javascript' | 'auto-run' | 'form-actions';
+
+function localizePdfRiskFlag(flag: PdfRiskFlag, language: SupportedLanguage): string {
+  switch (flag) {
+    case 'javascript':
+      return 'JavaScript';
+    case 'auto-run':
+      return pickLocalized(language, 'otomatik çalıştırma / gömülü içerik', 'auto-run / embedded content');
+    case 'form-actions':
+      return pickLocalized(language, 'form aksiyonları', 'form actions');
+    default: {
+      const _exhaustive: never = flag;
+      throw new Error(`Unknown PDF risk flag: ${String(_exhaustive)}`);
+    }
+  }
+}
+
+async function detectSuspiciousPdfContent(file: File): Promise<PdfRiskFlag[]> {
   const scanBuffer = await file.slice(0, 1024 * 1024).arrayBuffer();
   const scanText = new TextDecoder('latin1').decode(scanBuffer);
-  const signatures = [
-    { regex: /\/JavaScript|\/JS/gi, message: 'JavaScript' },
-    { regex: /\/EmbeddedFile|\/OpenAction|\/Launch/gi, message: 'otomatik çalıştırma / gömülü içerik' },
-    { regex: /\/SubmitForm|\/ImportData|\/AcroForm/gi, message: 'form aksiyonları' },
+  const signatures: Array<{ regex: RegExp; message: PdfRiskFlag }> = [
+    { regex: /\/JavaScript|\/JS/gi, message: 'javascript' },
+    { regex: /\/EmbeddedFile|\/OpenAction|\/Launch/gi, message: 'auto-run' },
+    { regex: /\/SubmitForm|\/ImportData|\/AcroForm/gi, message: 'form-actions' },
   ];
   return signatures.filter((s) => s.regex.test(scanText)).map((s) => s.message);
 }
@@ -119,8 +178,8 @@ async function runOptionalPdfTask<T>(
   }
 }
 
-export function useDropHandler(options: UseDropHandlerOptions = {}) {
-  const language = options.preferredLanguage ?? 'tr';
+export function useDropHandler(_options: UseDropHandlerOptions = {}) {
+  const language = useLanguage();
   const maxTotalSizeMb = Math.round((STUDIO_TOTAL_MAX_FILE_SIZE_BYTES / (1024 * 1024)) * 10) / 10;
 
   const {
@@ -134,8 +193,9 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
     addToast,
   } = useDrawOrDieStore();
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
+  const onDrop = useCallback(async (acceptedFiles: File[], fileRejections: FileRejection[] = []) => {
+    // Rejected drops (wrong type, too many files) are reported by onDropRejected.
+    if (acceptedFiles.length === 0 || fileRejections.length > 0) return;
 
     const clearUploadState = () => {
       setImage(null);
@@ -221,7 +281,6 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
           error: error instanceof Error ? error.message : String(error),
         },
       });
-      setUploadValidationError('Ek dosyalar okunamadı. Lütfen tekrar deneyin.');
       const message = pickLocalized(language, 'Ek dosyalar okunamadı. Lütfen tekrar deneyin.', 'Additional files could not be read. Please try again.');
       setUploadValidationError(message);
       addToast(message, 'error');
@@ -255,7 +314,7 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
           PDF_TEXT_TIMEOUT_MS,
           'metin çıkarımı'
         );
-        const suspiciousFlags = await runOptionalPdfTask(
+        const suspiciousFlags = await runOptionalPdfTask<PdfRiskFlag[]>(
           detectSuspiciousPdfContent(file),
           [],
           PDF_SECURITY_SCAN_TIMEOUT_MS,
@@ -267,8 +326,13 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
         }
 
         if (suspiciousFlags.length > 0) {
+          const flagLabels = suspiciousFlags.map((flag) => localizePdfRiskFlag(flag, language)).join(', ');
           addToast(
-            `PDF içinde riskli içerik göstergeleri tespit edildi (${suspiciousFlags.join(', ')}). Dikkatle devam edin.`,
+            pickLocalized(
+              language,
+              `PDF içinde riskli içerik göstergeleri tespit edildi (${flagLabels}). Dikkatle devam edin.`,
+              `Risky content indicators were found in the PDF (${flagLabels}). Proceed with caution.`,
+            ),
             'info',
             8000
           );
@@ -285,8 +349,21 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
             error: error instanceof Error ? error.message : String(error),
           },
         });
-        setUploadValidationError('PDF işlenemedi. Lütfen daha küçük ya da farklı bir dosya deneyin.');
-        addToast('PDF işlenemedi. Lütfen farklı bir dosya deneyin.', 'error');
+        setUploadValidationError(
+          pickLocalized(
+            language,
+            'PDF işlenemedi. Lütfen daha küçük ya da farklı bir dosya deneyin.',
+            'The PDF could not be processed. Please try a smaller or different file.',
+          ),
+        );
+        addToast(
+          pickLocalized(
+            language,
+            'PDF işlenemedi. Lütfen farklı bir dosya deneyin.',
+            'The PDF could not be processed. Please try a different file.',
+          ),
+          'error',
+        );
         clearUploadState();
       }
     } else {
@@ -306,8 +383,13 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
             error: error instanceof Error ? error.message : String(error),
           },
         });
-        setUploadValidationError('Görsel işlenemedi. Lütfen dosyayı tekrar deneyin.');
-        addToast('Görsel işlenemedi. Lütfen dosyayı tekrar deneyin.', 'error');
+        const message = pickLocalized(
+          language,
+          'Görsel işlenemedi. Lütfen dosyayı tekrar deneyin.',
+          'The image could not be processed. Please try the file again.',
+        );
+        setUploadValidationError(message);
+        addToast(message, 'error');
         clearUploadState();
       }
     }
@@ -324,8 +406,33 @@ export function useDropHandler(options: UseDropHandlerOptions = {}) {
     setUploadValidationError,
   ]);
 
+  const onDropRejected = useCallback((fileRejections: FileRejection[]) => {
+    if (fileRejections.length === 0) return;
+    const message = describeRejectedFiles(fileRejections, language, maxTotalSizeMb);
+    setUploadValidationError(message);
+    addToast(message, 'error', 6500);
+    setImage(null);
+    setImageBase64(null);
+    setAdditionalUploads([]);
+    setMimeType(null);
+    setPreviewUrl(null);
+    setPdfText(null);
+  }, [
+    addToast,
+    language,
+    maxTotalSizeMb,
+    setImage,
+    setImageBase64,
+    setAdditionalUploads,
+    setMimeType,
+    setPreviewUrl,
+    setPdfText,
+    setUploadValidationError,
+  ]);
+
   const dropzone = useDropzone({
     onDrop,
+    onDropRejected,
     accept: {
       'image/jpeg': ['.jpg', '.jpeg'],
       'image/png': ['.png'],

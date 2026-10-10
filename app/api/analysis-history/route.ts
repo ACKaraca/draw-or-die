@@ -14,6 +14,7 @@ import {
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { getAppwriteErrorDetails } from '@/lib/appwrite/error-utils';
 import { logServerError } from '@/lib/logger';
+import { HISTORY_RAPIDO_COSTS } from '@/lib/pricing';
 import { deductRapidoCents } from '@/lib/rapido-balance';
 import { normalizeCritiqueText } from '@/lib/critique';
 
@@ -21,7 +22,7 @@ const MAX_PAGE_SIZE = 30;
 const MAX_SOURCE_UPLOAD_BYTES = 35 * 1024 * 1024;
 const ALLOWED_SOURCE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
 const RAPIDO_PRECISION_SCALE = 100;
-const ANALYSIS_PRESERVE_COST_CENTS = 150;
+const ANALYSIS_PRESERVE_COST_CENTS = Math.round(HISTORY_RAPIDO_COSTS.ANALYSIS_PRESERVE * 100);
 const DELETE_RETENTION_DAYS = 30;
 
 type AnalysisHistoryRow = Models.Row & {

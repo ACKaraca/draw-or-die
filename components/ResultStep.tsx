@@ -1,32 +1,82 @@
-import { useLanguage } from "@/components/RuntimeTextLocalizer";
-import { pickLocalized } from "@/lib/i18n";
-import { motion } from 'framer-motion';
-import { Crown, AlertTriangle, RefreshCw, TrendingUp, Lightbulb, Route } from 'lucide-react';
-import Markdown from 'react-markdown';
-import html2canvas from 'html2canvas';
 import { useRef, useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import {
+    Crown,
+    AlertTriangle,
+    RefreshCw,
+    TrendingUp,
+    Lightbulb,
+    Route,
+    Download,
+    Loader2,
+    Sparkles,
+} from 'lucide-react';
+import Markdown from 'react-markdown';
+
 import { ChatDefense } from '@/components/ChatDefense';
-import { SimplePdfPreview } from '@/components/SimplePdfPreview';
+import { CommunityShareButton, type CommunityShareOptions } from '@/components/CommunityShareButton';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
-import { FormData, DefenseMessage, GalleryPlacementType } from '@/types';
-import { RAPIDO_COSTS } from '@/lib/pricing';
-import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
+import { NewProjectButton } from '@/components/NewProjectButton';
+import { PreserveAnalysisButton } from '@/components/PreserveAnalysisButton';
+import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { SimplePdfPreview } from '@/components/SimplePdfPreview';
+import { APPENDED_SECTION_PREFIX } from '@/hooks/useAnalysis';
 import { isDesignInsightOperation, type DesignInsightOperation } from '@/lib/design-insights';
+import { pickLocalized } from '@/lib/i18n';
+import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
+import { RAPIDO_COSTS, TIER_DEFAULTS } from '@/lib/pricing';
+import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
+
+import type { FormData, DefenseMessage, GalleryPlacementType } from '@/types';
+
+type PreviousProjectSnapshot = {
+    imageBase64: string;
+    mimeType: string;
+    critique?: string;
+};
+
+type ReportSection = {
+    heading: string;
+    body: string;
+};
+
+const APPENDED_SECTION_MARKER = `\n---\n\n${APPENDED_SECTION_PREFIX}`;
+
+/** Supplementary outputs (concept text, skill roadmap) are appended below the report by useAnalysis. */
+function splitReportSections(critique: string): { main: string; sections: ReportSection[] } {
+    const [main = '', ...rest] = critique.replace(/\r\n/g, '\n').split(APPENDED_SECTION_MARKER);
+    const sections = rest.map((chunk) => {
+        const newlineIndex = chunk.indexOf('\n');
+        return {
+            heading: (newlineIndex === -1 ? chunk : chunk.slice(0, newlineIndex)).trim(),
+            body: newlineIndex === -1 ? '' : chunk.slice(newlineIndex + 1).trim(),
+        };
+    });
+    return { main: main.trim(), sections };
+}
+
+/** previousProject stores raw base64 without a data: prefix. */
+function toImageSource(value: string, mimeType: string | undefined): string {
+    if (/^(data:|blob:|https?:)/i.test(value)) return value;
+    const safeMime = mimeType && mimeType.startsWith('image/') ? mimeType : 'image/jpeg';
+    return `data:${safeMime};base64,${value}`;
+}
 
 interface ResultStepProps {
     previewUrl: string | null;
     mimeType: string | null;
     handleNewProject: () => void;
     handleRevision: () => void;
-    previousProject: any;
+    previousProject: PreviousProjectSnapshot | null;
     critique: string | null;
     lastProgression: number | null;
     formData: FormData;
     isPremiumUser: boolean;
     galleryConsent: boolean | null;
     galleryPlacement: GalleryPlacementType;
-    handleGalleryConsent: (val: boolean) => void;
-    handlePremium: () => void;
+    handleGalleryConsent: (val: boolean) => Promise<boolean> | void;
+    handlePremium: () => Promise<void> | void;
     isDefending: boolean;
     setIsDefending: (val: boolean) => void;
     defenseTurnCount: number;
@@ -42,8 +92,10 @@ interface ResultStepProps {
     setShowGuestUpgradePrompt: (val: boolean) => void;
     setGuestDrawingCount: (val: number) => void;
     onUpgradeClick: () => void;
-    handlePreserveAnalysis?: () => void;
-    handleShareToCommunity?: () => void;
+    /** Opens the sign-up / sign-in modal (guests are routed here, not to the Premium shop). */
+    onAuthRequired?: () => void;
+    handlePreserveAnalysis?: () => Promise<boolean> | void;
+    handleShareToCommunity?: (options: CommunityShareOptions) => Promise<boolean> | void;
     handleAutoConcept?: () => void;
     latestAnalysisKind: string | null;
     handleDesignInsight: (operation: DesignInsightOperation) => void;
@@ -56,6 +108,7 @@ export function ResultStep({
     defenseMessages, isDefenseLoading, defenseInput, setDefenseInput, handleDefenseSubmit,
     // P0.3
     isAnonymous, guestDrawingCount, showGuestUpgradePrompt, setShowGuestUpgradePrompt, setGuestDrawingCount, onUpgradeClick,
+    onAuthRequired,
     handlePreserveAnalysis,
     handleShareToCommunity,
     handleAutoConcept,
@@ -63,13 +116,27 @@ export function ResultStep({
     handleDesignInsight,
 }: ResultStepProps) {
     const language = useLanguage();
+    const addToast = useDrawOrDieStore((state) => state.addToast);
     const exportRef = useRef<HTMLDivElement>(null);
     const [showCompare, setShowCompare] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
+    const [isRescueStarting, setIsRescueStarting] = useState(false);
+    const [pendingGalleryConsent, setPendingGalleryConsent] = useState<boolean | null>(null);
     const normalizedAnalysisKind = (latestAnalysisKind ?? 'SINGLE_JURY').toUpperCase();
     const isFocusedReport = isDesignInsightOperation(normalizedAnalysisKind);
     const reportTitle = isFocusedReport
         ? analysisKindLabel(normalizedAnalysisKind, language)
         : pickLocalized(language, 'Jüri Raporu', 'Jury Report');
+    const { main: mainCritique, sections: reportSections } = splitReportSections(critique ?? '');
+    const hasReportSection = (kind: string) =>
+        reportSections.some(
+            (section) => section.heading === analysisKindLabel(kind, 'tr') || section.heading === analysisKindLabel(kind, 'en'),
+        );
+    const hasSkillRoadmap = normalizedAnalysisKind === 'SKILL_ROADMAP' || hasReportSection('SKILL_ROADMAP');
+    const hasConceptText = hasReportSection('AUTO_CONCEPT');
+    // previousProject equals the current board after a fresh jury run; only a revision has a real "before".
+    const canCompare = Boolean(previousProject?.imageBase64) && normalizedAnalysisKind === 'REVISION_SAME';
+    const isComparing = showCompare && canCompare;
 
     // P0.3: Track guest completion on first result view
     const isGuestFirstCompletion = !isFocusedReport && isAnonymous && !isPremiumUser && guestDrawingCount === 0;
@@ -83,21 +150,46 @@ export function ResultStep({
     }, [isGuestFirstCompletion]);
 
     const handleExport = async () => {
-        if (exportRef.current) {
-            try {
-                const canvas = await html2canvas(exportRef.current, { backgroundColor: '#0A0F1A' });
-                const dataUrl = canvas.toDataURL('image/png');
-                if (!dataUrl.startsWith('data:image/')) {
-                    throw new Error('Security check failed: Invalid data URL');
-                }
-                const link = document.createElement('a');
-                link.download = `draw-or-die-${normalizedAnalysisKind.toLowerCase()}.png`;
-                link.href = dataUrl;
-                link.click();
-            } catch (err) {
-                console.error("Export failed", err);
-                alert(pickLocalized(language, 'Dışa aktarma başarısız oldu.', 'Export failed.'));
+        if (!exportRef.current || isExporting) return;
+        setIsExporting(true);
+        try {
+            const { default: html2canvas } = await import('html2canvas');
+            const canvas = await html2canvas(exportRef.current, { backgroundColor: '#0A0F1A' });
+            const dataUrl = canvas.toDataURL('image/png');
+            if (!dataUrl.startsWith('data:image/')) {
+                throw new Error('Security check failed: Invalid data URL');
             }
+            const link = document.createElement('a');
+            link.download = `draw-or-die-${normalizedAnalysisKind.toLowerCase()}.png`;
+            link.href = dataUrl;
+            link.click();
+        } catch {
+            addToast(
+                pickLocalized(language, 'Dışa aktarma başarısız oldu. Lütfen tekrar dene.', 'Export failed. Please try again.'),
+                'error',
+            );
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const startPremiumRescue = async () => {
+        if (isRescueStarting) return;
+        setIsRescueStarting(true);
+        try {
+            await handlePremium();
+        } finally {
+            setIsRescueStarting(false);
+        }
+    };
+
+    const submitGalleryConsent = async (consent: boolean) => {
+        if (pendingGalleryConsent !== null) return;
+        setPendingGalleryConsent(consent);
+        try {
+            await handleGalleryConsent(consent);
+        } finally {
+            setPendingGalleryConsent(null);
         }
     };
 
@@ -108,91 +200,67 @@ export function ResultStep({
             animate={{ opacity: 1, y: 0 }}
             className="w-full max-w-6xl grid grid-cols-1 xl:grid-cols-12 gap-5 md:gap-8 relative"
         >
-            {/* P0.3: Guest upgrade prompt overlay */}
-            {showGuestUpgradePrompt && (
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-                    onClick={() => setShowGuestUpgradePrompt(false)}
-                >
-                    <div
-                        className="bg-gradient-to-b from-slate-900/95 to-slate-950/95 border border-amber-500/30 rounded-2xl shadow-2xl max-w-sm p-8 text-center"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="mb-4 text-4xl">🎨</div>
-                        <h2 className="font-display text-2xl font-bold mb-3 text-white">
-                            {pickLocalized(language, 'Harika iş!', 'Great work!')}
-                        </h2>
-                        <p className="text-slate-300 mb-6 text-sm leading-relaxed">
+            {/* P0.3: Guest sign-up prompt after the first completed drawing */}
+            <ConfirmDialog
+                isOpen={showGuestUpgradePrompt}
+                title={pickLocalized(language, 'Harika iş!', 'Great work!')}
+                description={pickLocalized(
+                    language,
+                    'Jüri raporun hazır. Ücretsiz hesap oluşturarak çalışmalarını saklayabilir ve daha fazla pafta gönderebilirsin.',
+                    'Your jury report is ready. Create a free account to keep your work and submit more boards.',
+                )}
+                icon={<Sparkles size={18} strokeWidth={1.5} />}
+                confirmLabel={pickLocalized(language, 'Hesap Oluştur', 'Create account')}
+                cancelLabel={pickLocalized(language, 'Belki Sonra', 'Maybe later')}
+                onConfirm={() => {
+                    setShowGuestUpgradePrompt(false);
+                    (onAuthRequired ?? onUpgradeClick)();
+                }}
+                onCancel={() => setShowGuestUpgradePrompt(false)}
+            >
+                <div className="rounded-lg border border-white/[0.08] bg-bg-2 p-4">
+                    <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">
+                        {pickLocalized(language, 'Hesap avantajları', 'Account benefits')}
+                    </p>
+                    <ul className="space-y-1 font-sans text-sm text-text">
+                        <li>
+                            ✓{' '}
                             {pickLocalized(
                                 language,
-                                'Çizimin tamamlandı ve jüriye hazır. Kayıt olarak çalışmalarını saklayıp daha fazla gönderi yapabilirsin.',
-                                'Your design is complete and ready for the jury. Create an account to save your work and submit more designs.',
+                                `${TIER_DEFAULTS.REGISTERED} Rapido başlangıç bakiyesi`,
+                                `${TIER_DEFAULTS.REGISTERED} Rapido starting balance`,
                             )}
-                        </p>
-                        
-                        <div className="space-y-2 mb-6 text-left bg-slate-800/50 rounded-lg p-4">
-                            <p className="text-xs text-slate-400 font-mono uppercase tracking-widest mb-2">
-                                {pickLocalized(language, 'Premium avantajları', 'Premium benefits')}
-                            </p>
-                            <ul className="text-sm text-slate-300 space-y-1">
-                                <li>✓ {pickLocalized(language, 'Sınırsız tasarım kaydı', 'Save unlimited designs')}</li>
-                                <li>✓ {pickLocalized(language, 'Birden fazla jüri eleştirisi', 'Multiple jury critiques')}</li>
-                                <li>✓ {pickLocalized(language, 'Jüri savunma sohbeti', 'Jury defense chat')}</li>
-                                <li>✓ {pickLocalized(language, 'AI mentor desteği', 'AI mentor assistance')}</li>
-                                <li>✓ {pickLocalized(language, 'Haftalık kurtarma tokenları', 'Weekly rescue tokens')}</li>
-                            </ul>
-                        </div>
-
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowGuestUpgradePrompt(false)}
-                                className="flex-1 py-3 px-4 bg-white/10 hover:bg-white/20 border border-white/10 rounded-lg text-white font-mono text-sm transition-colors"
-                                aria-label={pickLocalized(language, 'Kapat ve gezinmeye devam et', 'Dismiss and continue browsing')}
-                            >
-                                {pickLocalized(language, 'Belki sonra', 'Maybe later')}
-                            </button>
-                            <button
-                                onClick={() => {
-                                    setShowGuestUpgradePrompt(false);
-                                    onUpgradeClick();
-                                }}
-                                className="flex-1 py-3 px-4 bg-amber-500 hover:bg-amber-600 rounded-lg text-black font-bold transition-colors"
-                                aria-label={pickLocalized(language, 'Hesap oluştur', 'Create account to save designs')}
-                            >
-                                {pickLocalized(language, 'Hesap Oluştur', 'Create account')}
-                            </button>
-                        </div>
-                    </div>
-                </motion.div>
-            )}
+                        </li>
+                        <li>✓ {pickLocalized(language, 'Daha fazla jüri gönderimi', 'More jury submissions')}</li>
+                        <li>✓ {pickLocalized(language, 'Orta uzunlukta jüri raporları', 'Medium-length jury reports')}</li>
+                    </ul>
+                </div>
+            </ConfirmDialog>
 
             {/* Left: Image */}
             <div className="xl:col-span-5 flex flex-col gap-4">
-                <div className="relative aspect-[4/5] sm:aspect-[3/4] w-full bg-black/50 border border-white/10 rounded-xl overflow-hidden group">
-                    {showCompare && previousProject ? (
-                        <div className="absolute inset-0 flex relative border-4 border-neon-red/30">
-                            <div className="w-1/2 h-full border-r border-neon-red relative">
+                <div className="relative aspect-[4/5] sm:aspect-[3/4] w-full bg-black/50 border border-white/10 rounded-xl overflow-hidden">
+                    {isComparing && previousProject ? (
+                        <div className="absolute inset-0 flex border-4 border-neon-red/30">
+                            <div className="w-1/2 h-full border-r border-neon-red relative overflow-hidden">
                                 {previousProject.mimeType === 'application/pdf' ? (
-                                    <div className="w-full h-full flex items-center justify-center text-slate-500 font-mono text-xs">{pickLocalized(language, 'PDF önizleme karşılaştırması desteklenmiyor', 'PDF preview comparison is not supported')}</div>
+                                    <div className="w-full h-full flex items-center justify-center p-4 text-center text-slate-500 font-mono text-xs">{pickLocalized(language, 'PDF önizleme karşılaştırması desteklenmiyor', 'PDF preview comparison is not supported')}</div>
                                 ) : (
-                                    <img src={previousProject.imageBase64} alt={pickLocalized(language, 'Önce', 'Before')} className="absolute top-0 left-0 w-[200%] max-w-none h-full object-contain object-left pointer-events-none" />
+                                    <img src={toImageSource(previousProject.imageBase64, previousProject.mimeType)} alt={pickLocalized(language, 'Önce', 'Before')} className="absolute top-0 left-0 w-[200%] max-w-none h-full object-contain object-left pointer-events-none" />
                                 )}
-                                <span className="absolute top-2 left-2 bg-black/80 text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">{pickLocalized(language, 'Önce', 'Before')}</span>
+                                <span className="absolute top-2 left-2 bg-black/80 text-white px-2 py-1 font-mono text-[10px] font-bold tracking-widest uppercase rounded">{pickLocalized(language, 'Önce', 'Before')}</span>
                             </div>
                             <div className="w-1/2 h-full relative overflow-hidden">
-                                {mimeType === 'application/pdf' ? (
+                                {previewUrl && (mimeType === 'application/pdf' ? (
                                     <SimplePdfPreview
-                                        src={previewUrl!}
+                                        src={previewUrl}
                                         className="h-full w-full"
                                         showControls={false}
                                     />
                                 ) : (
-                                    <img src={previewUrl!} alt={pickLocalized(language, 'Sonra', 'After')} className="absolute top-0 right-0 w-[200%] max-w-none h-full object-contain object-right pointer-events-none" />
-                                )}
-                                <span className="absolute top-2 right-2 bg-neon-red text-white px-2 py-1 text-[10px] font-bold tracking-widest uppercase rounded">{pickLocalized(language, 'Sonra', 'After')}</span>
+                                    <img src={previewUrl} alt={pickLocalized(language, 'Sonra', 'After')} className="absolute top-0 right-0 w-[200%] max-w-none h-full object-contain object-right pointer-events-none" />
+                                ))}
+                                <span className="absolute top-2 right-2 bg-neon-red text-white px-2 py-1 font-mono text-[10px] font-bold tracking-widest uppercase rounded">{pickLocalized(language, 'Sonra', 'After')}</span>
                             </div>
                         </div>
                     ) : (
@@ -210,68 +278,68 @@ export function ResultStep({
                         )
                     )}
 
-                    {previousProject && (
-                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {canCompare && (
+                        <div className="absolute bottom-4 left-1/2 -translate-x-1/2">
                             <button
-                                onClick={() => setShowCompare(!showCompare)}
-                                className="bg-black/80 text-white px-4 py-2 rounded-full font-mono text-xs tracking-wider border border-white/20 hover:border-neon-red transition-colors"
+                                type="button"
+                                onClick={() => setShowCompare((prev) => !prev)}
+                                aria-pressed={isComparing}
+                                className="bg-black/80 text-white px-4 py-2 rounded-full font-mono text-xs tracking-wider border border-white/20 hover:border-neon-red focus-visible:border-neon-red focus-visible:outline-none transition-colors"
                             >
-                                {showCompare
-                                  ? pickLocalized(language, 'Kapat', 'Close')
+                                {isComparing
+                                  ? pickLocalized(language, 'Karşılaştırmayı Kapat', 'Close comparison')
                                   : pickLocalized(language, 'Evrim Görünümü (Önce/Sonra)', 'Evolution view (before/after)')}
                             </button>
                         </div>
                     )}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                    <button
-                        onClick={handlePreserveAnalysis}
-                        disabled={!handlePreserveAnalysis}
-                        className="min-h-12 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
-                    >
-                        {pickLocalized(language, 'Analizi Koru', 'Preserve analysis')} (1.5 Rapido)
-                    </button>
+                    <PreserveAnalysisButton
+                        onPreserve={handlePreserveAnalysis}
+                        className="min-h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-emerald-100 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
                     {!isFocusedReport && (
-                        <button
-                            onClick={handleShareToCommunity}
-                            disabled={!handleShareToCommunity}
-                            className="min-h-12 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:opacity-50"
-                        >
-                            {pickLocalized(language, "Community'de Paylaş", 'Share on Community')}
-                        </button>
+                        <CommunityShareButton
+                            onShare={handleShareToCommunity}
+                            className="min-h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
                     )}
-                    {!isFocusedReport && handleAutoConcept && (
+                    {!isFocusedReport && handleAutoConcept && !hasConceptText && (
                         <button
+                            type="button"
                             onClick={handleAutoConcept}
-                            className="min-h-12 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-sky-100 transition-colors hover:bg-sky-500/20"
-                            title={pickLocalized(language, 'Havalı felsefi konsept metni uydur', 'Spin up a philosophical concept text')}
+                            className="min-h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-sky-100 transition-colors hover:bg-sky-500/20"
+                            title={pickLocalized(language, 'Projen için jüriye hazır bir konsept metni üret; raporun korunur', 'Generate a jury-ready concept text for your project; your report is kept')}
                         >
-                            <Lightbulb size={16} /> {pickLocalized(language, 'Konsept Metni Yaz', 'Write concept text')} ({RAPIDO_COSTS.AUTO_CONCEPT} Rapido)
+                            <Lightbulb size={16} strokeWidth={1.5} aria-hidden="true" />
+                            {pickLocalized(language, 'Konsept Metni Yaz', 'Write concept text')}{' '}
+                            <span className="font-normal opacity-60">({RAPIDO_COSTS.AUTO_CONCEPT} Rapido)</span>
                         </button>
                     )}
-                    <button
-                        onClick={handleNewProject}
-                        className="min-h-12 rounded-lg border border-white/20 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-slate-200 transition-colors hover:bg-white/5"
+                    <NewProjectButton
+                        onConfirm={handleNewProject}
+                        className="min-h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-white/20 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-slate-200 transition-colors hover:bg-white/5"
                     >
-                        <RefreshCw size={16} /> {pickLocalized(language, 'Yeni Proje', 'New Project')}
-                    </button>
-                    {normalizedAnalysisKind !== 'SKILL_ROADMAP' && (
+                        <RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" /> {pickLocalized(language, 'Yeni Proje', 'New Project')}
+                    </NewProjectButton>
+                    {!hasSkillRoadmap && (
                         <button
                             type="button"
                             onClick={() => handleDesignInsight('SKILL_ROADMAP')}
-                            className="min-h-12 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20"
+                            className="min-h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-cyan-100 transition-colors hover:bg-cyan-500/20"
                         >
-                            <Route size={16} strokeWidth={1.5} />
+                            <Route size={16} strokeWidth={1.5} aria-hidden="true" />
                             {pickLocalized(language, 'Beceri Rotamı Oluştur', 'Build My Skill Roadmap')}{' '}
-                            <span className="text-neon-red">({RAPIDO_COSTS.SKILL_ROADMAP} Rapido)</span>
+                            <span className="font-normal text-neon-red">({RAPIDO_COSTS.SKILL_ROADMAP} Rapido)</span>
                         </button>
                     )}
                     {!isFocusedReport && previousProject && (
                         <button
+                            type="button"
                             onClick={handleRevision}
-                            className="min-h-12 rounded-lg border border-neon-red/30 bg-neon-red/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-neon-red transition-colors hover:bg-neon-red/20"
+                            className="min-h-12 inline-flex items-center justify-center gap-2 rounded-lg border border-neon-red/30 bg-neon-red/10 px-3 py-3 text-center font-mono text-[11px] font-bold uppercase tracking-wider text-neon-red transition-colors hover:bg-neon-red/20"
                         >
-                            <TrendingUp size={16} /> {pickLocalized(language, 'Revizyon Yükle', 'Upload Revision')}
+                            <TrendingUp size={16} strokeWidth={1.5} aria-hidden="true" /> {pickLocalized(language, 'Revizyon Yükle', 'Upload Revision')}
                         </button>
                     )}
                 </div>
@@ -295,11 +363,19 @@ export function ResultStep({
                             </span>
                         )}
                         <button
-                            onClick={handleExport}
-                            className="ml-2 hover:bg-white/10 p-2 rounded transition-colors text-slate-400 hover:text-white"
-                            title={pickLocalized(language, "Roast'u İndir", 'Download roast')}
+                            type="button"
+                            onClick={() => void handleExport()}
+                            disabled={isExporting}
+                            aria-busy={isExporting}
+                            className="ml-2 hover:bg-white/10 p-2 rounded transition-colors text-slate-400 hover:text-white disabled:cursor-wait disabled:opacity-60"
+                            title={pickLocalized(language, 'Raporu PNG olarak indir', 'Download report as PNG')}
+                            aria-label={pickLocalized(language, 'Raporu PNG olarak indir', 'Download report as PNG')}
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            {isExporting ? (
+                                <Loader2 size={16} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+                            ) : (
+                                <Download size={16} strokeWidth={1.5} aria-hidden="true" />
+                            )}
                         </button>
                     </div>
 
@@ -314,15 +390,31 @@ export function ResultStep({
                     )}
 
                     <div className="prose prose-invert prose-slate max-w-none font-sans text-slate-300 overflow-y-auto max-h-[42vh] sm:max-h-[500px] pr-2 sm:pr-4 custom-scrollbar">
-                        <Markdown>{critique || ''}</Markdown>
+                        <Markdown>{mainCritique}</Markdown>
                     </div>
 
-                    {/* Gallery Consent */}
-                    {isPremiumUser && galleryPlacement !== 'NONE' && (
+                    {reportSections.map((section, index) => (
+                        <section
+                            key={`${section.heading}-${index}`}
+                            className="mt-6 rounded-xl border border-white/[0.08] bg-bg-2 p-5"
+                            aria-label={section.heading}
+                        >
+                            <h3 className="section-divider">
+                                <span aria-hidden="true">◈</span>
+                                {section.heading}
+                            </h3>
+                            <div className="prose prose-invert prose-slate max-w-none font-sans text-slate-300 overflow-y-auto max-h-[42vh] pr-2 custom-scrollbar">
+                                <Markdown>{section.body}</Markdown>
+                            </div>
+                        </section>
+                    ))}
+
+                    {/* Gallery Consent — explicit opt-in for every tier; nothing is published without it */}
+                    {galleryPlacement !== 'NONE' && (
                         <div className={`mt-8 border rounded-xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${galleryPlacement === 'HALL_OF_FAME' ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-neon-red/10 border-neon-red/30'}`}>
                             <div>
                                 <h3 className={`font-display font-bold text-xl flex items-center gap-2 mb-1 ${galleryPlacement === 'HALL_OF_FAME' ? 'text-emerald-500' : 'text-neon-red'}`}>
-                                    {galleryPlacement === 'HALL_OF_FAME' ? <Crown size={20} /> : <AlertTriangle size={20} />}
+                                    {galleryPlacement === 'HALL_OF_FAME' ? <Crown size={20} strokeWidth={1.5} /> : <AlertTriangle size={20} strokeWidth={1.5} />}
                                     {galleryPlacement === 'HALL_OF_FAME'
                                       ? pickLocalized(language, 'Hall of Fame Adayı!', 'Hall of Fame nominee!')
                                       : pickLocalized(language, 'Wall of Death Adayı!', 'Wall of Death nominee!')}
@@ -331,24 +423,43 @@ export function ResultStep({
                                     {galleryPlacement === 'HALL_OF_FAME'
                                       ? pickLocalized(
                                           language,
-                                          'Jüri bu projeyi başarısından dolayı Hall of Fame galerisine eklemeyi önerdi.',
-                                          'The jury recommends adding this project to the Hall of Fame gallery.',
+                                          'Jüri bu projeyi başarısından dolayı Hall of Fame galerisine önerdi.',
+                                          'The jury nominated this project for the Hall of Fame gallery.',
                                         )
                                       : pickLocalized(
                                           language,
-                                          'Jüri bu projeyi ibret olması için Wall of Death galerisine eklemeyi önerdi.',
-                                          'The jury recommends adding this project to the Wall of Death gallery.',
-                                        )}
+                                          'Jüri bu projeyi ibret olması için Wall of Death galerisine önerdi.',
+                                          'The jury nominated this project for the Wall of Death gallery.',
+                                        )}{' '}
+                                    {pickLocalized(
+                                        language,
+                                        'İzin verirsen paftan ve jüri yorumunun bir bölümü herkese açık galeride sergilenir; vermezsen gizli kalır.',
+                                        'If you allow it, your board and an excerpt of the jury comment are shown in the public gallery; otherwise it stays private.',
+                                    )}
                                 </p>
                             </div>
 
                             <div className="flex-shrink-0">
                                 {galleryConsent === null ? (
                                     <div className="flex gap-3">
-                                        <button onClick={() => handleGalleryConsent(true)} className="px-4 py-2 bg-white text-black font-bold text-sm rounded hover:bg-slate-200 transition-colors">
+                                        <button
+                                            type="button"
+                                            onClick={() => void submitGalleryConsent(true)}
+                                            disabled={pendingGalleryConsent !== null}
+                                            aria-busy={pendingGalleryConsent === true}
+                                            className="inline-flex items-center gap-2 rounded-lg border border-white/[0.13] bg-white/5 px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-wider text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
+                                            {pendingGalleryConsent === true ? (
+                                                <Loader2 size={14} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+                                            ) : null}
                                             {pickLocalized(language, 'İzin Ver', 'Allow')}
                                         </button>
-                                        <button onClick={() => handleGalleryConsent(false)} className="px-4 py-2 border border-white/20 text-white font-bold text-sm rounded hover:bg-white/10 transition-colors">
+                                        <button
+                                            type="button"
+                                            onClick={() => void submitGalleryConsent(false)}
+                                            disabled={pendingGalleryConsent !== null}
+                                            className="rounded-lg px-4 py-2 font-mono text-[11px] font-bold uppercase tracking-wider text-text-muted transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                                        >
                                             {pickLocalized(language, 'Gizli Tut', 'Keep private')}
                                         </button>
                                     </div>
@@ -385,7 +496,7 @@ export function ResultStep({
                 {!isFocusedReport && <div className="mt-6 rounded-xl border border-neon-red/30 bg-neon-red/10 p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                         <h3 className="font-display font-bold text-xl text-white flex items-center gap-2 mb-1">
-                            <Crown className="text-yellow-500" size={20} /> {pickLocalized(language, 'Projeyi Kurtar (Premium)', 'Rescue the project (Premium)')}
+                            <Crown className="text-yellow-500" size={20} strokeWidth={1.5} /> {pickLocalized(language, 'Projeyi Kurtar (Premium)', 'Rescue the project (Premium)')}
                         </h3>
                         <p className="text-sm text-slate-400">
                             {pickLocalized(
@@ -396,10 +507,23 @@ export function ResultStep({
                         </p>
                     </div>
                     <button
-                        onClick={handlePremium}
-                        className="min-h-12 px-6 py-3 bg-neon-red text-white font-mono font-bold uppercase tracking-wider text-xs transition-colors hover:bg-neon-red/80"
+                        type="button"
+                        onClick={() => void startPremiumRescue()}
+                        disabled={isRescueStarting}
+                        aria-busy={isRescueStarting}
+                        className="min-h-12 inline-flex items-center justify-center gap-2 rounded-none px-6 py-3 bg-neon-red text-white font-mono font-bold uppercase tracking-wider text-xs shadow-[0_0_24px_rgba(255,0,51,0.35)] transition-colors hover:bg-neon-red/90 disabled:cursor-wait disabled:opacity-70 disabled:shadow-none"
                     >
-                        {pickLocalized(language, 'Kilidi Aç', 'Unlock')} ({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)
+                        {isRescueStarting ? (
+                            <>
+                                <Loader2 size={14} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+                                {pickLocalized(language, 'Paftalar hazırlanıyor…', 'Preparing sheets…')}
+                            </>
+                        ) : (
+                            <>
+                                {pickLocalized(language, 'Kilidi Aç', 'Unlock')}{' '}
+                                <span className="font-normal opacity-60">({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)</span>
+                            </>
+                        )}
                     </button>
                 </div>}
             </div>

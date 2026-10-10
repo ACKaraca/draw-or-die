@@ -122,8 +122,32 @@ describe('result views', () => {
     expect(props.onUpgradeClick).not.toHaveBeenCalled();
   });
 
+  it('routes the guest "Create account" CTA to the auth modal, not the Premium shop', () => {
+    const onAuthRequired = jest.fn();
+    const props = baseResultProps({ showGuestUpgradePrompt: true, onAuthRequired });
+
+    render(<ResultStep {...props} />);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /hesap oluştur/i }));
+
+    expect(onAuthRequired).toHaveBeenCalledTimes(1);
+    expect(props.onUpgradeClick).not.toHaveBeenCalled();
+    expect(props.setShowGuestUpgradePrompt).toHaveBeenCalledWith(false);
+  });
+
+  it('closes the guest prompt with Escape', () => {
+    const props = baseResultProps({ showGuestUpgradePrompt: true });
+
+    render(<ResultStep {...props} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(props.setShowGuestUpgradePrompt).toHaveBeenCalledWith(false);
+  });
+
   it('renders gallery consent actions and opens the revision comparison toggle', async () => {
-    const handleGalleryConsent = jest.fn();
+    const handleGalleryConsent = jest.fn().mockResolvedValue(true);
 
     render(
       <ResultStep
@@ -134,26 +158,60 @@ describe('result views', () => {
           isPremiumUser: true,
           galleryPlacement: 'HALL_OF_FAME',
           handleGalleryConsent,
+          latestAnalysisKind: 'REVISION_SAME',
           previousProject: {
             mimeType: 'image/png',
-            imageBase64: 'data:image/png;base64,abc',
+            imageBase64: 'abc',
+            critique: 'Earlier critique',
           },
         })}
       />,
     );
 
     fireEvent.click(screen.getByText('İzin Ver'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /gizli tut/i })).not.toBeDisabled());
     fireEvent.click(screen.getByText('Gizli Tut'));
     expect(handleGalleryConsent).toHaveBeenNthCalledWith(1, true);
-    expect(handleGalleryConsent).toHaveBeenNthCalledWith(2, false);
+    await waitFor(() => expect(handleGalleryConsent).toHaveBeenNthCalledWith(2, false));
 
     fireEvent.click(screen.getByRole('button', { name: /evrim görünümü/i }));
-    expect(screen.getByAltText('Önce')).toBeTruthy();
+    expect(screen.getByAltText('Önce')).toHaveAttribute('src', 'data:image/png;base64,abc');
     expect(screen.getByAltText('Sonra')).toBeTruthy();
   });
 
-  it('calls preserve handler from result step action', () => {
-    const handlePreserveAnalysis = jest.fn();
+  it('shows the gallery consent card to free users too (explicit opt-in for every tier)', () => {
+    render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+          isPremiumUser: false,
+          galleryPlacement: 'WALL_OF_DEATH',
+        })}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'İzin Ver' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /gizli tut/i })).toBeInTheDocument();
+  });
+
+  it('hides the evolution toggle after a fresh jury run (before and after would be the same board)', () => {
+    render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+          latestAnalysisKind: 'SINGLE_JURY',
+          previousProject: { mimeType: 'image/png', imageBase64: 'abc', critique: 'Same board' },
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: /evrim görünümü/i })).toBeNull();
+  });
+
+  it('calls preserve handler from result step action and shows the done state', async () => {
+    const handlePreserveAnalysis = jest.fn().mockResolvedValue(true);
 
     render(
       <ResultStep
@@ -165,8 +223,97 @@ describe('result views', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('Analizi Koru (1.5 Rapido)'));
+    const preserveButton = screen.getByRole('button', { name: /analizi koru/i });
+    expect(preserveButton).toHaveTextContent('Analizi Koru (1.5 Rapido)');
+    fireEvent.click(preserveButton);
+    fireEvent.click(preserveButton);
+
     expect(handlePreserveAnalysis).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('button', { name: /analiz korundu/i })).toBeDisabled();
+  });
+
+  it('asks for confirmation before starting a new project', () => {
+    const handleNewProject = jest.fn();
+
+    render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+          handleNewProject,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /yeni proje/i }));
+    expect(handleNewProject).not.toHaveBeenCalled();
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog.contains(document.activeElement)).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /yeni proje başlat/i }));
+    expect(handleNewProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires in-app consent before sharing to the community', async () => {
+    const handleShareToCommunity = jest.fn().mockResolvedValue(true);
+
+    render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+          handleShareToCommunity,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /toplulukta paylaş/i }));
+    expect(handleShareToCommunity).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /onaylıyorum, paylaş/i }));
+
+    expect(handleShareToCommunity).toHaveBeenCalledWith({ confirmed: true });
+    expect(await screen.findByRole('button', { name: /toplulukta paylaşıldı/i })).toBeDisabled();
+  });
+
+  it('keeps the original critique and renders appended outputs in their own section', () => {
+    render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+          critique: 'Original jury critique\n\n---\n\n## ◈ Kişisel Beceri Rotası\n\nWeek 1: section drills',
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/Original jury critique/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Kişisel Beceri Rotası' })).toHaveTextContent('Week 1: section drills');
+    expect(screen.queryByRole('button', { name: /beceri rotamı oluştur/i })).toBeNull();
+  });
+
+  it('shows a loading state from the first Premium Rescue click', async () => {
+    let resolveRescue: () => void = () => {};
+    const handlePremium = jest.fn(() => new Promise<void>((resolve) => { resolveRescue = resolve; }));
+
+    render(
+      <ResultStep
+        {...baseResultProps({
+          isAnonymous: false,
+          guestDrawingCount: 2,
+          handlePremium,
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /kilidi aç/i }));
+    const busyButton = screen.getByRole('button', { name: /paftalar hazırlanıyor/i });
+    expect(busyButton).toBeDisabled();
+    fireEvent.click(busyButton);
+    expect(handlePremium).toHaveBeenCalledTimes(1);
+
+    resolveRescue();
+    expect(await screen.findByRole('button', { name: /kilidi aç/i })).not.toBeDisabled();
   });
 
   it('renders a focused diagnostic report and can build a skill roadmap', () => {
@@ -194,7 +341,7 @@ describe('result views', () => {
 
     render(<MultiResultStep {...baseMultiProps({ handlePreserveAnalysis })} />);
 
-    fireEvent.click(screen.getByText('Analizi Koru (1.5 Rapido)'));
+    fireEvent.click(screen.getByRole('button', { name: /analizi koru/i }));
     expect(handlePreserveAnalysis).toHaveBeenCalledTimes(1);
   });
 
@@ -236,9 +383,22 @@ describe('result views', () => {
     fireEvent.click(screen.getAllByText('Circulation is unclear')[0]);
     expect(premiumProps.setSelectedFlawIndex).toHaveBeenCalledWith(0);
 
-    fireEvent.click(screen.getByTitle('Analizi Koru'));
+    fireEvent.click(screen.getByRole('button', { name: /analizi koru/i }));
     expect(premiumProps.handlePreserveAnalysis).toHaveBeenCalledTimes(1);
 
     clickSpy.mockRestore();
+  });
+
+  it('renders premium flaw markers as labelled, keyboard-reachable buttons', () => {
+    const premiumProps = basePremiumProps();
+
+    render(<PremiumResultStep {...premiumProps} />);
+
+    const marker = screen.getByRole('button', { name: 'Sorun #1: Circulation is unclear' });
+    fireEvent.click(marker);
+    expect(premiumProps.setSelectedFlawIndex).toHaveBeenCalledWith(0);
+    expect(screen.getByText('Kırmızı Kalem Revizyonu')).toBeInTheDocument();
+    expect(screen.queryByText(/1\.5 Rapido/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /yüksek çözünürlük/i })).not.toHaveTextContent(/rapido/i);
   });
 });

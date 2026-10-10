@@ -4,25 +4,32 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Clock3, Loader2, AlertTriangle, Trophy, Skull, ExternalLink, Trash2 } from 'lucide-react';
 import type { AnalysisHistoryItem, GalleryPlacementType } from '@/types';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { aspectRatioToStyleValue, clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
-import { pickLocalized } from '@/lib/i18n';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
+import { DESIGN_INSIGHT_OPERATIONS } from '@/lib/design-insights';
+import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
 
 const PAGE_SIZE = 12;
 
-function getAnalysisKindLabel(kind: string, language: ReturnType<typeof useLanguage>): string {
-  switch (kind) {
-    case 'SINGLE_JURY': return pickLocalized(language, 'Tek Jüri', 'Single jury');
-    case 'REVISION_SAME': return pickLocalized(language, 'Revizyon', 'Revision');
-    case 'MULTI_JURY': return pickLocalized(language, 'Çoklu Jüri', 'Multi jury');
-    case 'PREMIUM_RESCUE': return pickLocalized(language, 'Premium Rescue', 'Premium rescue');
-    case 'AUTO_CONCEPT': return pickLocalized(language, 'Konsept Üretimi', 'Concept generation');
-    case 'MATERIAL_BOARD': return pickLocalized(language, 'Malzeme Paftası', 'Material board');
-    default: return kind.replace(/_/g, ' ');
-  }
+const LABELLED_ANALYSIS_KINDS: ReadonlySet<string> = new Set([
+  'SINGLE_JURY',
+  'REVISION_SAME',
+  'MULTI_JURY',
+  'PREMIUM_RESCUE',
+  'AUTO_CONCEPT',
+  'MATERIAL_BOARD',
+  ...DESIGN_INSIGHT_OPERATIONS,
+]);
+
+function getAnalysisKindLabel(kind: string, language: SupportedLanguage): string {
+  if (LABELLED_ANALYSIS_KINDS.has(kind)) return analysisKindLabel(kind, language);
+  // Never show a raw internal enum to users.
+  return pickLocalized(language, 'Analiz', 'Analysis');
 }
 
 function parseMultiHistoryCritique(raw: string) {
@@ -62,12 +69,12 @@ function parseMultiHistoryCritique(raw: string) {
   return null;
 }
 
-function formatPersonaDisplayName(name: string, index: number): string {
+function formatPersonaDisplayName(name: string, index: number, language: SupportedLanguage): string {
   const cleaned = name.trim();
-  return cleaned || `Jüri ${index + 1}`;
+  return cleaned || `${pickLocalized(language, 'Jüri', 'Juror')} ${index + 1}`;
 }
 
-function renderHistoryPreview(item: AnalysisHistoryItem) {
+function renderHistoryPreview(item: AnalysisHistoryItem, language: SupportedLanguage) {
   if (item.analysisKind === 'MULTI_JURY') {
     const parsed = parseMultiHistoryCritique(item.critique);
     if (parsed) {
@@ -75,7 +82,7 @@ function renderHistoryPreview(item: AnalysisHistoryItem) {
         <div className="space-y-2">
           {parsed.personas.map((persona, index) => (
             <div key={`${item.id}-${persona.id}`} className="rounded-md border border-white/10 bg-white/5 p-2">
-              <p className="text-[10px] font-mono uppercase tracking-wider text-cyan-200">{formatPersonaDisplayName(persona.name, index)}</p>
+              <p className="text-[10px] font-mono uppercase tracking-wider text-cyan-200">{formatPersonaDisplayName(persona.name, index, language)}</p>
               <p className="mt-1 text-xs text-slate-300 line-clamp-3 whitespace-pre-line">{normalizeCritiqueText(persona.critique)}</p>
             </div>
           ))}
@@ -84,16 +91,16 @@ function renderHistoryPreview(item: AnalysisHistoryItem) {
     }
   }
 
-  return <p className="text-sm text-slate-300 line-clamp-5 whitespace-pre-line">{toHistoryExcerpt(item)}</p>;
+  return <p className="text-sm text-slate-300 line-clamp-5 whitespace-pre-line">{toHistoryExcerpt(item, language)}</p>;
 }
 
-function toHistoryExcerpt(item: AnalysisHistoryItem): string {
+function toHistoryExcerpt(item: AnalysisHistoryItem, language: SupportedLanguage): string {
   if (item.analysisKind === 'MULTI_JURY') {
     const parsed = parseMultiHistoryCritique(item.critique);
     if (parsed) {
       return normalizeCritiqueText(
         parsed.personas
-          .map((entry, index) => `${formatPersonaDisplayName(entry.name, index)}\n\n${entry.critique}`)
+          .map((entry, index) => `${formatPersonaDisplayName(entry.name, index, language)}\n\n${entry.critique}`)
           .join('\n\n---\n\n')
       );
     }
@@ -112,6 +119,7 @@ export function HistoryStep() {
   const [total, setTotal] = useState(0);
   const [filter, setFilter] = useState<GalleryPlacementType | 'ALL'>('ALL');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pendingDeleteItem, setPendingDeleteItem] = useState<AnalysisHistoryItem | null>(null);
   const [measuredRatios, setMeasuredRatios] = useState<Record<string, number>>({});
   const {
     setStep,
@@ -201,7 +209,7 @@ export function HistoryStep() {
   const openHistoryAnalysis = (item: AnalysisHistoryItem) => {
     if (item.isDeleted) return;
     const parsedMulti = item.analysisKind === 'MULTI_JURY' ? parseMultiHistoryCritique(item.critique) : null;
-    const normalizedCritique = toHistoryExcerpt(item);
+    const normalizedCritique = toHistoryExcerpt(item, language);
     if (!normalizedCritique && !parsedMulti) return;
 
     setPreviewUrl(item.sourceUrl || item.previewUrl);
@@ -273,7 +281,14 @@ export function HistoryStep() {
   }, [
     addToast,
     authedFetch,
+    language,
   ]);
+
+  const confirmPendingDelete = () => {
+    const item = pendingDeleteItem;
+    setPendingDeleteItem(null);
+    if (item) void deleteHistoryItem(item);
+  };
 
   return (
     <motion.div
@@ -302,13 +317,13 @@ export function HistoryStep() {
             onClick={() => setFilter('HALL_OF_FAME')}
             className={`px-3 py-2 border rounded ${filter === 'HALL_OF_FAME' ? 'border-emerald-400 text-emerald-300 bg-emerald-500/10' : 'border-white/20 text-slate-300 hover:text-white'}`}
           >
-            {pickLocalized(language, 'Hall', 'Hall')}
+            {pickLocalized(language, 'Hall of Fame', 'Hall of Fame')}
           </button>
           <button
             onClick={() => setFilter('WALL_OF_DEATH')}
             className={`px-3 py-2 border rounded ${filter === 'WALL_OF_DEATH' ? 'border-red-400 text-red-300 bg-red-500/10' : 'border-white/20 text-slate-300 hover:text-white'}`}
           >
-            {pickLocalized(language, 'Wall', 'Wall')}
+            {pickLocalized(language, 'Wall of Death', 'Wall of Death')}
           </button>
           <button
             onClick={() => setFilter('NONE')}
@@ -351,7 +366,7 @@ export function HistoryStep() {
                 </div>
               </div>
               <p className="text-xs text-slate-400 mb-3 font-mono">{new Date(item.createdAt).toLocaleString(language === 'en' ? 'en-US' : 'tr-TR')}</p>
-              {renderHistoryPreview(item)}
+              {renderHistoryPreview(item, language)}
               <div className="mt-4 flex items-center justify-between text-xs font-mono">
                 <span className="text-slate-400">{pickLocalized(language, 'Puan', 'Score')}</span>
                 <span className="text-white font-bold">{typeof item.score === 'number' ? item.score : '-'}</span>
@@ -366,7 +381,7 @@ export function HistoryStep() {
               </button>
               <button
                 type="button"
-                onClick={() => void deleteHistoryItem(item)}
+                onClick={() => setPendingDeleteItem(item)}
                 disabled={deletingId === item.id || item.isDeleted}
                 className="mt-2 w-full rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-red-100 text-xs font-mono uppercase tracking-wider hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
               >
@@ -390,6 +405,22 @@ export function HistoryStep() {
           {pickLocalized(language, 'Henüz kayıtlı analiz geçmişi bulunamadı.', 'No saved analysis history yet.')}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingDeleteItem !== null}
+        isDestructive
+        title={pickLocalized(language, 'Analiz ve proje silinsin mi?', 'Delete this analysis and project?')}
+        description={pickLocalized(
+          language,
+          `"${pendingDeleteItem?.title ?? ''}" silindi olarak işaretlenecek ve 30 gün sonra kalıcı olarak kaldırılacak.`,
+          `"${pendingDeleteItem?.title ?? ''}" will be marked as deleted and permanently removed after 30 days.`,
+        )}
+        icon={<Trash2 size={18} strokeWidth={1.5} />}
+        confirmLabel={pickLocalized(language, 'Kalıcı Olarak Sil', 'Delete permanently')}
+        cancelLabel={pickLocalized(language, 'Vazgeç', 'Cancel')}
+        onConfirm={confirmPendingDelete}
+        onCancel={() => setPendingDeleteItem(null)}
+      />
 
       {hasMore && (
         <div className="flex justify-center mt-10">

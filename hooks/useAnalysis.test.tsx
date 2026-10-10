@@ -166,8 +166,8 @@ describe('useAnalysis', () => {
     expect(setIsAuthModalOpen).toHaveBeenCalledWith(true);
   });
 
-  it('aborts community share when confirmation is cancelled', async () => {
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(false);
+  it('refuses community share without explicit in-app confirmation', async () => {
+    const confirmSpy = jest.spyOn(window, 'confirm');
 
     const { result } = renderHook(() =>
       useAnalysis({
@@ -186,7 +186,7 @@ describe('useAnalysis', () => {
       await result.current.handleShareToCommunity();
     });
 
-    expect(confirmSpy).toHaveBeenCalled();
+    expect(confirmSpy).not.toHaveBeenCalled();
     expect(addToast).toHaveBeenCalledWith('Community paylaşımı onaylanmadı.', 'info');
     expect(global.fetch).not.toHaveBeenCalled();
 
@@ -194,7 +194,6 @@ describe('useAnalysis', () => {
   });
 
   it('shows moderation rejection message when community share is blocked by moderation', async () => {
-    const confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       ok: false,
       status: 422,
@@ -219,10 +218,221 @@ describe('useAnalysis', () => {
     );
 
     await act(async () => {
-      await result.current.handleShareToCommunity();
+      await result.current.handleShareToCommunity({ confirmed: true });
     });
 
     expect(addToast).toHaveBeenCalledWith('Moderation blocked this share.', 'error');
-    confirmSpy.mockRestore();
+  });
+
+  describe('analysis flows', () => {
+    const storeActions = {
+      setCritique: jest.fn(),
+      setGalleryPlacement: jest.fn(),
+      setGalleryConsent: jest.fn(),
+      setPreviousProject: jest.fn(),
+      setLatestAnalysisKind: jest.fn(),
+      setLastProgression: jest.fn(),
+      setFormData: jest.fn(),
+      setPremiumData: jest.fn(),
+      setMultiData: jest.fn(),
+    };
+
+    function mockAnalysisStore(overrides: Record<string, unknown> = {}) {
+      mockedStore.mockReturnValue({
+        step: 'upload',
+        image: null,
+        imageBase64: 'abc',
+        mimeType: 'image/png',
+        additionalUploads: [],
+        formData: {
+          category: 'concept',
+          topic: 'Test',
+          site: '',
+          concept: '',
+          defense: '',
+          harshness: 2,
+          analysisLength: 'SHORT',
+          singlePersonaId: 'constructive',
+          multiPersonaIds: ['structural', 'conceptual'],
+        },
+        pdfText: null,
+        isRevisionMode: false,
+        previousProject: null,
+        latestAnalysisKind: 'SINGLE_JURY',
+        galleryPlacement: 'NONE',
+        critique: null,
+        premiumData: null,
+        multiData: null,
+        addToast,
+        setStep,
+        setIsAuthModalOpen,
+        ...storeActions,
+        ...overrides,
+      } as never);
+    }
+
+    function renderAnalysisHook(isPremiumUser = false) {
+      return renderHook(() =>
+        useAnalysis({
+          user: { id: 'user-1' } as never,
+          profile: null,
+          isPremiumUser,
+          rapidoPens: 50,
+          getJWT,
+          refreshProfile,
+          setProfile: jest.fn(),
+          preferredLanguage: 'tr',
+        }),
+      );
+    }
+
+    const mockedGenerate = jest.requireMock('@/lib/ai').generateAIResponse as jest.Mock;
+
+    it('never publishes a free user board to the gallery without consent', async () => {
+      mockAnalysisStore();
+      mockedGenerate.mockResolvedValueOnce({
+        result: JSON.stringify({ critique: 'Strong parti.', score: 92, galleryPlacement: 'HALL_OF_FAME' }),
+      });
+
+      const { result } = renderAnalysisHook(false);
+      await act(async () => {
+        await result.current.handleAnalyze();
+      });
+
+      expect(storeActions.setGalleryPlacement).toHaveBeenCalledWith('HALL_OF_FAME');
+      expect(storeActions.setGalleryConsent).toHaveBeenCalledWith(null);
+      expect(storeActions.setGalleryConsent).not.toHaveBeenCalledWith(true);
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(setStep).toHaveBeenLastCalledWith('result');
+    });
+
+    it('ignores a second paid analysis click while the first is in flight', async () => {
+      mockAnalysisStore();
+      let resolveAnalysis: (value: unknown) => void = () => {};
+      mockedGenerate.mockReturnValueOnce(new Promise((resolve) => { resolveAnalysis = resolve; }));
+
+      const { result } = renderAnalysisHook(true);
+      let first: Promise<unknown> = Promise.resolve();
+      await act(async () => {
+        first = result.current.handleAnalyze();
+        await result.current.handleAnalyze();
+      });
+
+      expect(mockedGenerate).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        resolveAnalysis({ result: JSON.stringify({ critique: 'Done', score: 50 }) });
+        await first;
+      });
+    });
+
+    it('maps structured error codes to friendly copy instead of raw codes', async () => {
+      mockAnalysisStore();
+      mockedGenerate.mockRejectedValueOnce(new Error('INSUFFICIENT_RAPIDO:4:2'));
+
+      const { result } = renderAnalysisHook(true);
+      await act(async () => {
+        await result.current.handleAnalyze();
+      });
+
+      const [message, type] = addToast.mock.calls.at(-1) as [string, string];
+      expect(type).toBe('error');
+      expect(message).toContain('4 Rapido');
+      expect(message).toContain('mevcut: 2');
+      expect(message).not.toContain('INSUFFICIENT_RAPIDO');
+    });
+
+    it('never shows an unknown machine code to the user', async () => {
+      mockAnalysisStore();
+      mockedGenerate.mockRejectedValueOnce(new Error('SOME_NEW_CODE:7'));
+
+      const { result } = renderAnalysisHook(true);
+      await act(async () => {
+        await result.current.handleAnalyze();
+      });
+
+      expect(addToast).toHaveBeenLastCalledWith('Bir hata oluştu. Lütfen tekrar dene.', 'error');
+    });
+
+    it('keeps the previous board as the "before" image after a revision', async () => {
+      const previousProject = { imageBase64: 'old-board', mimeType: 'image/jpeg', critique: 'Old critique' };
+      mockAnalysisStore({ isRevisionMode: true, previousProject, imageBase64: 'new-board' });
+      mockedGenerate.mockResolvedValueOnce({
+        result: JSON.stringify({ critique: 'Better', score: 70, isSameProject: true, progressionScore: 10 }),
+      });
+
+      const { result } = renderAnalysisHook(true);
+      await act(async () => {
+        await result.current.handleAnalyze();
+      });
+
+      expect(mockedGenerate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          operation: 'REVISION_SAME',
+          params: expect.objectContaining({ previousCritique: 'Old critique' }),
+        }),
+      );
+      expect(storeActions.setPreviousProject).toHaveBeenLastCalledWith(previousProject);
+      expect(storeActions.setLatestAnalysisKind).toHaveBeenCalledWith('REVISION_SAME');
+    });
+
+    it('appends the skill roadmap below the existing report instead of replacing it', async () => {
+      mockAnalysisStore({ step: 'result', critique: 'Original jury critique' });
+      mockedGenerate.mockResolvedValueOnce({
+        result: JSON.stringify({ critique: 'Week 1: section drills', score: 60 }),
+      });
+
+      const { result } = renderAnalysisHook(true);
+      await act(async () => {
+        await result.current.handleDesignInsight('SKILL_ROADMAP');
+      });
+
+      const savedCritique = storeActions.setCritique.mock.calls.at(-1)?.[0] as string;
+      expect(savedCritique.startsWith('Original jury critique')).toBe(true);
+      expect(savedCritique).toContain('## ◈ Kişisel Beceri Rotası');
+      expect(savedCritique).toContain('Week 1: section drills');
+      expect(storeActions.setLatestAnalysisKind).not.toHaveBeenCalled();
+      expect(storeActions.setGalleryPlacement).not.toHaveBeenCalled();
+      expect(setStep).toHaveBeenLastCalledWith('result');
+    });
+
+    it('returns to the multi-jury result when Premium Rescue fails after a multi run', async () => {
+      mockAnalysisStore({
+        step: 'multi-result',
+        multiData: { personas: [{ id: 'structural', name: 'Structural', critique: 'x', score: 40 }] },
+      });
+      mockedGenerate.mockRejectedValueOnce(new Error('RATE_LIMITED:30'));
+
+      const { result } = renderAnalysisHook(true);
+      await act(async () => {
+        await result.current.handlePremium();
+      });
+
+      expect(setStep).toHaveBeenCalledWith('premium-analyzing');
+      expect(setStep).toHaveBeenLastCalledWith('multi-result');
+      expect(addToast).toHaveBeenLastCalledWith(expect.stringContaining('30 sn'), 'error');
+    });
+
+    it('does not charge twice for preserving the same analysis', async () => {
+      mockAnalysisStore({ critique: 'Preserve me' });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: jest.fn().mockResolvedValue({ rapido_remaining: 10 }),
+      });
+
+      const { result } = renderAnalysisHook(true);
+      let firstResult = false;
+      let secondResult = false;
+      await act(async () => {
+        firstResult = await result.current.handlePreserveAnalysis();
+      });
+      await act(async () => {
+        secondResult = await result.current.handlePreserveAnalysis();
+      });
+
+      expect(firstResult).toBe(true);
+      expect(secondResult).toBe(true);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(addToast).toHaveBeenLastCalledWith('Bu analiz zaten korundu.', 'info');
+    });
   });
 });

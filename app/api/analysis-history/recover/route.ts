@@ -10,9 +10,10 @@ import {
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { normalizeCritiqueText } from '@/lib/critique';
+import { HISTORY_RAPIDO_COSTS } from '@/lib/pricing';
 
 const RAPIDO_PRECISION_SCALE = 100;
-const BOARD_RECOVERY_COST_CENTS = 150; // 1.5 Rapido
+const BOARD_RECOVERY_COST_CENTS = Math.round(HISTORY_RAPIDO_COSTS.BOARD_RECOVERY * 100);
 
 type AnalysisHistoryRow = Models.Row & {
   user_id: string;

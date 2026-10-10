@@ -9,31 +9,75 @@
  */
 
 import { AnimatePresence } from 'framer-motion';
+import dynamic from 'next/dynamic';
+
 import { HeroStep } from '@/components/HeroStep';
+import { StepLoadingFallback } from '@/components/StepLoadingFallback';
 import { UploadStep } from '@/components/UploadStep';
-import {
-  AnalyzingStep,
-  PremiumAnalyzingStep,
-  MultiAnalyzingStep,
-} from '@/components/AnalyzingSteps';
-import { ResultStep } from '@/components/ResultStep';
-import { PremiumResultStep } from '@/components/PremiumResultStep';
-import { GalleryStep } from '@/components/GalleryStep';
-import { MultiResultStep } from '@/components/MultiResultStep';
-import { AIMentorStep } from '@/components/AIMentorStep';
-import { HistoryStep } from '@/components/HistoryStep';
-import { PremiumUpgradeStep } from '@/components/PremiumUpgradeStep';
-import { ProfileStep } from '@/components/ProfileStep';
-import { AccountDetailsStep } from '@/components/AccountDetailsStep';
-import { ArchBuilderStep } from '@/components/ArchBuilderStep';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
-import type { SupportedLanguage } from '@/lib/i18n';
+
+import type { DropzoneState } from 'react-dropzone';
+import type { CommunityShareOptions } from '@/components/CommunityShareButton';
 import type { DesignInsightOperation } from '@/lib/design-insights';
+import type { SupportedLanguage } from '@/lib/i18n';
+import type { Badge } from '@/types';
+
+// Every step except the landing + Studio Desk is split out of the first-load bundle
+// (html2canvas, react-markdown, mentor/archbuilder code only load when that step opens).
+const stepLoading = () => <StepLoadingFallback />;
+
+const AnalyzingStep = dynamic(
+  () => import('@/components/AnalyzingSteps').then((mod) => mod.AnalyzingStep),
+  { loading: stepLoading },
+);
+const PremiumAnalyzingStep = dynamic(
+  () => import('@/components/AnalyzingSteps').then((mod) => mod.PremiumAnalyzingStep),
+  { loading: stepLoading },
+);
+const MultiAnalyzingStep = dynamic(
+  () => import('@/components/AnalyzingSteps').then((mod) => mod.MultiAnalyzingStep),
+  { loading: stepLoading },
+);
+const ResultStep = dynamic(() => import('@/components/ResultStep').then((mod) => mod.ResultStep), {
+  loading: stepLoading,
+});
+const PremiumResultStep = dynamic(
+  () => import('@/components/PremiumResultStep').then((mod) => mod.PremiumResultStep),
+  { loading: stepLoading },
+);
+const GalleryStep = dynamic(() => import('@/components/GalleryStep').then((mod) => mod.GalleryStep), {
+  loading: stepLoading,
+});
+const MultiResultStep = dynamic(
+  () => import('@/components/MultiResultStep').then((mod) => mod.MultiResultStep),
+  { loading: stepLoading },
+);
+const AIMentorStep = dynamic(() => import('@/components/AIMentorStep').then((mod) => mod.AIMentorStep), {
+  loading: stepLoading,
+});
+const HistoryStep = dynamic(() => import('@/components/HistoryStep').then((mod) => mod.HistoryStep), {
+  loading: stepLoading,
+});
+const PremiumUpgradeStep = dynamic(
+  () => import('@/components/PremiumUpgradeStep').then((mod) => mod.PremiumUpgradeStep),
+  { loading: stepLoading },
+);
+const ProfileStep = dynamic(() => import('@/components/ProfileStep').then((mod) => mod.ProfileStep), {
+  loading: stepLoading,
+});
+const AccountDetailsStep = dynamic(
+  () => import('@/components/AccountDetailsStep').then((mod) => mod.AccountDetailsStep),
+  { loading: stepLoading },
+);
+const ArchBuilderStep = dynamic(
+  () => import('@/components/ArchBuilderStep').then((mod) => mod.ArchBuilderStep),
+  { loading: stepLoading },
+);
 
 interface StepRouterProps {
   // Dropzone bindings (computed in page.tsx via useDropHandler)
-  getRootProps: ReturnType<typeof import('react-dropzone').useDropzone>['getRootProps'];
-  getInputProps: ReturnType<typeof import('react-dropzone').useDropzone>['getInputProps'];
+  getRootProps: DropzoneState['getRootProps'];
+  getInputProps: DropzoneState['getInputProps'];
   isDragActive: boolean;
 
   // Auth-derived values (passed from page.tsx to avoid coupling store to auth)
@@ -44,21 +88,22 @@ interface StepRouterProps {
   isAnonymous: boolean; // P0.3: Guest mode identifier
   rapidoPens: number;
   progressionScore: number;
-  earnedBadges: import('@/types').Badge[];
+  earnedBadges: Badge[];
   preferredLanguage?: SupportedLanguage;
   multiJuryPromoActive?: boolean;
 
-  // AI handlers (from useAnalysis hook)
+  // AI handlers (from useAnalysis hook). Promise-returning handlers let result screens show
+  // loading/done states; plain void handlers stay valid for callers that do not track them.
   handleAnalyze: () => void;
   handleMultiAnalyze: () => void;
-  handlePremium: () => void;
+  handlePremium: () => Promise<void> | void;
   handleAutoConcept: () => void;
   handleMaterialBoard: () => void;
   handleDesignInsight: (operation: DesignInsightOperation) => void;
   handleDefenseSubmit: () => void;
-  handleGalleryConsent: (val: boolean) => void;
-  handlePreserveAnalysis?: () => void;
-  handleShareToCommunity?: () => void;
+  handleGalleryConsent: (val: boolean) => Promise<boolean> | void;
+  handlePreserveAnalysis?: () => Promise<boolean> | void;
+  handleShareToCommunity?: (options: CommunityShareOptions) => Promise<boolean> | void;
 }
 
 export function StepRouter({
@@ -136,10 +181,11 @@ export function StepRouter({
 
   return (
     <AnimatePresence mode="wait">
-      {step === 'hero' && <HeroStep setStep={setStep} />}
+      {step === 'hero' && <HeroStep key="hero" setStep={setStep} />}
 
       {step === 'upload' && (
         <UploadStep
+          key="upload"
           getRootProps={getRootProps}
           getInputProps={getInputProps}
           isDragActive={isDragActive}
@@ -165,10 +211,7 @@ export function StepRouter({
           onUpgradeClick={() => setStep('premium-upgrade')}
           isAnonymous={isAnonymous}
           guestDrawingCount={guestDrawingCount}
-          onGuestUpgradeRequired={() => {
-            setShowGuestUpgradePrompt(true);
-            setStep('premium-upgrade');
-          }}
+          onGuestUpgradeRequired={onAuthRequired}
           preferredLanguage={preferredLanguage}
           multiJuryPromoActive={multiJuryPromoActive}
         />
@@ -176,16 +219,18 @@ export function StepRouter({
 
       {step === 'archbuilder' && (
         <ArchBuilderStep
+          key="archbuilder"
           onAuthRequired={onAuthRequired}
         />
       )}
 
-      {step === 'analyzing' && <AnalyzingStep />}
-      {step === 'multi-analyzing' && <MultiAnalyzingStep />}
-      {step === 'premium-analyzing' && <PremiumAnalyzingStep />}
+      {step === 'analyzing' && <AnalyzingStep key="analyzing" />}
+      {step === 'multi-analyzing' && <MultiAnalyzingStep key="multi-analyzing" />}
+      {step === 'premium-analyzing' && <PremiumAnalyzingStep key="premium-analyzing" />}
 
       {step === 'result' && (
         <ResultStep
+          key="result"
           previewUrl={previewUrl}
           mimeType={mimeType}
           handleNewProject={startNewProject}
@@ -213,6 +258,7 @@ export function StepRouter({
           setShowGuestUpgradePrompt={setShowGuestUpgradePrompt}
           setGuestDrawingCount={setGuestDrawingCount}
           onUpgradeClick={() => setStep('premium-upgrade')}
+          onAuthRequired={onAuthRequired}
           handlePreserveAnalysis={handlePreserveAnalysis}
           handleShareToCommunity={handleShareToCommunity}
           handleAutoConcept={handleAutoConcept}
@@ -223,6 +269,7 @@ export function StepRouter({
 
       {step === 'premium' && premiumData && (
         <PremiumResultStep
+          key="premium"
           premiumData={premiumData}
           previewUrl={previewUrl}
           mimeType={mimeType}
@@ -246,6 +293,7 @@ export function StepRouter({
 
       {step === 'multi-result' && multiData && (
         <MultiResultStep
+          key="multi-result"
           multiData={multiData}
           previewUrl={previewUrl}
           mimeType={mimeType}
@@ -258,6 +306,7 @@ export function StepRouter({
 
       {step === 'gallery' && (
         <GalleryStep
+          key="gallery"
           currentGallery={currentGallery}
           setCurrentGallery={setCurrentGallery}
           galleryItems={galleryItems}
@@ -266,6 +315,7 @@ export function StepRouter({
 
       {step === 'ai-mentor' && (
         <AIMentorStep
+          key="ai-mentor"
           isAuthenticated={isAuthenticated}
           userId={userId}
           isAnonymous={isAnonymous}
@@ -278,10 +328,11 @@ export function StepRouter({
         />
       )}
 
-      {step === 'history' && <HistoryStep />}
+      {step === 'history' && <HistoryStep key="history" />}
 
       {step === 'profile' && (
         <ProfileStep
+          key="profile"
           onUpgradeClick={() => setStep('premium-upgrade')}
           onOpenRapidoShop={() => setStep('rapido-shop')}
           onOpenAccountDetails={() => setStep('account-details')}
@@ -290,12 +341,13 @@ export function StepRouter({
         />
       )}
 
-      {step === 'premium-upgrade' && <PremiumUpgradeStep setStep={setStep} />}
+      {step === 'premium-upgrade' && <PremiumUpgradeStep key="premium-upgrade" setStep={setStep} />}
 
-      {step === 'rapido-shop' && <PremiumUpgradeStep setStep={setStep} initialTab="rapido" />}
+      {step === 'rapido-shop' && <PremiumUpgradeStep key="rapido-shop" setStep={setStep} initialTab="rapido" />}
 
       {step === 'account-details' && (
         <AccountDetailsStep
+          key="account-details"
           onBack={() => setStep('profile')}
           onOpenRapidoShop={() => setStep('rapido-shop')}
           onOpenPremiumShop={() => setStep('premium-upgrade')}

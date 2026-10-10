@@ -1,26 +1,42 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Layers, Hammer, Frown } from 'lucide-react';
+import { RefreshCw, Layers, Hammer, Frown, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { MultiPersonaData } from '@/types';
-import { SimplePdfPreview } from '@/components/SimplePdfPreview';
+
+import { CommunityShareButton, type CommunityShareOptions } from '@/components/CommunityShareButton';
 import { InteractiveImagePreview } from '@/components/InteractiveImagePreview';
+import { NewProjectButton } from '@/components/NewProjectButton';
+import { PreserveAnalysisButton } from '@/components/PreserveAnalysisButton';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { SimplePdfPreview } from '@/components/SimplePdfPreview';
 import { pickLocalized } from '@/lib/i18n';
 import { RAPIDO_COSTS } from '@/lib/pricing';
+
+import type { MultiPersonaData } from '@/types';
 
 interface MultiResultStepProps {
     multiData: MultiPersonaData;
     previewUrl: string | null;
     mimeType: string | null;
     handleNewProject: () => void;
-    handlePremium?: () => void;
-    handlePreserveAnalysis?: () => void;
-    handleShareToCommunity?: () => void;
+    handlePremium?: () => Promise<void> | void;
+    handlePreserveAnalysis?: () => Promise<boolean> | void;
+    handleShareToCommunity?: (options: CommunityShareOptions) => Promise<boolean> | void;
 }
 
 export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProject, handlePremium, handlePreserveAnalysis, handleShareToCommunity }: MultiResultStepProps) {
     const language = useLanguage();
+    const [isRescueStarting, setIsRescueStarting] = useState(false);
+
+    const startPremiumRescue = async () => {
+        if (!handlePremium || isRescueStarting) return;
+        setIsRescueStarting(true);
+        try {
+            await handlePremium();
+        } finally {
+            setIsRescueStarting(false);
+        }
+    };
     const personas = useMemo(() => {
         if (Array.isArray(multiData.personas) && multiData.personas.length > 0) {
             return multiData.personas;
@@ -60,7 +76,7 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
             exit={{ opacity: 0, scale: 1.05 }}
             className="w-full max-w-6xl grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-8"
         >
-            {/* Sol: Resim */}
+            {/* Left: board preview */}
             <div className="flex flex-col gap-4">
                 <div className="flex justify-between items-center mb-2">
                     <h2 className="font-display text-2xl font-bold uppercase tracking-wide flex items-center gap-2 flex-wrap">
@@ -84,7 +100,7 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                 </div>
             </div>
 
-            {/* Sağ: Tablar ve Eleştiri */}
+            {/* Right: persona tabs and critique */}
             <div className="flex flex-col gap-4 bg-white/5 p-4 sm:p-6 rounded-xl border border-white/10 h-full max-h-[82vh] overflow-hidden">
                 {/* Tabs */}
                 <div className={`grid gap-2 border-b border-white/10 pb-4 ${personas.length <= 2 ? 'grid-cols-2' : personas.length === 3 ? 'grid-cols-3' : 'grid-cols-2 xl:grid-cols-4'}`}>
@@ -93,6 +109,8 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                         return (
                         <button
                             key={persona.id}
+                            type="button"
+                            aria-pressed={effectiveActivePersonaId === persona.id}
                             onClick={() => setActivePersonaId(persona.id)}
                             className={`py-2.5 px-1 rounded-lg font-display font-bold uppercase tracking-wider text-[11px] sm:text-sm flex flex-col items-center gap-1.5 transition-all border-b-2
                                     ${effectiveActivePersonaId === persona.id ? `${visual.bg} ${visual.color} ${visual.border}` : 'border-transparent text-slate-500 hover:bg-white/5'}
@@ -134,32 +152,39 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
                 <div className="mt-auto pt-4 border-t border-white/10">
                     {handlePremium && (
                         <button
-                            onClick={handlePremium}
-                            className="mb-2 w-full rounded-lg border border-neon-red/30 bg-neon-red/10 px-3 py-3 font-mono text-[11px] font-bold uppercase tracking-wider text-neon-red transition-colors hover:bg-neon-red/20"
+                            type="button"
+                            onClick={() => void startPremiumRescue()}
+                            disabled={isRescueStarting}
+                            aria-busy={isRescueStarting}
+                            className="mb-2 w-full inline-flex items-center justify-center gap-2 rounded-lg border border-neon-red/30 bg-neon-red/10 px-3 py-3 font-mono text-[11px] font-bold uppercase tracking-wider text-neon-red transition-colors hover:bg-neon-red/20 disabled:cursor-wait disabled:opacity-70"
                         >
-                            {pickLocalized(language, 'Juri Kararlarindan Kurtarma Plani Cikar', 'Build a rescue plan from jury critiques')} ({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)
+                            {isRescueStarting ? (
+                                <>
+                                    <Loader2 size={14} strokeWidth={1.5} className="animate-spin" aria-hidden="true" />
+                                    {pickLocalized(language, 'Paftalar hazırlanıyor…', 'Preparing sheets…')}
+                                </>
+                            ) : (
+                                <>
+                                    {pickLocalized(language, 'Jüri Kararlarından Kurtarma Planı Çıkar', 'Build a rescue plan from jury critiques')}{' '}
+                                    <span className="font-normal opacity-60">({RAPIDO_COSTS.PREMIUM_RESCUE} Rapido)</span>
+                                </>
+                            )}
                         </button>
                     )}
-                    <button
-                        onClick={handlePreserveAnalysis}
-                        disabled={!handlePreserveAnalysis}
-                        className="mb-2 w-full py-3 font-bold uppercase tracking-wider border border-emerald-400/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-100 transition-colors flex items-center justify-center gap-2"
+                    <PreserveAnalysisButton
+                        onPreserve={handlePreserveAnalysis}
+                        className="mb-2 w-full rounded-lg py-3 font-mono text-[11px] font-bold uppercase tracking-wider border border-emerald-400/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-100 transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                    <CommunityShareButton
+                        onShare={handleShareToCommunity}
+                        className="mb-2 w-full rounded-lg py-3 font-mono text-[11px] font-bold uppercase tracking-wider border border-cyan-400/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-100 transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                    <NewProjectButton
+                        onConfirm={handleNewProject}
+                        className="w-full rounded-lg py-4 font-mono text-[11px] font-bold uppercase tracking-wider border border-white/[0.13] text-slate-200 hover:bg-white/5 transition-colors flex items-center justify-center gap-2"
                     >
-                        {pickLocalized(language, 'Analizi Koru', 'Preserve analysis')} (1.5 Rapido)
-                    </button>
-                    <button
-                        onClick={handleShareToCommunity}
-                        disabled={!handleShareToCommunity}
-                        className="mb-2 w-full py-3 font-bold uppercase tracking-wider border border-cyan-400/40 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-100 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                        {pickLocalized(language, 'Toplulukta Paylaş', 'Share on community')}
-                    </button>
-                    <button
-                        onClick={handleNewProject}
-                        className="w-full py-4 font-bold uppercase tracking-wider bg-white text-black hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
-                    >
-                        <RefreshCw size={18} /> {pickLocalized(language, 'Yeni Proje', 'New project')}
-                    </button>
+                        <RefreshCw size={16} strokeWidth={1.5} aria-hidden="true" /> {pickLocalized(language, 'Yeni Proje', 'New project')}
+                    </NewProjectButton>
                 </div>
             </div>
         </motion.div>

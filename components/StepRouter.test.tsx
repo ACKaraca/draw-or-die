@@ -15,7 +15,11 @@ jest.mock('@/components/HeroStep', () => ({
 }));
 
 jest.mock('@/components/UploadStep', () => ({
-  UploadStep: () => <div data-testid="upload-step">Upload</div>,
+  UploadStep: ({ onGuestUpgradeRequired }: { onGuestUpgradeRequired?: () => void }) => (
+    <button data-testid="upload-step" type="button" onClick={onGuestUpgradeRequired}>
+      Upload
+    </button>
+  ),
 }));
 jest.mock('@/components/AnalyzingSteps', () => ({
   AnalyzingStep: () => <div data-testid="analyzing-step">Analyzing</div>,
@@ -189,5 +193,44 @@ describe('StepRouter', () => {
     );
 
     await waitFor(() => expect(getByTestId('gallery-step')).toBeTruthy());
+  });
+
+  it('sends guests who hit the trial limit to sign-up instead of the Premium shop', () => {
+    const onAuthRequired = jest.fn();
+    const setShowGuestUpgradePrompt = jest.fn();
+    mockedStore.mockReturnValueOnce({
+      ...mockedStore(),
+      step: 'upload',
+      setShowGuestUpgradePrompt,
+    } as never);
+
+    const { getByTestId } = render(
+      <StepRouter
+        getRootProps={jest.fn() as never}
+        getInputProps={jest.fn() as never}
+        isDragActive={false}
+        isAuthenticated
+        userId="guest-1"
+        onAuthRequired={onAuthRequired}
+        isPremiumUser={false}
+        isAnonymous
+        rapidoPens={0}
+        progressionScore={0}
+        earnedBadges={[]}
+        handleAnalyze={handle}
+        handleMultiAnalyze={handle}
+        handlePremium={handle}
+        handleAutoConcept={handle}
+        handleMaterialBoard={handle}
+        handleDesignInsight={handle}
+        handleDefenseSubmit={handle}
+        handleGalleryConsent={handle}
+      />
+    );
+
+    getByTestId('upload-step').click();
+    expect(onAuthRequired).toHaveBeenCalledTimes(1);
+    expect(setStep).not.toHaveBeenCalledWith('premium-upgrade');
+    expect(setShowGuestUpgradePrompt).not.toHaveBeenCalled();
   });
 });

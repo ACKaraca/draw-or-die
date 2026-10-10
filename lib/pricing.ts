@@ -18,6 +18,12 @@ export const RAPIDO_COSTS = {
     SKILL_ROADMAP: 3,        // Önceki kritiklerden kişisel gelişim rotası
 } as const;
 
+// Analysis-history storage actions (not AI operations, so kept out of RAPIDO_COSTS).
+export const HISTORY_RAPIDO_COSTS = {
+    ANALYSIS_PRESERVE: 1.5,  // Analizi kalıcı olarak koru
+    BOARD_RECOVERY: 1.5,     // Silinen paftayı geri getir
+} as const;
+
 // Rapido rewards (earned, not spent)
 export const RAPIDO_REWARDS = {
     PEER_REVIEW_COMMENT: 0.25, // Bir akran projesine yorum bırakınca kazanılan rapido

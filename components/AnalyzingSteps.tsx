@@ -10,6 +10,8 @@ export function AnalyzingStep() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            role="status"
+            aria-live="polite"
             className="flex flex-col items-center text-center"
         >
             <div className="w-24 h-24 border-4 border-neon-red/20 border-t-neon-red rounded-full animate-spin mb-8"></div>
@@ -31,6 +33,8 @@ export function PremiumAnalyzingStep() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            role="status"
+            aria-live="polite"
             className="flex flex-col items-center text-center"
         >
             <div className="w-24 h-24 border-4 border-yellow-500/20 border-t-yellow-500 rounded-full animate-spin mb-8"></div>
@@ -52,6 +56,8 @@ export function MultiAnalyzingStep() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            role="status"
+            aria-live="polite"
             className="flex flex-col items-center text-center"
         >
             <div className="flex gap-4 mb-8">
@@ -59,7 +65,7 @@ export function MultiAnalyzingStep() {
                 <div className="w-16 h-16 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" style={{ animationDelay: '0.2s' }}></div>
                 <div className="w-16 h-16 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin" style={{ animationDelay: '0.4s' }}></div>
             </div>
-            <h2 className="font-display text-3xl font-bold uppercase mb-2 bg-clip-text text-transparent bg-gradient-to-r from-blue-500 via-purple-500 to-red-500">
+            <h2 className="font-display text-3xl font-bold uppercase mb-2 text-[var(--color-purple)]">
                 {pickLocalized(language, 'Jüri Konseyi Toplandı...', 'Jury council has convened...')}
             </h2>
             <p className="font-mono text-slate-400">

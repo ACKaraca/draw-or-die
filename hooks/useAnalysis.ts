@@ -8,12 +8,12 @@
  */
 'use client';
 
-import { useCallback, useMemo } from 'react';
-import confetti from 'canvas-confetti';
+import { useCallback, useMemo, useRef } from 'react';
+import type confetti from 'canvas-confetti';
 import { generateAIResponse } from '@/lib/ai';
-import { RAPIDO_COSTS } from '@/lib/pricing';
+import { HISTORY_RAPIDO_COSTS, RAPIDO_COSTS } from '@/lib/pricing';
 import { reportClientError } from '@/lib/logger';
-import { PremiumData, MultiPersonaData } from '@/types';
+import type { PremiumData, MultiPersonaData, StepType } from '@/types';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { trackConversionEvent } from '@/lib/growth-tracking';
@@ -28,40 +28,49 @@ import type { DesignInsightOperation } from '@/lib/design-insights';
 const PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 const PREVIEW_JPEG_QUALITIES = [0.82, 0.74, 0.66, 0.58, 0.5, 0.42];
 const PREMIUM_MAX_RENDERED_PAGES = 12;
-const ANALYSIS_PRESERVE_COST = 1.5;
+export const ANALYSIS_PRESERVE_COST = HISTORY_RAPIDO_COSTS.ANALYSIS_PRESERVE;
 const PREMIUM_RESCUE_IMAGE_EDITING_ENABLED =
   process.env.NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED === 'true';
 type FlawSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
-function communityShareConfirmationText(language: SupportedLanguage): string {
-  if (language === 'en') {
-    return [
-      'Community sharing confirmation',
-      '',
-      'I confirm that:',
-      '1) I have the right to share the board/image I uploaded.',
-      '2) I checked for personal data (phone, email, student ID, signature, etc.).',
-      '3) I read and accept the community rules and responsibility for sharing.',
-      '',
-      'Do you want to continue?',
-    ].join('\n');
-  }
-  return [
-    'Community paylasimi onayi',
-    '',
-    'Asagidaki maddeleri okudum ve onayliyorum:',
-    '1) Yukledigim pafta/gorsel icin paylasim hakkina sahibim.',
-    '2) Kisisel veri (telefon, e-posta, ogrenci no, imza vb.) iceren alanlari kontrol ettim.',
-    '3) Topluluk kurallarini okudum, anladim ve paylasim sorumlulugunu kabul ediyorum.',
-    '',
-    '"Okudum, anladim ve community paylasimini onayliyorum."',
-    '',
-    'Devam etmek istiyor musunuz?',
-  ].join('\n');
-}
+type ActionLock = 'analysis' | 'defense' | 'preserve' | 'share' | 'gallery';
+
+type ProjectSnapshot = {
+  imageBase64: string;
+  mimeType: string;
+  critique: string;
+};
+
+export type CommunityShareRequest = {
+  /** Must be true: callers collect explicit consent (CommunityShareButton) before sharing. */
+  confirmed?: boolean;
+};
+
+/** Prefix for supplementary outputs appended below an existing report; ResultStep splits on it. */
+export const APPENDED_SECTION_PREFIX = '## ◈ ';
 
 function pickLanguageCopy(language: SupportedLanguage, trText: string, enText: string): string {
   return language === 'en' ? enText : trText;
+}
+
+function appendReportSection(baseCritique: string, heading: string, body: string): string {
+  return `${baseCritique.trim()}\n\n---\n\n${APPENDED_SECTION_PREFIX}${heading}\n\n${body.trim()}`;
+}
+
+function fireConfetti(options: confetti.Options): void {
+  void import('canvas-confetti')
+    .then(({ default: launchConfetti }) => {
+      void launchConfetti(options);
+    })
+    .catch(() => {
+      // Celebration effects are optional; a failed chunk load must never affect the result flow.
+    });
+}
+
+function isMachineErrorCode(message: string): boolean {
+  if (/\s/.test(message)) return false;
+  const [code = ''] = message.split(':');
+  return code.length >= 4 && code.includes('_') && /^[A-Z0-9_]+$/.test(code);
 }
 
 type ApiErrorPayload = {
@@ -248,12 +257,12 @@ function parsePersonaResult(value: unknown, language: SupportedLanguage): { crit
 
 function normalizePersonaNameFromId(personaId: string, language: SupportedLanguage): string {
   const map: Record<string, { tr: string; en: string }> = {
-    constructive: { tr: 'Yapici Mentor', en: 'Constructive Mentor' },
-    structural: { tr: 'Strukturcu', en: 'Structural Critic' },
-    conceptual: { tr: 'Konseptuel', en: 'Concept Critic' },
-    grumpy: { tr: 'Huysuz Juri', en: 'Brutal Critic' },
-    contextualist: { tr: 'Baglamci', en: 'Context Reviewer' },
-    sustainability: { tr: 'Surdurulebilirlik Uzm.', en: 'Sustainability Expert' },
+    constructive: { tr: 'Yapıcı Mentor', en: 'Constructive Mentor' },
+    structural: { tr: 'Strüktürcü', en: 'Structural Critic' },
+    conceptual: { tr: 'Konseptüel', en: 'Concept Critic' },
+    grumpy: { tr: 'Huysuz Jüri', en: 'Brutal Critic' },
+    contextualist: { tr: 'Bağlamcı', en: 'Context Reviewer' },
+    sustainability: { tr: 'Sürdürülebilirlik Uzm.', en: 'Sustainability Expert' },
   };
 
   if (!map[personaId]) return personaId;
@@ -773,7 +782,7 @@ export function parsePremiumRescueResult(raw: unknown, language: SupportedLangua
   const practicalSolutionsRaw =
     practicalSolutionsCandidates.find((entries) => entries.length > 0) ?? [];
   const fallbackSolutions = flaws.map((flaw, index) => {
-    const prefix = pickLanguageCopy(language, `#${index + 1} icin`, `For #${index + 1}`);
+    const prefix = pickLanguageCopy(language, `#${index + 1} için`, `For #${index + 1}`);
     return `${prefix}: ${flaw.drawingGuide || flaw.reason}`;
   });
   const practicalSolutions = Array.from(new Set([
@@ -784,7 +793,7 @@ export function parsePremiumRescueResult(raw: unknown, language: SupportedLangua
     practicalSolutions.push(
       pickLanguageCopy(
         language,
-        `Eksik kalan kritik pafta kararlarini teknik gerekceyle yeniden duzenle (${practicalSolutions.length + 1}).`,
+        `Eksik kalan kritik pafta kararlarını teknik gerekçeyle yeniden düzenle (${practicalSolutions.length + 1}).`,
         `Rework the remaining critical board decisions with technical justification (${practicalSolutions.length + 1}).`,
       ),
     );
@@ -857,12 +866,13 @@ export function useAnalysis({
 
   const handleInsufficientRapido = useCallback(
     (cost: number, featureLabel: string) => {
+      const available = Math.max(0, rapidoPens);
       if (!isPremiumUser) {
         store.addToast(
           pickLanguageCopy(
             uiLanguage,
-            `${featureLabel} için ${cost} Rapido gerekiyor. Trial limitine yaklaştın; Premium'a geçerek devam edebilirsin.`,
-            `${featureLabel} requires ${cost} Rapido. You're close to the trial limit; continue with Premium.`,
+            `${featureLabel} için ${cost} Rapido gerekiyor (mevcut: ${available}). Deneme limitine yaklaştın; Premium'a geçerek devam edebilirsin.`,
+            `${featureLabel} requires ${cost} Rapido (available: ${available}). You're close to the trial limit; continue with Premium.`,
           ),
           'info',
           6000
@@ -873,13 +883,13 @@ export function useAnalysis({
       store.addToast(
         pickLanguageCopy(
           uiLanguage,
-          `Yeterli Rapido Kaleminiz yok! (${cost} gerekli)`,
-          `Not enough Rapido pens! (${cost} required)`,
+          `Yetersiz Rapido. ${featureLabel} için ${cost} Rapido gerekiyor, mevcut: ${available}. Rapido yükleyip tekrar dene.`,
+          `Not enough Rapido. ${featureLabel} requires ${cost} Rapido, available: ${available}. Top up and try again.`,
         ),
         'error'
       );
     },
-    [isPremiumUser, store, uiLanguage]
+    [isPremiumUser, rapidoPens, store, uiLanguage]
   );
 
   const getReadyImagePayload = useCallback(
@@ -900,22 +910,50 @@ export function useAnalysis({
     [store, uiLanguage]
   );
 
+  /** Maps the structured codes thrown by lib/ai.ts (formatStructuredAIError) to friendly copy. */
   const toUserErrorMessage = useCallback(
     (error: unknown, fallback?: string) => {
-      const fb = fallback ?? pickLanguageCopy(uiLanguage, 'Bir hata oluştu.', 'Something went wrong.');
+      const fb = fallback ?? pickLanguageCopy(uiLanguage, 'Bir hata oluştu. Lütfen tekrar dene.', 'Something went wrong. Please try again.');
       if (!(error instanceof Error)) return fb;
+      const message = error.message.trim();
 
-      if (error.message.startsWith('RATE_LIMITED:')) {
-        const waitSecondsRaw = Number(error.message.split(':')[1] ?? '60');
-        const waitSeconds = Number.isFinite(waitSecondsRaw) ? Math.max(1, Math.ceil(waitSecondsRaw)) : 60;
+      if (message.includes('RATE_LIMITED')) {
+        const waitSecondsRaw = Number(message.split('RATE_LIMITED:')[1]?.split(/\s/)[0] ?? '60');
+        const waitSeconds = Number.isFinite(waitSecondsRaw) && waitSecondsRaw > 0 ? Math.ceil(waitSecondsRaw) : 60;
         return pickLanguageCopy(
           uiLanguage,
-          `Çok fazla istek gönderdin. Lütfen ${waitSeconds} sn bekleyiniz.`,
-          `Too many requests. Please wait ${waitSeconds} seconds.`,
+          `Çok fazla istek gönderdin. Lütfen ${waitSeconds} sn bekleyip tekrar dene.`,
+          `Too many requests. Please wait ${waitSeconds} seconds and try again.`,
         );
       }
 
-      if (error.message === 'MENTOR_PREMIUM_LIMIT_REACHED') {
+      if (message.includes('INSUFFICIENT_RAPIDO')) {
+        const [, requiredRaw = '', availableRaw = ''] = message.slice(message.indexOf('INSUFFICIENT_RAPIDO')).split(':');
+        const required = Number.parseFloat(requiredRaw);
+        const available = Number.parseFloat(availableRaw);
+        if (Number.isFinite(required) && Number.isFinite(available)) {
+          return pickLanguageCopy(
+            uiLanguage,
+            `Yetersiz Rapido. Bu işlem için ${required} Rapido gerekiyor, mevcut: ${available}. Rapido yükleyip tekrar dene.`,
+            `Not enough Rapido. This action requires ${required} Rapido, available: ${available}. Top up and try again.`,
+          );
+        }
+        return pickLanguageCopy(
+          uiLanguage,
+          'Yetersiz Rapido. Rapido yükleyip tekrar dene.',
+          'Not enough Rapido. Top up and try again.',
+        );
+      }
+
+      if (message.includes('PREMIUM_REQUIRED')) {
+        return pickLanguageCopy(
+          uiLanguage,
+          "Bu özellik Premium üyelere özeldir. Devam etmek için Premium'a geç.",
+          'This feature is for Premium members. Go Premium to continue.',
+        );
+      }
+
+      if (message === 'MENTOR_PREMIUM_LIMIT_REACHED') {
         return pickLanguageCopy(
           uiLanguage,
           'Bu mentor sohbeti 12K limite ulaştı. 2x Rapido ile devam edebilir veya yeni sohbet açabilirsin.',
@@ -923,7 +961,7 @@ export function useAnalysis({
         );
       }
 
-      if (error.message === 'CHAT_TOKEN_LIMIT_REACHED') {
+      if (message === 'CHAT_TOKEN_LIMIT_REACHED') {
         return pickLanguageCopy(
           uiLanguage,
           'Bu mentor sohbetinin token limiti doldu. Yeni sohbet açmalısın.',
@@ -931,9 +969,52 @@ export function useAnalysis({
         );
       }
 
-      return error.message || fb;
+      if (message === 'GUEST_MENTOR_DISABLED') {
+        return pickLanguageCopy(
+          uiLanguage,
+          'AI Mentor misafir hesaplarda kullanılamaz. Devam etmek için hesap oluştur.',
+          'AI Mentor is not available for guest accounts. Create an account to continue.',
+        );
+      }
+
+      // Never surface an unmapped machine code (e.g. "SOME_CODE:1") to the user.
+      if (!message || isMachineErrorCode(message)) return fb;
+      return message;
     },
     [uiLanguage],
+  );
+
+  // In-flight guards: refs (not state) so a second click in the same frame is rejected
+  // before React re-renders the disabled button.
+  const locksRef = useRef<Partial<Record<ActionLock, string>>>({});
+  const revisionBaselineRef = useRef<ProjectSnapshot | null>(null);
+  const lastPreservedPayloadRef = useRef<string | null>(null);
+
+  const runExclusive = useCallback(
+    async <T>(lock: ActionLock, key: string, task: () => Promise<T>): Promise<T | undefined> => {
+      const activeKey = locksRef.current[lock];
+      if (activeKey) {
+        if (lock === 'analysis' && activeKey !== key) {
+          store.addToast(
+            pickLanguageCopy(
+              uiLanguage,
+              'Bir analiz zaten sürüyor. Bitmesini bekleyip tekrar dene.',
+              'An analysis is already running. Wait for it to finish and try again.',
+            ),
+            'info',
+          );
+        }
+        return undefined;
+      }
+
+      locksRef.current[lock] = key;
+      try {
+        return await task();
+      } finally {
+        delete locksRef.current[lock];
+      }
+    },
+    [store, uiLanguage],
   );
 
   // -------------------------------------------------------------------------
@@ -1163,19 +1244,34 @@ export function useAnalysis({
     [buildGalleryPreviewPayload, getJWT, store, user, t]
   );
 
-  const handleShareToCommunity = useCallback(async () => {
+  const buildPremiumSummaryText = useCallback(
+    (premiumData: PremiumData): string =>
+      normalizeCritiqueText(
+        premiumData.summary ||
+          [
+            premiumData.flaws.length > 0
+              ? `${t('Tespit edilen sorunlar', 'Detected issues')}:\n${premiumData.flaws.map((entry, idx) => `${idx + 1}. ${entry.reason}`).join('\n')}`
+              : '',
+            premiumData.practicalSolutions.length > 0
+              ? `${t('Pratik çözümler', 'Practical solutions')}:\n${premiumData.practicalSolutions.map((entry, idx) => `${idx + 1}. ${entry}`).join('\n')}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n\n'),
+      ),
+    [t],
+  );
+
+  const shareToCommunity = useCallback(async (request?: CommunityShareRequest): Promise<boolean> => {
     if (!user?.id) {
       store.addToast(t('Community paylaşımı için giriş yapmalısınız.', 'Sign in to share with the community.'), 'error');
       store.setIsAuthModalOpen(true);
       return false;
     }
 
-    if (typeof window !== 'undefined') {
-      const approved = window.confirm(communityShareConfirmationText(uiLanguage));
-      if (!approved) {
-        store.addToast(t('Community paylaşımı onaylanmadı.', 'Community share was not confirmed.'), 'info');
-        return false;
-      }
+    if (!request?.confirmed) {
+      store.addToast(t('Community paylaşımı onaylanmadı.', 'Community share was not confirmed.'), 'info');
+      return false;
     }
 
     const analysisKind = (store.latestAnalysisKind ?? 'SINGLE_JURY').toUpperCase();
@@ -1192,18 +1288,7 @@ export function useAnalysis({
     }
 
     if (!juryQuote && analysisKind === 'PREMIUM_RESCUE' && store.premiumData) {
-      juryQuote = normalizeCritiqueText(
-        store.premiumData.summary || [
-          store.premiumData.flaws.length > 0
-            ? `Tespit edilen sorunlar:\n${store.premiumData.flaws.map((entry, idx) => `${idx + 1}. ${entry.reason}`).join('\n')}`
-            : '',
-          store.premiumData.practicalSolutions.length > 0
-            ? `Pratik cozumler:\n${store.premiumData.practicalSolutions.map((entry, idx) => `${idx + 1}. ${entry}`).join('\n')}`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n\n'),
-      );
+      juryQuote = buildPremiumSummaryText(store.premiumData);
     }
 
     if (!juryQuote) {
@@ -1216,13 +1301,19 @@ export function useAnalysis({
       juryQuote: juryQuote.substring(0, 1200),
       analysisKind,
     });
-  }, [store, submitGalleryItem, user, t, uiLanguage]);
+  }, [store, submitGalleryItem, user, t, buildPremiumSummaryText]);
 
-  const handlePreserveAnalysis = useCallback(async () => {
+  const handleShareToCommunity = useCallback(
+    async (request?: CommunityShareRequest): Promise<boolean> =>
+      (await runExclusive('share', 'community', () => shareToCommunity(request))) ?? false,
+    [runExclusive, shareToCommunity],
+  );
+
+  const preserveAnalysis = useCallback(async (): Promise<boolean> => {
     if (!user?.id) {
       store.addToast(t('Analizi korumak için giriş yapmalısınız.', 'Sign in to preserve your analysis.'), 'error');
       store.setIsAuthModalOpen(true);
-      return;
+      return false;
     }
 
     const sourceBase64 = (store.imageBase64 ?? '').trim();
@@ -1232,7 +1323,7 @@ export function useAnalysis({
         t('Korunacak pafta verisi bulunamadı. Lütfen analizi tekrar üretin.', 'No board data to preserve. Please run the analysis again.'),
         'error',
       );
-      return;
+      return false;
     }
 
     const analysisKind = (store.latestAnalysisKind ?? 'SINGLE_JURY').toUpperCase();
@@ -1255,18 +1346,7 @@ export function useAnalysis({
         ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length)
         : null;
     } else if (analysisKind === 'PREMIUM_RESCUE' && store.premiumData) {
-      critiquePayload = normalizeCritiqueText(
-        store.premiumData.summary || [
-          store.premiumData.flaws.length > 0
-            ? `Tespit edilen sorunlar:\n${store.premiumData.flaws.map((entry, idx) => `${idx + 1}. ${entry.reason}`).join('\n')}`
-            : '',
-          store.premiumData.practicalSolutions.length > 0
-            ? `Pratik cozumler:\n${store.premiumData.practicalSolutions.map((entry, idx) => `${idx + 1}. ${entry}`).join('\n')}`
-            : '',
-        ]
-          .filter(Boolean)
-          .join('\n\n')
-      );
+      critiquePayload = buildPremiumSummaryText(store.premiumData);
       scorePayload = null;
     } else {
       critiquePayload = normalizeCritiqueText(store.critique || '');
@@ -1275,7 +1355,14 @@ export function useAnalysis({
 
     if (!critiquePayload) {
       store.addToast(t('Korunacak analiz içeriği bulunamadı.', 'No analysis content to preserve.'), 'error');
-      return;
+      return false;
+    }
+
+    // The result screen remounts after navigation; this stops a second paid save of the same report.
+    const preserveSignature = `${analysisKind}\n${critiquePayload}`;
+    if (lastPreservedPayloadRef.current === preserveSignature) {
+      store.addToast(t('Bu analiz zaten korundu.', 'This analysis is already preserved.'), 'info');
+      return true;
     }
 
     try {
@@ -1310,17 +1397,18 @@ export function useAnalysis({
         if (payload.code === 'INSUFFICIENT_RAPIDO') {
           store.addToast(
             t(
-              `Yetersiz Rapido. Gerekli: ${payload.required ?? ANALYSIS_PRESERVE_COST}, Mevcut: ${payload.available ?? 0}`,
-              `Insufficient Rapido. Required: ${payload.required ?? ANALYSIS_PRESERVE_COST}, available: ${payload.available ?? 0}`,
+              `Yetersiz Rapido. Gerekli: ${payload.required ?? ANALYSIS_PRESERVE_COST}, mevcut: ${payload.available ?? 0}. Rapido yükleyip tekrar dene.`,
+              `Not enough Rapido. Required: ${payload.required ?? ANALYSIS_PRESERVE_COST}, available: ${payload.available ?? 0}. Top up and try again.`,
             ),
             'error',
           );
-          return;
+          return false;
         }
 
-        throw new Error(payload.error || t('Analiz korunamadı.', 'Could not preserve analysis.'));
+        throw new Error(payload.error || payload.code || t('Analiz korunamadı.', 'Could not preserve analysis.'));
       }
 
+      lastPreservedPayloadRef.current = preserveSignature;
       store.addToast(
         t(
           `Analiz korundu. ${ANALYSIS_PRESERVE_COST} Rapido düşüldü. Kalan: ${payload.rapido_remaining ?? '-'} Rapido`,
@@ -1329,33 +1417,48 @@ export function useAnalysis({
         'success',
       );
       await refreshProfile();
+      return true;
     } catch (error) {
       console.error('[history] preserve failed:', error);
-      store.addToast(
-        error instanceof Error ? error.message : t('Analiz korunamadı.', 'Could not preserve analysis.'),
-        'error',
-      );
+      store.addToast(toUserErrorMessage(error, t('Analiz korunamadı.', 'Could not preserve analysis.')), 'error');
+      return false;
     }
-  }, [getJWT, refreshProfile, store, user, t]);
+  }, [getJWT, refreshProfile, store, user, t, buildPremiumSummaryText, toUserErrorMessage]);
+
+  const handlePreserveAnalysis = useCallback(
+    async (): Promise<boolean> => (await runExclusive('preserve', 'preserve', preserveAnalysis)) ?? false,
+    [runExclusive, preserveAnalysis],
+  );
 
   // -------------------------------------------------------------------------
-  // handleGalleryConsent
+  // handleGalleryConsent — explicit opt-in for every tier (nothing is published without it)
   // -------------------------------------------------------------------------
-  const handleGalleryConsent = useCallback(
-    async (consent: boolean) => {
+  const submitGalleryConsent = useCallback(
+    async (consent: boolean): Promise<boolean> => {
       store.setGalleryConsent(consent);
-      if (consent && store.galleryPlacement !== 'NONE') {
-        const galleryType = store.galleryPlacement as 'HALL_OF_FAME' | 'WALL_OF_DEATH';
-        await submitGalleryItem(galleryType, { autoApproved: true });
+      if (!consent || store.galleryPlacement === 'NONE') return true;
+
+      const galleryType = store.galleryPlacement as 'HALL_OF_FAME' | 'WALL_OF_DEATH';
+      const isSubmitted = await submitGalleryItem(galleryType, { autoApproved: true });
+      if (!isSubmitted) {
+        // Let the user retry instead of showing "allowed" for a submission that never happened.
+        store.setGalleryConsent(null);
       }
+      return isSubmitted;
     },
-    [store, submitGalleryItem]
+    [store, submitGalleryItem],
+  );
+
+  const handleGalleryConsent = useCallback(
+    async (consent: boolean): Promise<boolean> =>
+      (await runExclusive('gallery', 'gallery', () => submitGalleryConsent(consent))) ?? false,
+    [runExclusive, submitGalleryConsent],
   );
 
   // -------------------------------------------------------------------------
   // handleAnalyze — SINGLE_JURY or REVISION_SAME
   // -------------------------------------------------------------------------
-  const handleAnalyze = useCallback(async () => {
+  const runSingleOrRevision = useCallback(async () => {
     const { imageBase64, mimeType, formData, pdfText, isRevisionMode, previousProject, additionalUploads } = store;
     const readyPayload = getReadyImagePayload(imageBase64, mimeType);
     if (!readyPayload) return;
@@ -1372,7 +1475,12 @@ export function useAnalysis({
       return;
     }
 
-    if (isRevisionMode && previousProject) {
+    // The newest revised board lives in revisionBaselineRef so the store's previousProject can keep
+    // showing the true "before" board in the evolution view.
+    const revisionBaseline: ProjectSnapshot | null =
+      isRevisionMode && previousProject ? (revisionBaselineRef.current ?? previousProject) : null;
+
+    if (revisionBaseline) {
       if (rapidoPens < RAPIDO_COSTS.REVISION_SAME) {
         handleInsufficientRapido(RAPIDO_COSTS.REVISION_SAME, t('Revizyon analizi', 'Revision analysis'));
         return;
@@ -1385,13 +1493,13 @@ export function useAnalysis({
     }
 
     void trackConversionEvent('critique_started', {
-      type: isRevisionMode && previousProject ? 'revision' : 'standard',
+      type: revisionBaseline ? 'revision' : 'standard',
       isPremium: isPremiumUser,
     });
     store.setStep('analyzing');
 
     try {
-      if (isRevisionMode && previousProject) {
+      if (revisionBaseline) {
         const aiResponse = await generateAIResponse({
           locale: uiLanguage,
           operation: 'REVISION_SAME',
@@ -1406,7 +1514,7 @@ export function useAnalysis({
             harshness: formData.harshness,
             analysisLength: formData.analysisLength,
             pdfText: pdfText?.substring(0, 1000),
-            previousCritique: previousProject.critique,
+            previousCritique: revisionBaseline.critique,
             additionalFiles,
           }),
         });
@@ -1430,27 +1538,26 @@ export function useAnalysis({
           store.setGalleryPlacement(placement);
           store.setGalleryConsent(null);
           const previewPayload = await buildGalleryPreviewPayload();
-          store.setPreviousProject({
+          revisionBaselineRef.current = {
             imageBase64: previewPayload?.imageBase64 ?? readyImageBase64,
             mimeType: previewPayload?.mimeType ?? readyMimeType,
             critique,
+          };
+          store.setPreviousProject({
+            imageBase64: revisionBaseline.imageBase64,
+            mimeType: revisionBaseline.mimeType,
+            critique: revisionBaseline.critique,
           });
+          store.setLatestAnalysisKind('REVISION_SAME');
           store.setStep('result');
           void trackConversionEvent('critique_completed', {
             type: 'revision',
             isPremium: isPremiumUser,
           });
 
-          store.setLatestAnalysisKind('REVISION_SAME');
-
-          if (!isPremiumUser && placement !== 'NONE') {
-            store.setGalleryConsent(true);
-            void submitGalleryItem(placement, { autoApproved: true });
-          }
-
           if (data.isSameProject) {
             if ((typeof data.progressionScore === 'number' ? data.progressionScore : 0) > 50) {
-              confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#10B981', '#ffffff'] });
+              fireConfetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#10B981', '#ffffff'] });
             }
           } else {
             store.setLastProgression(null);
@@ -1506,23 +1613,19 @@ export function useAnalysis({
           store.setGalleryPlacement(placement);
           store.setGalleryConsent(null);
           const previewPayload = await buildGalleryPreviewPayload();
+          // A fresh jury run starts a new revision chain: this board becomes the next baseline.
+          revisionBaselineRef.current = null;
           store.setPreviousProject({
             imageBase64: previewPayload?.imageBase64 ?? readyImageBase64,
             mimeType: previewPayload?.mimeType ?? readyMimeType,
             critique,
           });
+          store.setLatestAnalysisKind('SINGLE_JURY');
           store.setStep('result');
           void trackConversionEvent('critique_completed', {
             type: 'standard',
             isPremium: isPremiumUser,
           });
-
-          store.setLatestAnalysisKind('SINGLE_JURY');
-
-          if (!isPremiumUser && placement !== 'NONE') {
-            store.setGalleryConsent(true);
-            void submitGalleryItem(placement, { autoApproved: true });
-          }
         } else {
           store.addToast(t('Jüri sessiz kaldı. Tekrar dene.', 'The jury stayed silent. Try again.'), 'error');
           store.setStep('upload');
@@ -1534,7 +1637,7 @@ export function useAnalysis({
         scope: 'analysis.single_or_revision',
         message: 'Analysis request failed',
         details: {
-          operation: isRevisionMode ? 'REVISION_SAME' : 'SINGLE_JURY',
+          operation: revisionBaseline ? 'REVISION_SAME' : 'SINGLE_JURY',
           error: error instanceof Error ? error.message : String(error),
         },
       });
@@ -1552,16 +1655,20 @@ export function useAnalysis({
     getReadyImagePayload,
     toUserErrorMessage,
     buildGalleryPreviewPayload,
-    submitGalleryItem,
     withLanguage,
     t,
     uiLanguage,
   ]);
 
+  const handleAnalyze = useCallback(
+    () => runExclusive('analysis', 'single-jury', runSingleOrRevision),
+    [runExclusive, runSingleOrRevision],
+  );
+
   // -------------------------------------------------------------------------
   // handleMultiAnalyze — MULTI_JURY (Premium)
   // -------------------------------------------------------------------------
-  const handleMultiAnalyze = useCallback(async () => {
+  const runMultiJury = useCallback(async () => {
     const { imageBase64, mimeType, additionalUploads, formData, pdfText } = store;
     const readyPayload = getReadyImagePayload(imageBase64, mimeType);
     if (!readyPayload) return;
@@ -1586,13 +1693,7 @@ export function useAnalysis({
       return;
     }
     if (rapidoPens < RAPIDO_COSTS.MULTI_JURY) {
-      store.addToast(
-        t(
-          `Yeterli Rapido Kaleminiz yok! (Çoklu Jüri analizi ${RAPIDO_COSTS.MULTI_JURY} Rapido gerektirir)`,
-          `Not enough Rapido pens! (Multi jury requires ${RAPIDO_COSTS.MULTI_JURY} Rapido)`,
-        ),
-        'error'
-      );
+      handleInsufficientRapido(RAPIDO_COSTS.MULTI_JURY, t('Çoklu Jüri analizi', 'Multi jury analysis'));
       return;
     }
 
@@ -1651,44 +1752,30 @@ export function useAnalysis({
       }
     } catch (e) {
       console.error(e);
-      const errorMessage = toUserErrorMessage(
-        e,
-        pickLanguageCopy(uiLanguage, 'Jüriler toplanamadı.', 'Could not gather the jury.'),
-      );
       void reportClientError({
         scope: 'analysis.multi_jury',
         message: 'Multi jury request failed',
         details: {
-          error: errorMessage,
+          error: e instanceof Error ? e.message : String(e),
         },
       });
-
-      if (errorMessage === 'PREMIUM_REQUIRED') {
-        store.addToast(t('Çoklu Jüri analizi Premium üyelere özeldir!', 'Multi jury is for Premium members only!'), 'error');
-      } else if (errorMessage.startsWith('INSUFFICIENT_RAPIDO')) {
-        store.addToast(
-          t(
-            `Yeterli Rapido Kaleminiz yok! (Çoklu Jüri analizi ${RAPIDO_COSTS.MULTI_JURY} Rapido gerektirir)`,
-            `Not enough Rapido pens! (Multi jury requires ${RAPIDO_COSTS.MULTI_JURY} Rapido)`,
-          ),
-          'error'
-        );
-      } else {
-        store.addToast(
-          errorMessage || t('Jüriler toplanamadı.', 'Could not gather the jury.'),
-          'error',
-        );
-      }
-
+      store.addToast(toUserErrorMessage(e, t('Jüriler toplanamadı. Tekrar dene.', 'Could not gather the jury. Try again.')), 'error');
       store.setStep('upload');
     }
-  }, [store, isPremiumUser, multiJuryPromoActive, rapidoPens, refreshProfile, getReadyImagePayload, toUserErrorMessage, withLanguage, responseLanguage, uiLanguage, t]);
+  }, [store, isPremiumUser, multiJuryPromoActive, rapidoPens, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, responseLanguage, uiLanguage, t]);
+
+  const handleMultiAnalyze = useCallback(
+    () => runExclusive('analysis', 'multi-jury', runMultiJury),
+    [runExclusive, runMultiJury],
+  );
 
   // -------------------------------------------------------------------------
   // handlePremium — PREMIUM_RESCUE
   // -------------------------------------------------------------------------
-  const handlePremium = useCallback(async () => {
+  const runPremiumRescue = useCallback(async () => {
     const { image, imageBase64, mimeType, formData, pdfText, additionalUploads, multiData } = store;
+    // A failed rescue must land back on the screen the user started from, never on an empty result.
+    const returnStep: StepType = store.step === 'multi-result' && multiData ? 'multi-result' : 'result';
     const readyPayload = getReadyImagePayload(imageBase64, mimeType);
     if (!readyPayload) return;
     const { imageBase64: readyImageBase64, mimeType: readyMimeType } = readyPayload;
@@ -1698,16 +1785,35 @@ export function useAnalysis({
       return;
     }
 
-    const premiumPrepared = await preparePremiumRescueInputs({
-      image,
-      imageBase64: readyImageBase64,
-      mimeType: readyMimeType,
-      additionalUploads: (additionalUploads ?? []).map((entry) => ({
-        name: entry.name,
-        mimeType: entry.mimeType,
-        base64: entry.base64,
-      })),
-    });
+    let premiumPrepared: PremiumRescuePreparation;
+    try {
+      premiumPrepared = await preparePremiumRescueInputs({
+        image,
+        imageBase64: readyImageBase64,
+        mimeType: readyMimeType,
+        additionalUploads: (additionalUploads ?? []).map((entry) => ({
+          name: entry.name,
+          mimeType: entry.mimeType,
+          base64: entry.base64,
+        })),
+      });
+    } catch (error) {
+      void reportClientError({
+        scope: 'analysis.premium_rescue.prepare',
+        message: 'Premium rescue page preparation failed',
+        details: {
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      store.addToast(
+        t(
+          'Paftalar hazırlanamadı. Dosyayı yeniden yükleyip tekrar dene.',
+          'Could not prepare your sheets. Re-upload the file and try again.',
+        ),
+        'error',
+      );
+      return;
+    }
 
     void trackConversionEvent('critique_started', {
       type: 'premium',
@@ -1763,19 +1869,19 @@ export function useAnalysis({
             type: 'premium',
             isPremium: isPremiumUser,
           });
-          confetti({
+          fireConfetti({
             particleCount: 100,
             spread: 70,
             origin: { y: 0.6 },
             colors: ['#FF0033', '#ffffff', '#0A0F1A'],
           });
         } else {
-          store.addToast(t('Analiz başarısız oldu.', 'Analysis failed.'), 'error');
-          store.setStep('result');
+          store.addToast(t('Kurtarma analizi sonuç üretmedi. Tekrar dene.', 'The rescue analysis returned no result. Try again.'), 'error');
+          store.setStep(returnStep);
         }
       } else {
-        store.addToast(t('Analiz başarısız oldu.', 'Analysis failed.'), 'error');
-        store.setStep('result');
+        store.addToast(t('Kurtarma analizi sonuç üretmedi. Tekrar dene.', 'The rescue analysis returned no result. Try again.'), 'error');
+        store.setStep(returnStep);
       }
     } catch (error) {
       console.error(error);
@@ -1787,15 +1893,23 @@ export function useAnalysis({
         },
       });
       store.addToast(toUserErrorMessage(error), 'error');
-      store.setStep('result');
+      store.setStep(returnStep);
     }
   }, [store, rapidoPens, isPremiumUser, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, responseLanguage, uiLanguage, t]);
+
+  const handlePremium = useCallback(
+    () => runExclusive('analysis', 'premium-rescue', runPremiumRescue),
+    [runExclusive, runPremiumRescue],
+  );
 
   // -------------------------------------------------------------------------
   // handleAutoConcept — AUTO_CONCEPT
   // -------------------------------------------------------------------------
-  const handleAutoConcept = useCallback(async () => {
-    const { imageBase64, mimeType, additionalUploads, formData } = store;
+  const runAutoConcept = useCallback(async () => {
+    const { imageBase64, mimeType, additionalUploads, formData, critique: currentCritique } = store;
+    // From the result screen the concept text is added below the paid report instead of replacing it.
+    const shouldAppendToReport = store.step === 'result' && Boolean(currentCritique?.trim());
+    const fallbackStep: StepType = shouldAppendToReport ? 'result' : 'upload';
     const readyPayload = getReadyImagePayload(imageBase64, mimeType);
     if (!readyPayload) return;
     const { imageBase64: readyImageBase64, mimeType: readyMimeType } = readyPayload;
@@ -1832,22 +1946,33 @@ export function useAnalysis({
         const data = safeParseJsonObject(aiResponse.result);
         const critiqueText = normalizeCritiqueText(typeof data.critique === 'string' ? data.critique : '');
         await refreshProfile();
-        store.setLastProgression(null);
-        store.setCritique(critiqueText);
-        store.setGalleryPlacement('NONE');
-        store.setGalleryConsent(null);
-        store.setPreviousProject(null);
 
-        store.setLatestAnalysisKind('AUTO_CONCEPT');
+        if (shouldAppendToReport && currentCritique) {
+          store.setCritique(
+            appendReportSection(currentCritique, analysisKindLabel('AUTO_CONCEPT', uiLanguage), critiqueText),
+          );
+          store.setStep('result');
+          store.addToast(
+            t('Konsept metni jüri raporunun altına eklendi.', 'Concept text was added below the jury report.'),
+            'success',
+          );
+        } else {
+          store.setLastProgression(null);
+          store.setCritique(critiqueText);
+          store.setGalleryPlacement('NONE');
+          store.setGalleryConsent(null);
+          store.setPreviousProject(null);
+          store.setLatestAnalysisKind('AUTO_CONCEPT');
+          store.setStep('result');
+        }
 
-        store.setStep('result');
         void trackConversionEvent('critique_completed', {
           type: 'auto_concept',
           isPremium: isPremiumUser,
         });
       } else {
         store.addToast(t('İlham gelmedi. Tekrar dene.', 'No inspiration came through. Try again.'), 'error');
-        store.setStep('upload');
+        store.setStep(fallbackStep);
       }
     } catch (error) {
       console.error(error);
@@ -1859,14 +1984,19 @@ export function useAnalysis({
         },
       });
       store.addToast(toUserErrorMessage(error), 'error');
-      store.setStep('upload');
+      store.setStep(fallbackStep);
     }
   }, [store, rapidoPens, isPremiumUser, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
+
+  const handleAutoConcept = useCallback(
+    () => runExclusive('analysis', 'auto-concept', runAutoConcept),
+    [runExclusive, runAutoConcept],
+  );
 
   // -------------------------------------------------------------------------
   // handleMaterialBoard — MATERIAL_BOARD (Premium)
   // -------------------------------------------------------------------------
-  const handleMaterialBoard = useCallback(async () => {
+  const runMaterialBoard = useCallback(async () => {
     const { imageBase64, mimeType, additionalUploads, formData } = store;
     const readyPayload = getReadyImagePayload(imageBase64, mimeType);
     if (!readyPayload) return;
@@ -1939,7 +2069,12 @@ export function useAnalysis({
     }
   }, [store, isPremiumUser, rapidoPens, refreshProfile, handleInsufficientRapido, getReadyImagePayload, toUserErrorMessage, withLanguage, uiLanguage, t]);
 
-  const handleDesignInsight = useCallback(async (operation: DesignInsightOperation) => {
+  const handleMaterialBoard = useCallback(
+    () => runExclusive('analysis', 'material-board', runMaterialBoard),
+    [runExclusive, runMaterialBoard],
+  );
+
+  const runDesignInsight = useCallback(async (operation: DesignInsightOperation) => {
     const {
       imageBase64,
       mimeType,
@@ -1962,7 +2097,9 @@ export function useAnalysis({
       mimeType: entry.mimeType,
       base64: entry.base64,
     }));
-    const fallbackStep = operation === 'SKILL_ROADMAP' ? 'result' : 'upload';
+    // From the result screen (e.g. Skill Roadmap) the output is added below the paid report instead of replacing it.
+    const shouldAppendToReport = store.step === 'result' && Boolean(currentCritique?.trim());
+    const fallbackStep: StepType = shouldAppendToReport || operation === 'SKILL_ROADMAP' ? 'result' : 'upload';
 
     void trackConversionEvent('critique_started', {
       type: operation.toLowerCase(),
@@ -1996,12 +2133,22 @@ export function useAnalysis({
       const { critique } = parseCritiqueResult(aiResponse.result);
       applyGameState(aiResponse.game_state);
       await refreshProfile();
-      store.setLastProgression(null);
-      store.setCritique(critique);
-      store.setGalleryPlacement('NONE');
-      store.setGalleryConsent(null);
-      store.setLatestAnalysisKind(operation);
-      store.setStep('result');
+      if (shouldAppendToReport && currentCritique) {
+        const sectionLabel = analysisKindLabel(operation, uiLanguage);
+        store.setCritique(appendReportSection(currentCritique, sectionLabel, critique));
+        store.setStep('result');
+        store.addToast(
+          t(`${sectionLabel} raporun altına eklendi.`, `${sectionLabel} was added below the report.`),
+          'success',
+        );
+      } else {
+        store.setLastProgression(null);
+        store.setCritique(critique);
+        store.setGalleryPlacement('NONE');
+        store.setGalleryConsent(null);
+        store.setLatestAnalysisKind(operation);
+        store.setStep('result');
+      }
 
       void trackConversionEvent('critique_completed', {
         type: operation.toLowerCase(),
@@ -2033,10 +2180,16 @@ export function useAnalysis({
     withLanguage,
   ]);
 
+  const handleDesignInsight = useCallback(
+    (operation: DesignInsightOperation) =>
+      runExclusive('analysis', `design-insight:${operation}`, () => runDesignInsight(operation)),
+    [runExclusive, runDesignInsight],
+  );
+
   // -------------------------------------------------------------------------
   // handleDefenseSubmit — DEFENSE (Premium, up to 3 turns)
   // -------------------------------------------------------------------------
-  const handleDefenseSubmit = useCallback(async () => {
+  const runDefenseTurn = useCallback(async () => {
     const { defenseInput, isDefenseLoading, defenseTurnCount, defenseMessages, critique, formData } = store;
     if (!defenseInput.trim() || isDefenseLoading) return;
 
@@ -2099,7 +2252,7 @@ export function useAnalysis({
           if (scoreChange !== 0) {
             store.setLastProgression(scoreChange);
             if (scoreChange > 0) {
-              confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#10B981', '#ffffff'] });
+              fireConfetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#10B981', '#ffffff'] });
               store.addToast(t(`Jüriyi ikna ettin! +${scoreChange} Puan!`, `You convinced the jury! +${scoreChange} points!`), 'success');
             } else {
               store.addToast(t(`Jüri ikna olmadı... ${scoreChange} Puan!`, `The jury was not convinced... ${scoreChange} points!`), 'info');
@@ -2126,6 +2279,11 @@ export function useAnalysis({
       store.setIsDefenseLoading(false);
     }
   }, [store, isPremiumUser, rapidoPens, refreshProfile, applyGameState, handleInsufficientRapido, toUserErrorMessage, withLanguage, uiLanguage, t]);
+
+  const handleDefenseSubmit = useCallback(
+    () => runExclusive('defense', 'defense', runDefenseTurn),
+    [runExclusive, runDefenseTurn],
+  );
 
   return {
     handleAnalyze,
