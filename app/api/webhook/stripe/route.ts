@@ -134,6 +134,11 @@ export async function POST(request: NextRequest) {
                 await handlePaymentFailed(invoice);
                 break;
             }
+            case 'invoice.paid': {
+                const invoice = event.data.object as Stripe.Invoice;
+                await handleInvoicePaid(invoice);
+                break;
+            }
         }
     } catch (error) {
         logServerError('webhook.stripe.handler', error, { eventId: event.id, eventType: event.type });
@@ -339,18 +344,56 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
     });
 }
 
+/** Stripe moved the subscription reference to `parent.subscription_details` in newer API versions. */
+function getInvoiceSubscriptionId(invoice: Stripe.Invoice): string {
+    const legacy = (invoice as Stripe.Invoice & { subscription?: string | Stripe.Subscription | null }).subscription;
+    const fromParent = invoice.parent?.subscription_details?.subscription;
+    const candidate = fromParent ?? legacy;
+    if (typeof candidate === 'string') return candidate;
+    if (candidate && typeof candidate === 'object' && 'id' in candidate) return String(candidate.id);
+    return '';
+}
+
+/**
+ * Renewal invoices refill the monthly Premium allowance (same "top up to at least
+ * TIER_DEFAULTS.PREMIUM" rule as the first purchase). The first invoice is skipped because
+ * checkout.session.completed already granted it.
+ */
+async function handleInvoicePaid(invoice: Stripe.Invoice) {
+    if (invoice.billing_reason !== 'subscription_cycle') return;
+
+    const subscriptionId = getInvoiceSubscriptionId(invoice);
+    if (!subscriptionId) return;
+
+    const profile = await findProfileBySubscriptionId(subscriptionId);
+    if (!profile) return;
+
+    const currentRapido = Number.isFinite(profile.rapido_pens) ? profile.rapido_pens : 0;
+    const rapidoDelta = Math.max(0, TIER_DEFAULTS.PREMIUM - currentRapido);
+    const nextRapidoBalance = rapidoDelta > 0
+        ? await creditRapidoPens(profile.id, profile, rapidoDelta)
+        : currentRapido;
+
+    await updateProfileById(profile.id, {
+        is_premium: true,
+        subscription_status: 'active',
+    });
+
+    await recordBillingEventSafely({
+        userId: profile.id,
+        eventType: 'premium_renewal',
+        amountCents: typeof invoice.amount_paid === 'number' ? invoice.amount_paid : 0,
+        currency: (invoice.currency || 'try').toLowerCase(),
+        rapidoDelta,
+        rapidoBalanceAfter: nextRapidoBalance,
+        stripeCustomerId: typeof invoice.customer === 'string' ? invoice.customer : null,
+        stripeSubscriptionId: subscriptionId,
+        metadata: { invoiceId: invoice.id ?? null },
+    });
+}
+
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
-    const invoiceWithSubscription = invoice as Stripe.Invoice & {
-        subscription?: string | Stripe.Subscription | null;
-    };
-    const subscriptionId =
-        typeof invoiceWithSubscription.subscription === 'string'
-            ? invoiceWithSubscription.subscription
-            : invoiceWithSubscription.subscription &&
-                typeof invoiceWithSubscription.subscription === 'object' &&
-                'id' in invoiceWithSubscription.subscription
-                ? String(invoiceWithSubscription.subscription.id)
-                : '';
+    const subscriptionId = getInvoiceSubscriptionId(invoice);
     if (!subscriptionId) return;
 
     const profile = await findProfileBySubscriptionId(subscriptionId);

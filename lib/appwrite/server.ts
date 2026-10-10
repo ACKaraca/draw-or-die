@@ -140,6 +140,18 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return getAdminEmails().includes(email.trim().toLowerCase());
 }
+
+/**
+ * Primary email that may be trusted for privileges (admin, student pricing). An unverified
+ * address can be typed in by anyone at signup, so it never grants anything.
+ */
+export function getVerifiedEmail(user: Pick<AppwriteAuthUser, 'email' | 'emailVerified'>): string | null {
+  return user.emailVerified === true && user.email ? user.email : null;
+}
+
+export function isVerifiedAdmin(user: Pick<AppwriteAuthUser, 'email' | 'emailVerified'>): boolean {
+  return isAdminEmail(getVerifiedEmail(user));
+}
 export const APPWRITE_BUCKET_GALLERY_ID = process.env.APPWRITE_BUCKET_GALLERY_ID ?? 'gallery';
 
 const EARLY_REGISTRATION_BONUS_LIMIT = 100;
@@ -151,6 +163,10 @@ export type AppwriteAuthUser = {
   id: string;
   email: string | null;
   name: string | null;
+  /** Appwrite `emailVerification`; absent for users built from ids only (e.g. webhooks). */
+  emailVerified?: boolean;
+  /** Account registration timestamp (ISO). */
+  createdAt?: string | null;
 };
 
 function createBaseClient(): Client {
@@ -213,6 +229,8 @@ export async function getUserFromJwt(jwt: string): Promise<AppwriteAuthUser | nu
       id: user.$id,
       email: user.email ?? null,
       name: user.name ?? null,
+      emailVerified: user.emailVerification === true,
+      createdAt: user.registration || user.$createdAt || null,
     };
     writeCachedJwtUser(cacheKey, authUser);
     return authUser;

@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     await ensureCoreAppwriteResources();
     await getOrCreateProfile(user);
 
-    const result = await applyReferralReward(user.id);
+    const result = await applyReferralReward(user);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 500 });

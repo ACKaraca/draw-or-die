@@ -4,7 +4,7 @@ import { LegalBrandHeader } from '@/components/LegalBrandHeader';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalizedFour } from '@/lib/i18n';
 
-const PRIVACY_CONTACT_EMAIL = 'destek@drawordie.app';
+const PRIVACY_CONTACT_EMAIL = 'support@ackaraca.me';
 
 type LocalizedText = { tr: string; en: string; de: string; it: string };
 

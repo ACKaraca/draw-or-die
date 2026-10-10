@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     await ensureCoreAppwriteResources();
     await getOrCreateProfile(user);
 
-    const result = await linkReferralToUser(user.id, code);
+    const result = await linkReferralToUser(user, code);
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 422 });

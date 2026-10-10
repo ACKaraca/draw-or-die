@@ -72,6 +72,7 @@ describe('useAuth', () => {
     expect(result.current.user).toEqual({
       id: 'user-1',
       email: 'user@example.com',
+      emailVerified: false,
       name: 'User One',
       identities: [{ provider: 'email' }],
     });

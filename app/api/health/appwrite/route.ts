@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getAuthenticatedUserFromRequest, isAdminEmail } from '@/lib/appwrite/server';
+import { getAuthenticatedUserFromRequest, isVerifiedAdmin } from '@/lib/appwrite/server';
 import { validateCoreAppwriteResources } from '@/lib/appwrite/resource-validation';
 
 type ValidationIssue = Awaited<ReturnType<typeof validateCoreAppwriteResources>>[number];
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
   const { issues, timestamp } = await getValidationSnapshot();
   // Raw Appwrite error messages can leak internals; only admins get the details.
-  const visibleIssues = isAdminEmail(user.email)
+  const visibleIssues = isVerifiedAdmin(user)
     ? issues
     : issues.map(({ resource }) => ({ resource }));
 

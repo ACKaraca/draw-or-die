@@ -21,6 +21,8 @@ jest.mock('next/server', () => ({
 jest.mock('@/lib/appwrite/server', () => ({
   getAuthenticatedUserFromRequest: jest.fn(),
   getOrCreateProfile: jest.fn(),
+  getVerifiedEmail: (user: { email: string | null; emailVerified?: boolean }) =>
+    (user.emailVerified === true && user.email ? user.email : null),
 }));
 
 jest.mock('@/lib/rate-limit', () => ({
@@ -340,6 +342,7 @@ describe('POST /api/checkout', () => {
       id: 'user-student',
       email: 'student@itu.edu.tr',
       name: 'Student User',
+      emailVerified: true,
     });
     const POST = await loadRoute();
 
@@ -357,5 +360,22 @@ describe('POST /api/checkout', () => {
         cancel_url: 'https://app.drawor-die.com?checkout=cancelled',
       })
     );
+  });
+
+  it('does not grant student pricing for an unverified edu.tr signup email', async () => {
+    mockedGetAuthenticatedUserFromRequest.mockResolvedValueOnce({
+      id: 'user-unverified',
+      email: 'someone@itu.edu.tr',
+      name: 'Unverified',
+      emailVerified: false,
+    });
+    const POST = await loadRoute();
+
+    await POST(
+      createRequest({ mode: 'premium_yearly' }) as never
+    );
+
+    const sessionArgs = mockCreateSession.mock.calls[0][0] as { line_items: Array<{ price: string }> };
+    expect(sessionArgs.line_items[0].price).not.toBe('price_1TJfafR9Q18j8gkWATTSoYr5');
   });
 });

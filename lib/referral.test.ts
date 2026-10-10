@@ -1,0 +1,85 @@
+const mockGetOrCreateProfile = jest.fn();
+const mockGetFeatureFlag = jest.fn();
+const mockFindProfileByReferralCode = jest.fn();
+const mockUpdateProfileById = jest.fn();
+const mockRecordBillingEvent = jest.fn();
+const mockClaimOnce = jest.fn();
+const mockReleaseClaim = jest.fn();
+const mockCreditRapidoPens = jest.fn();
+
+jest.mock('@/lib/appwrite/server', () => ({
+  getOrCreateProfile: (...args: unknown[]) => mockGetOrCreateProfile(...args),
+  getFeatureFlag: (...args: unknown[]) => mockGetFeatureFlag(...args),
+  findProfileByReferralCode: (...args: unknown[]) => mockFindProfileByReferralCode(...args),
+  updateProfileById: (...args: unknown[]) => mockUpdateProfileById(...args),
+  recordBillingEvent: (...args: unknown[]) => mockRecordBillingEvent(...args),
+}));
+jest.mock('@/lib/idempotency', () => ({
+  claimOnce: (...args: unknown[]) => mockClaimOnce(...args),
+  releaseClaim: (...args: unknown[]) => mockReleaseClaim(...args),
+}));
+jest.mock('@/lib/rapido-balance', () => ({
+  creditRapidoPens: (...args: unknown[]) => mockCreditRapidoPens(...args),
+}));
+jest.mock('@/lib/logger', () => ({ logServerError: jest.fn() }));
+
+import type { AppwriteAuthUser } from '@/lib/appwrite/server';
+import { applyReferralReward, linkReferralToUser } from '@/lib/referral';
+
+const NOW_ISO = new Date().toISOString();
+const OLD_ISO = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
+
+function makeUser(overrides: Partial<AppwriteAuthUser> = {}): AppwriteAuthUser {
+  return { id: 'new-user', email: 'new@example.com', name: 'New', emailVerified: true, createdAt: NOW_ISO, ...overrides };
+}
+
+describe('referral hardening', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetFeatureFlag.mockResolvedValue(null);
+    mockGetOrCreateProfile.mockResolvedValue({ id: 'new-user', rapido_pens: 15, referred_by: 'ABCD1234', referral_rewarded_at: null });
+    mockFindProfileByReferralCode.mockResolvedValue({ id: 'referrer', row_id: 'referrer', rapido_pens: 3 });
+    mockClaimOnce.mockResolvedValue(true);
+    mockCreditRapidoPens.mockResolvedValue(20);
+    mockUpdateProfileById.mockResolvedValue({});
+    mockRecordBillingEvent.mockResolvedValue({});
+  });
+
+  it('rejects linking from anonymous accounts', async () => {
+    const result = await linkReferralToUser(makeUser({ email: null }), 'ABCD1234');
+    expect(result.success).toBe(false);
+    expect(mockUpdateProfileById).not.toHaveBeenCalled();
+  });
+
+  it('rejects linking from old accounts', async () => {
+    const result = await linkReferralToUser(makeUser({ createdAt: OLD_ISO }), 'ABCD1234');
+    expect(result.success).toBe(false);
+  });
+
+  it('does not reward an unverified email', async () => {
+    const result = await applyReferralReward(makeUser({ emailVerified: false }));
+    expect(result).toEqual({ success: true, rewarded: false });
+    expect(mockCreditRapidoPens).not.toHaveBeenCalled();
+  });
+
+  it('rewards both sides once for a verified new account', async () => {
+    const result = await applyReferralReward(makeUser());
+    expect(result).toEqual({ success: true, rewarded: true, rapido: 5 });
+    expect(mockClaimOnce).toHaveBeenCalledWith('referral-reward:new-user');
+    expect(mockCreditRapidoPens).toHaveBeenCalledTimes(2);
+  });
+
+  it('pays nothing when a parallel request already claimed the reward', async () => {
+    mockClaimOnce.mockResolvedValue(false);
+    const result = await applyReferralReward(makeUser());
+    expect(result.rewarded).toBe(false);
+    expect(mockCreditRapidoPens).not.toHaveBeenCalled();
+  });
+
+  it('releases the claim when crediting fails', async () => {
+    mockCreditRapidoPens.mockRejectedValueOnce(new Error('appwrite down'));
+    const result = await applyReferralReward(makeUser());
+    expect(result.success).toBe(false);
+    expect(mockReleaseClaim).toHaveBeenCalledWith('referral-reward:new-user');
+  });
+});

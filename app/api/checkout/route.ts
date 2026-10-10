@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { STRIPE_PRICES, StripeTierKey, resolveStripeTierForUser } from '@/lib/pricing';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
-import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwrite/server';
+import { getAuthenticatedUserFromRequest, getOrCreateProfile, getVerifiedEmail } from '@/lib/appwrite/server';
 import { ensureCommerceAppwriteResources, ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { validatePromoForCheckout } from '@/lib/promo-codes';
 import { getRequestLanguage } from '@/lib/server-i18n';
@@ -257,9 +257,9 @@ export async function POST(request: NextRequest) {
 
         // Determine pricing tier based on verified edu email (if available)
         const profile = await getOrCreateProfile(user);
-        const email = user.email ?? '';
+        // Student pricing from the signup email only once that email is verified.
         const tierKey = resolveStripeTierForUser({
-            primaryEmail: email,
+            primaryEmail: getVerifiedEmail(user),
             eduVerified: profile.edu_verified,
             eduEmail: profile.edu_email,
         });
@@ -335,7 +335,7 @@ export async function POST(request: NextRequest) {
         );
 
         const session = await stripe.checkout.sessions.create({
-            customer_email: email || undefined,
+            customer_email: user.email || undefined,
             client_reference_id: user.id,
             mode: checkoutMode,
             line_items: lineItems,

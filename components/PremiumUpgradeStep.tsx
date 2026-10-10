@@ -52,8 +52,9 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
     const setIsAuthModalOpen = useDrawOrDieStore((s) => s.setIsAuthModalOpen);
 
     const email = user?.email ?? '';
+    // Mirrors the server: the signup email only unlocks student pricing once verified.
     const tierKey = resolveStripeTierForUser({
-        primaryEmail: email,
+        primaryEmail: user?.emailVerified ? email : null,
         eduVerified: profile?.edu_verified,
         eduEmail: profile?.edu_email,
     });

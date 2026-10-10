@@ -3,7 +3,9 @@ import {
   APPWRITE_TABLE_PROFILES_ID,
   getAdminTables,
   getProfileRowForUser,
+  updateProfileById,
   updateProfileRowById,
+  type NormalizedUserProfile,
   type UserProfileRow,
 } from '@/lib/appwrite/server';
 import { logServerError } from '@/lib/logger';
@@ -74,4 +76,32 @@ export async function deductRapidoCents(params: {
     rapido_fraction_cents: rapidoFractionCents,
   });
   return nextCents;
+}
+
+/**
+ * Adds whole Rapido to a profile and returns the new balance. Uses an atomic increment when the
+ * profile row id is known, so concurrent charges/credits can't overwrite each other.
+ */
+export async function creditRapidoPens(
+  userId: string,
+  profile: Pick<NormalizedUserProfile, 'row_id' | 'rapido_pens'>,
+  amount: number,
+): Promise<number> {
+  const value = Math.max(0, Math.trunc(amount));
+  if (value === 0) return profile.rapido_pens;
+
+  if (profile.row_id) {
+    const updated = await getAdminTables().incrementRowColumn<UserProfileRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROFILES_ID,
+      rowId: profile.row_id,
+      column: 'rapido_pens',
+      value,
+    });
+    return Number.isFinite(updated.rapido_pens) ? Number(updated.rapido_pens) : profile.rapido_pens + value;
+  }
+
+  const nextBalance = profile.rapido_pens + value;
+  await updateProfileById(userId, { rapido_pens: nextBalance });
+  return nextBalance;
 }

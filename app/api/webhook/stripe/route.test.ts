@@ -358,4 +358,56 @@ describe('POST /api/webhook/stripe', () => {
       expect.objectContaining({ is_premium: false }),
     );
   });
+
+  it('refills the premium allowance on a renewal invoice', async () => {
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_renewal',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_1',
+          billing_reason: 'subscription_cycle',
+          amount_paid: 14900,
+          currency: 'try',
+          customer: 'cus_1',
+          parent: { subscription_details: { subscription: 'sub_123' } },
+        },
+      },
+    });
+    mockFindProfileBySubscriptionId.mockResolvedValue({ id: 'user-1', row_id: 'profile-row-1', rapido_pens: 40 });
+    mockIncrementRowColumn.mockResolvedValue({ $id: 'profile-row-1', rapido_pens: 200 });
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(200);
+    expect(mockFindProfileBySubscriptionId).toHaveBeenCalledWith('sub_123');
+    expect(mockIncrementRowColumn).toHaveBeenCalledWith(expect.objectContaining({
+      rowId: 'profile-row-1',
+      column: 'rapido_pens',
+      value: 160,
+    }));
+    expect(mockUpdateProfileById).toHaveBeenCalledWith('user-1', { is_premium: true, subscription_status: 'active' });
+  });
+
+  it('ignores the first subscription invoice (already granted at checkout)', async () => {
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_first_invoice',
+      type: 'invoice.paid',
+      data: {
+        object: {
+          id: 'in_0',
+          billing_reason: 'subscription_create',
+          parent: { subscription_details: { subscription: 'sub_123' } },
+        },
+      },
+    });
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(200);
+    expect(mockFindProfileBySubscriptionId).not.toHaveBeenCalled();
+    expect(mockIncrementRowColumn).not.toHaveBeenCalled();
+  });
 });

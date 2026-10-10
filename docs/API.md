@@ -8,6 +8,8 @@ Creates a Stripe Checkout session.
 
 **Auth:** Valid Appwrite session required (server-side user check)
 
+**Pricing tier:** student tiers come from a verified edu email (`/api/verify-edu`) or from the signup email **only when Appwrite reports it as verified**. Unverified `.edu.tr` signups get the `GLOBAL` tier.
+
 **Body:**
 ```json
 {
@@ -40,7 +42,8 @@ Stripe webhook endpoint. Configure the URL in the Stripe Dashboard.
 **Processed events:**
 - `checkout.session.completed` — Premium activation or Rapido top-up
 - `customer.subscription.deleted` — Premium cancellation
-- `invoice.payment_failed` — Logged for observability
+- `invoice.payment_failed` — Marks the subscription `past_due`
+- `invoice.paid` (`billing_reason = subscription_cycle`) — Renewal: tops the balance up to the monthly Premium allowance (`TIER_DEFAULTS.PREMIUM`) and records a `premium_renewal` billing event. Yearly plans renew yearly, so they get this top-up once per year.
 
 **Notes:**
 - Idempotency is enforced via the `stripe_events` table (duplicate events are skipped).
@@ -171,9 +174,11 @@ Returns the authenticated user's unique referral link.
 
 ### POST /api/referral/apply
 
-Applies a referral code, granting bonus Rapido to both parties.
+Grants the referral bonus to both parties for the referral linked at signup.
 
 **Auth:** Valid Appwrite JWT required.
+
+**Rules:** the reward is only granted to an account with a verified email that is at most 30 days old, and at most once (claimed through the `stripe_events` idempotency ledger, so parallel calls can't pay twice). Linking (`POST /api/referral/link`) requires a non-anonymous account created in the last 7 days.
 
 **Body:**
 ```json
@@ -196,6 +201,8 @@ Redeems a promotional code for Rapido or Premium access.
 **Errors:**
 - `404` — Code not found or expired
 - `409` — Code already redeemed
+
+**Concurrency:** each redemption first claims the user's next usage slot and atomically reserves a global use (`used_count` with `max`), so parallel requests can't exceed `max_uses_per_user` / `max_total_uses`. Failed grants roll both back.
 
 ---
 

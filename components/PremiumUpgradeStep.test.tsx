@@ -23,7 +23,7 @@ describe('PremiumUpgradeStep', () => {
 
   it('renders the premium tab and opens checkout for logged in users', async () => {
     mockedUseAuth.mockReturnValue({
-      user: { email: 'student@school.edu.tr' },
+      user: { email: 'student@school.edu.tr', emailVerified: true },
       profile: { is_premium: false, rapido_pens: 18 },
     });
 
@@ -89,7 +89,7 @@ describe('PremiumUpgradeStep', () => {
 
   it('derives the Akdeniz campaign price from pricing config', () => {
     mockedUseAuth.mockReturnValue({
-      user: { email: 'student@ogr.akdeniz.edu.tr' },
+      user: { email: 'student@ogr.akdeniz.edu.tr', emailVerified: true },
       profile: { is_premium: false, rapido_pens: 18 },
     });
 

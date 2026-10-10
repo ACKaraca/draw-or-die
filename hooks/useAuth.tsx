@@ -65,6 +65,7 @@ type AuthContextType = {
 export type AppUser = {
     id: string
     email: string | null
+    emailVerified?: boolean
     name?: string | null
     identities?: Array<{ provider: string }>
 }
@@ -187,11 +188,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     }, [createJwtWithRetry, setSessionHint])
 
-    const mapUser = useCallback((rawUser: { $id: string; email?: string | null; name?: string | null }): AppUser => {
+    const mapUser = useCallback((rawUser: {
+        $id: string
+        email?: string | null
+        name?: string | null
+        emailVerification?: boolean
+    }): AppUser => {
         const provider = rawUser.email ? 'email' : 'anonymous'
         return {
             id: rawUser.$id,
             email: rawUser.email ?? null,
+            emailVerified: rawUser.emailVerification === true,
             name: rawUser.name ?? null,
             identities: [{ provider }],
         }

@@ -4,10 +4,24 @@ import {
   findProfileByReferralCode,
   updateProfileById,
   recordBillingEvent,
+  type AppwriteAuthUser,
 } from '@/lib/appwrite/server';
+import { claimOnce, releaseClaim } from '@/lib/idempotency';
+import { logServerError } from '@/lib/logger';
+import { creditRapidoPens } from '@/lib/rapido-balance';
 
 const REFERRAL_FLAG_KEY = 'referral_system';
 const DEFAULT_REFERRAL_RAPIDO = 5;
+// Referrals are for genuinely new accounts: old or throwaway (anonymous/unverified) accounts
+// could otherwise be cycled to farm Rapido for the referrer.
+const REFERRAL_LINK_MAX_ACCOUNT_AGE_DAYS = 7;
+const REFERRAL_REWARD_MAX_ACCOUNT_AGE_DAYS = 30;
+
+function isAccountYoungerThan(user: AppwriteAuthUser, days: number): boolean {
+  const createdMs = user.createdAt ? Date.parse(user.createdAt) : Number.NaN;
+  if (!Number.isFinite(createdMs)) return false;
+  return Date.now() - createdMs <= days * 24 * 60 * 60 * 1000;
+}
 
 export async function getReferralConfig(): Promise<{ enabled: boolean; rapido: number }> {
   try {
@@ -34,9 +48,17 @@ export async function getReferralConfig(): Promise<{ enabled: boolean; rapido: n
 }
 
 export async function linkReferralToUser(
-  userId: string,
+  user: AppwriteAuthUser,
   referralCode: string,
 ): Promise<{ success: boolean; error?: string }> {
+  const userId = user.id;
+  if (!user.email) {
+    return { success: false, error: 'Referral kodu için e-posta ile kayıtlı bir hesap gerekli.' };
+  }
+  if (!isAccountYoungerThan(user, REFERRAL_LINK_MAX_ACCOUNT_AGE_DAYS)) {
+    return { success: false, error: 'Referral kodu yalnızca yeni hesaplarda kullanılabilir.' };
+  }
+
   const normalized = referralCode.trim().toUpperCase();
   if (!normalized || normalized.length < 4 || normalized.length > 16) {
     return { success: false, error: 'Geçersiz referral kodu.' };
@@ -79,31 +101,30 @@ export async function linkReferralToUser(
 }
 
 export async function applyReferralReward(
-  userId: string,
+  user: AppwriteAuthUser,
 ): Promise<{ success: boolean; rewarded: boolean; rapido?: number; error?: string }> {
+  const userId = user.id;
   const config = await getReferralConfig();
   if (!config.enabled) {
     return { success: true, rewarded: false };
   }
 
+  // Only a verified, recently created account can trigger the reward.
+  if (user.emailVerified !== true || !isAccountYoungerThan(user, REFERRAL_REWARD_MAX_ACCOUNT_AGE_DAYS)) {
+    return { success: true, rewarded: false };
+  }
+
   let userProfile;
   try {
-    userProfile = await getOrCreateProfile({ id: userId, email: null, name: null });
+    userProfile = await getOrCreateProfile(user);
   } catch {
     return { success: false, rewarded: false, error: 'Profil bulunamadı.' };
   }
 
-  // Already rewarded
-  if (userProfile.referral_rewarded_at) {
+  if (userProfile.referral_rewarded_at || !userProfile.referred_by) {
     return { success: true, rewarded: false };
   }
 
-  // No referral linked
-  if (!userProfile.referred_by) {
-    return { success: true, rewarded: false };
-  }
-
-  // Find referrer
   let referrer;
   try {
     referrer = await findProfileByReferralCode(userProfile.referred_by);
@@ -111,29 +132,31 @@ export async function applyReferralReward(
     return { success: false, rewarded: false, error: 'Referrer bulunamadı.' };
   }
 
-  if (!referrer) {
+  if (!referrer || referrer.id === userId) {
     // Referral code no longer valid - mark as rewarded to avoid retry loops
     await updateProfileById(userId, { referral_rewarded_at: new Date().toISOString() });
     return { success: true, rewarded: false };
   }
 
+  // Parallel calls must not pay twice: only the first claim proceeds.
+  const claimKey = `referral-reward:${userId}`;
+  if (!(await claimOnce(claimKey))) {
+    return { success: true, rewarded: false };
+  }
+
   const rapido = config.rapido;
-  const now = new Date().toISOString();
+  let newUserRapidoAfter: number;
+  let referrerRapidoAfter: number;
+  try {
+    await updateProfileById(userId, { referral_rewarded_at: new Date().toISOString() });
+    newUserRapidoAfter = await creditRapidoPens(userId, userProfile, rapido);
+    referrerRapidoAfter = await creditRapidoPens(referrer.id, referrer, rapido);
+  } catch (error) {
+    logServerError('referral.reward', error, { userId, referrerId: referrer.id });
+    await releaseClaim(claimKey);
+    return { success: false, rewarded: false, error: 'Referral ödülü verilemedi.' };
+  }
 
-  // Award to new user
-  const newUserRapidoAfter = (Number.isFinite(userProfile.rapido_pens) ? Number(userProfile.rapido_pens) : 0) + rapido;
-  await updateProfileById(userId, {
-    rapido_pens: newUserRapidoAfter,
-    referral_rewarded_at: now,
-  });
-
-  // Award to referrer
-  const referrerRapidoAfter = referrer.rapido_pens + rapido;
-  await updateProfileById(referrer.id, {
-    rapido_pens: referrerRapidoAfter,
-  });
-
-  // Log billing events
   await Promise.allSettled([
     recordBillingEvent({
       userId,

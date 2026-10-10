@@ -8,7 +8,7 @@ import {
   getAdminTables,
   getAuthenticatedUserFromRequest,
   getOrCreateProfile,
-  isAdminEmail,
+  isVerifiedAdmin,
 } from '@/lib/appwrite/server';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const profile = await getOrCreateProfile(user);
-    const isAdmin = isAdminEmail(user.email);
+    const isAdmin = isVerifiedAdmin(user);
     if (!profile.is_premium && !isAdmin) {
       return NextResponse.json(
         {

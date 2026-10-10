@@ -9,7 +9,7 @@ import {
   getAdminTables,
   getAuthenticatedUserFromRequest,
   getOrCreateProfile,
-  isAdminEmail,
+  isVerifiedAdmin,
 } from '@/lib/appwrite/server';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     }
 
     const profile = await getOrCreateProfile(user);
-    if (!profile.is_premium && !isAdminEmail(user.email)) {
+    if (!profile.is_premium && !isVerifiedAdmin(user)) {
       return NextResponse.json(
         {
           error: pickLocalized(lang, 'Referans Kütüphanesi Premium üyelere özeldir.', 'Reference Library is Premium-only.'),
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthenticated', code: 'UNAUTHENTICATED' }, { status: 401 });
     }
 
-    if (!isAdminEmail(user.email)) {
+    if (!isVerifiedAdmin(user)) {
       return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 });
     }
 

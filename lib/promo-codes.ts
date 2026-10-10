@@ -12,6 +12,9 @@ import {
   recordBillingEvent,
   updateProfileById,
 } from '@/lib/appwrite/server';
+import { claimOnce, releaseClaim } from '@/lib/idempotency';
+import { logServerError } from '@/lib/logger';
+import { creditRapidoPens } from '@/lib/rapido-balance';
 
 export type PromoRewardKind = 'rapido' | 'premium' | 'discount_percent' | 'discount_amount';
 export type PromoTargetScope = 'any' | 'guest' | 'registered' | 'premium' | 'edu' | 'akdeniz';
@@ -379,6 +382,21 @@ export function buildCheckoutAdjustment(
   };
 }
 
+async function releasePromoCounter(promoId: string): Promise<void> {
+  try {
+    await getAdminTables().decrementRowColumn({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROMO_CODES_ID,
+      rowId: promoId,
+      column: 'used_count',
+      value: 1,
+      min: 0,
+    });
+  } catch (error) {
+    logServerError('promo.redeem.counter-release', error, { promoId });
+  }
+}
+
 export async function redeemPromoCode(options: {
   code: string;
   user: AppwriteAuthUser;
@@ -416,52 +434,91 @@ export async function redeemPromoCode(options: {
   let rapidoDelta = 0;
   let message = 'Promo kodu uygulandı.';
 
-  if (promo.rewardKind === 'rapido') {
-    rapidoDelta = rewardValue || 1;
-    const nextRapido = updatedProfile.rapido_pens + rapidoDelta;
-    await updateProfileById(options.user.id, { rapido_pens: nextRapido });
-    updatedProfile = {
-      ...updatedProfile,
-      rapido_pens: nextRapido,
-    };
-    message = `${rapidoDelta} Rapido eklendi.`;
+  // The checks above are read-then-act; parallel requests would all pass them. Claim this
+  // user's next usage slot first so only one concurrent request can redeem it.
+  const slotKey = `promo-redeem:${promo.id}:${options.user.id}:${counts.userUses + 1}`;
+  if (!(await claimOnce(slotKey))) {
+    return { ok: false, code: 'PROMO_USER_LIMIT', error: 'Bu kodu zaten maksimum kez kullandın.' };
   }
 
-  if (promo.rewardKind === 'premium') {
-    const premiumDays = rewardValue || 30;
-    const currentBalance = updatedProfile.rapido_pens;
-    const premiumBalance = Math.max(currentBalance, TIER_DEFAULTS.PREMIUM);
-    rapidoDelta = Math.max(0, premiumBalance - currentBalance);
-    const periodEnd = new Date(Date.now() + premiumDays * 24 * 60 * 60 * 1000).toISOString();
-
-    await updateProfileById(options.user.id, {
-      is_premium: true,
-      rapido_pens: premiumBalance,
-      subscription_status: 'promo',
-      subscription_current_period_start: nowIso,
-      subscription_current_period_end: periodEnd,
-      subscription_cancel_at_period_end: false,
-      premium_started_at: nowIso,
-      premium_price_cents: 0,
-      premium_currency: promo.rewardCurrency || 'try',
-      premium_interval: promo.rewardInterval || 'promo',
-      premium_promo_code: promo.code,
+  // Reserve a global use atomically before granting anything.
+  let isCounterReserved = false;
+  try {
+    const counter = await tables.incrementRowColumn<PromoCodeRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROMO_CODES_ID,
+      rowId: promo.id,
+      column: 'used_count',
+      value: 1,
+      max: promo.maxTotalUses ?? undefined,
     });
-    updatedProfile = {
-      ...updatedProfile,
-      is_premium: true,
-      rapido_pens: premiumBalance,
-      subscription_status: 'promo',
-      subscription_current_period_start: nowIso,
-      subscription_current_period_end: periodEnd,
-      subscription_cancel_at_period_end: false,
-      premium_started_at: nowIso,
-      premium_price_cents: 0,
-      premium_currency: promo.rewardCurrency || 'try',
-      premium_interval: promo.rewardInterval || 'promo',
-      premium_promo_code: promo.code,
-    };
-    message = `${premiumDays} gün premium eklendi.`;
+    isCounterReserved = true;
+    if (promo.maxTotalUses !== null && Number(counter.used_count) > promo.maxTotalUses) {
+      throw new Error('PROMO_EXHAUSTED');
+    }
+  } catch (error) {
+    if (isCounterReserved) {
+      await releasePromoCounter(promo.id);
+    }
+    if (promo.maxTotalUses !== null) {
+      await releaseClaim(slotKey);
+      return { ok: false, code: 'PROMO_EXHAUSTED', error: 'Bu kodun tüm kullanım hakkı doldu.' };
+    }
+    // Uncapped code: a missing counter must not block the reward.
+    logServerError('promo.redeem.counter', error, { promoId: promo.id });
+  }
+
+  try {
+    if (promo.rewardKind === 'rapido') {
+      rapidoDelta = rewardValue || 1;
+      const nextRapido = await creditRapidoPens(options.user.id, updatedProfile, rapidoDelta);
+      updatedProfile = {
+        ...updatedProfile,
+        rapido_pens: nextRapido,
+      };
+      message = `${rapidoDelta} Rapido eklendi.`;
+    }
+
+    if (promo.rewardKind === 'premium') {
+      const premiumDays = rewardValue || 30;
+      const currentBalance = updatedProfile.rapido_pens;
+      const premiumBalance = Math.max(currentBalance, TIER_DEFAULTS.PREMIUM);
+      rapidoDelta = Math.max(0, premiumBalance - currentBalance);
+      const periodEnd = new Date(Date.now() + premiumDays * 24 * 60 * 60 * 1000).toISOString();
+
+      await updateProfileById(options.user.id, {
+        is_premium: true,
+        rapido_pens: premiumBalance,
+        subscription_status: 'promo',
+        subscription_current_period_start: nowIso,
+        subscription_current_period_end: periodEnd,
+        subscription_cancel_at_period_end: false,
+        premium_started_at: nowIso,
+        premium_price_cents: 0,
+        premium_currency: promo.rewardCurrency || 'try',
+        premium_interval: promo.rewardInterval || 'promo',
+        premium_promo_code: promo.code,
+      });
+      updatedProfile = {
+        ...updatedProfile,
+        is_premium: true,
+        rapido_pens: premiumBalance,
+        subscription_status: 'promo',
+        subscription_current_period_start: nowIso,
+        subscription_current_period_end: periodEnd,
+        subscription_cancel_at_period_end: false,
+        premium_started_at: nowIso,
+        premium_price_cents: 0,
+        premium_currency: promo.rewardCurrency || 'try',
+        premium_interval: promo.rewardInterval || 'promo',
+        premium_promo_code: promo.code,
+      };
+      message = `${premiumDays} gün premium eklendi.`;
+    }
+  } catch (error) {
+    if (isCounterReserved) await releasePromoCounter(promo.id);
+    await releaseClaim(slotKey);
+    throw error;
   }
 
   const redemption = await tables.createRow<PromoRedemptionRow>({
@@ -484,19 +541,6 @@ export async function redeemPromoCode(options: {
       redeemed_at: nowIso,
     },
   });
-
-  try {
-    await tables.incrementRowColumn({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_PROMO_CODES_ID,
-      rowId: promo.id,
-      column: 'used_count',
-      value: 1,
-      max: promo.maxTotalUses ?? undefined,
-    });
-  } catch {
-    // Keep the redemption log even if the counter write is not available.
-  }
 
   await recordBillingEvent({
     userId: options.user.id,
