@@ -44,7 +44,8 @@ describe('presentation components', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /log in \/ join/i }));
+    // Default UI language in tests is Turkish; the label is now localized instead of English-only.
+    fireEvent.click(screen.getByRole('button', { name: /giriş yap \/ katıl/i }));
 
     expect(onAuthClick).toHaveBeenCalledTimes(1);
   });

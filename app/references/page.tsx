@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { motion } from 'framer-motion';
-import { BookMarked, Crown, Lock, Search, MapPin } from 'lucide-react';
+import { BookMarked, Crown, Lock, LogIn, Search, MapPin } from 'lucide-react';
 import { account } from '@/lib/appwrite';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -102,9 +102,20 @@ export default function ReferencesLibraryPage() {
               'You must sign in to access the Reference Library.',
             )}
           </p>
-          <Link href="/" className="inline-block bg-white text-black px-6 py-3 uppercase font-bold tracking-wider rounded">
-            {pickLocalized(language, 'Ana Sayfa', 'Home')}
-          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/?auth=signin"
+              className="inline-flex items-center gap-2 bg-neon-red px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#cc0029] cta-primary-glow"
+            >
+              <LogIn size={14} aria-hidden="true" /> {pickLocalized(language, 'Giriş Yap', 'Sign In')}
+            </Link>
+            <Link
+              href="/"
+              className="inline-block rounded-lg border border-white/15 px-6 py-3 font-mono text-xs uppercase tracking-[0.1em] text-slate-300 transition-colors hover:text-white"
+            >
+              {pickLocalized(language, 'Ana Sayfa', 'Home')}
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -125,7 +136,7 @@ export default function ReferencesLibraryPage() {
               'The locked library of plan/section analyses by Peter Zumthor, Tadao Ando, and others is open only to Premium members.',
             )}
           </p>
-          <Link href="/shop" className="inline-block bg-amber-400 text-black px-6 py-3 uppercase font-bold tracking-wider rounded hover:bg-amber-300 transition-colors">
+          <Link href="/shop/premium" className="inline-block bg-amber-400 text-black px-6 py-3 uppercase font-bold tracking-wider rounded hover:bg-amber-300 transition-colors">
             {pickLocalized(language, 'Premium Al', 'Go Premium')}
           </Link>
         </div>
@@ -156,6 +167,7 @@ export default function ReferencesLibraryPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
           <input
             type="search"
+            aria-label={pickLocalized(language, 'Referanslarda ara', 'Search references')}
             placeholder={pickLocalized(language, 'Ara: mimar, tipoloji, etiket...', 'Search: architect, typology, tag...')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}

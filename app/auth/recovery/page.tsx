@@ -45,7 +45,29 @@ function RecoveryContent() {
       setMessage(pickLocalized(language, 'Şifre güncellendi. Giriş sayfasına yönlendiriliyorsun...', 'Password updated. Redirecting to the sign-in page...'));
       setTimeout(() => router.push('/'), 1800);
     } catch (recoveryError) {
-      setError(recoveryError instanceof Error ? recoveryError.message : pickLocalized(language, 'Şifre güncellenemedi.', 'Password could not be updated.'));
+      // Raw SDK messages are English and technical; map the common cases to actionable copy.
+      const { code, message: rawMessage } = (typeof recoveryError === 'object' && recoveryError !== null
+        ? recoveryError
+        : {}) as { code?: unknown; message?: unknown };
+      if (code === 401 || code === 404) {
+        setError(pickLocalized(
+          language,
+          'Bu sıfırlama bağlantısı geçersiz veya süresi dolmuş. Giriş ekranından yeni bir bağlantı iste.',
+          'This reset link is invalid or has expired. Request a new one from the sign-in screen.',
+        ));
+      } else if (code === 400 && typeof rawMessage === 'string' && /password/i.test(rawMessage)) {
+        setError(pickLocalized(
+          language,
+          'Şifre 8–256 karakter olmalı ve yaygın kullanılan bir şifre olmamalı.',
+          'Password must be 8–256 characters and must not be a commonly used password.',
+        ));
+      } else {
+        setError(pickLocalized(
+          language,
+          'Şifre güncellenemedi. Lütfen birkaç dakika sonra tekrar dene.',
+          'Password could not be updated. Please try again in a few minutes.',
+        ));
+      }
     } finally {
       setLoading(false);
     }
@@ -54,15 +76,19 @@ function RecoveryContent() {
   return (
     <div className="min-h-screen bg-[#080B14] text-white flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0A0F1A] p-8 shadow-2xl">
-        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-amber-200 text-center">Appwrite Recovery</p>
+        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-amber-200 text-center">
+          {pickLocalized(language, 'Hesap Kurtarma', 'Account Recovery')}
+        </p>
         <h1 className="mt-3 text-3xl font-display uppercase tracking-wide text-center">{pickLocalized(language, 'Şifre Sıfırlama', 'Password Reset')}</h1>
         {email && <p className="mt-2 text-center text-sm text-slate-400">{email}</p>}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div className="space-y-1">
-            <label className="text-xs font-mono text-slate-400 uppercase tracking-wider">{pickLocalized(language, 'Yeni Şifre', 'New Password')}</label>
+            <label htmlFor="recovery-password" className="text-xs font-mono text-slate-400 uppercase tracking-wider">{pickLocalized(language, 'Yeni Şifre', 'New Password')}</label>
             <input
+              id="recovery-password"
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-400"
@@ -70,9 +96,11 @@ function RecoveryContent() {
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-mono text-slate-400 uppercase tracking-wider">{pickLocalized(language, 'Yeni Şifre Tekrar', 'New Password Again')}</label>
+            <label htmlFor="recovery-password-confirm" className="text-xs font-mono text-slate-400 uppercase tracking-wider">{pickLocalized(language, 'Yeni Şifre Tekrar', 'Confirm New Password')}</label>
             <input
+              id="recovery-password-confirm"
               type="password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-white placeholder:text-slate-600 focus:outline-none focus:border-amber-400"
@@ -80,8 +108,8 @@ function RecoveryContent() {
             />
           </div>
 
-          {error && <p className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
-          {message && <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">{message}</p>}
+          {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
+          {message && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-200">{message}</p>}
 
           <button
             type="submit"
@@ -102,7 +130,9 @@ function RecoveryFallback() {
   return (
     <div className="min-h-screen bg-[#080B14] text-white flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0A0F1A] p-8 shadow-2xl">
-        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-amber-200 text-center">Appwrite Recovery</p>
+        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-amber-200 text-center">
+          {pickLocalized(language, 'Hesap Kurtarma', 'Account Recovery')}
+        </p>
         <h1 className="mt-3 text-3xl font-display uppercase tracking-wide text-center">{pickLocalized(language, 'Şifre Sıfırlama', 'Password Reset')}</h1>
         <p className="mt-4 text-center text-sm text-slate-300">{pickLocalized(language, 'Bağlantı doğrulanıyor...', 'Verifying link...')}</p>
       </div>

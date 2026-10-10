@@ -6,7 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Markdown from 'react-markdown';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Crown, Lock, MapPin, Ruler } from 'lucide-react';
+import { ArrowLeft, Crown, Lock, LogIn, MapPin, Ruler } from 'lucide-react';
 import { account } from '@/lib/appwrite';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -86,10 +86,27 @@ export default function ReferenceDetailPage() {
       <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
         <div className="max-w-md text-center">
           <Lock className="mx-auto mb-4 text-amber-400" size={48} />
-          <p className="text-slate-400 mb-6">{pickLocalized(language, 'Giriş gerekli.', 'Sign-in required.')}</p>
-          <Link href="/" className="bg-white text-black px-6 py-3 uppercase font-bold tracking-wider rounded">
-            {pickLocalized(language, 'Ana Sayfa', 'Home')}
-          </Link>
+          <p className="text-slate-400 mb-6">
+            {pickLocalized(
+              language,
+              'Bu referans analizini görmek için giriş yapmalısın.',
+              'Sign in to view this reference analysis.',
+            )}
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/?auth=signin"
+              className="inline-flex items-center gap-2 bg-neon-red px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#cc0029] cta-primary-glow"
+            >
+              <LogIn size={14} aria-hidden="true" /> {pickLocalized(language, 'Giriş Yap', 'Sign In')}
+            </Link>
+            <Link
+              href="/"
+              className="inline-block rounded-lg border border-white/15 px-6 py-3 font-mono text-xs uppercase tracking-[0.1em] text-slate-300 transition-colors hover:text-white"
+            >
+              {pickLocalized(language, 'Ana Sayfa', 'Home')}
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -101,7 +118,7 @@ export default function ReferenceDetailPage() {
         <div className="max-w-lg text-center bg-[#111827] border border-amber-400/30 rounded-2xl p-10">
           <Crown className="mx-auto mb-4 text-amber-400" size={48} />
           <p className="text-slate-400 mb-6">{pickLocalized(language, 'Premium üyelere özeldir.', 'Premium members only.')}</p>
-          <Link href="/shop" className="inline-block bg-amber-400 text-black px-6 py-3 uppercase font-bold tracking-wider rounded">
+          <Link href="/shop/premium" className="inline-block bg-amber-400 text-black px-6 py-3 uppercase font-bold tracking-wider rounded">
             {pickLocalized(language, 'Premium Al', 'Go Premium')}
           </Link>
         </div>

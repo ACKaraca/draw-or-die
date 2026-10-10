@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
@@ -18,14 +18,43 @@ type CookieConsentBannerProps = {
   initialConsentStatus?: CookieConsentStatus;
 };
 
+// Published on <html> so toasts and page padding can sit above the banner instead of under it.
+const BANNER_HEIGHT_CSS_VAR = '--cookie-banner-h';
+
 export function CookieConsentBanner({ initialConsentStatus }: CookieConsentBannerProps) {
   const language = useLanguage();
+  const bannerRef = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(() => {
     const initialStatus = initialConsentStatus === 'unset'
       ? getCookieConsentStatus()
       : (initialConsentStatus ?? getCookieConsentStatus());
     return initialStatus === 'unset';
   });
+
+  useEffect(() => {
+    const rootStyle = document.documentElement.style;
+    const node = bannerRef.current;
+    if (!visible || !node) {
+      rootStyle.removeProperty(BANNER_HEIGHT_CSS_VAR);
+      return;
+    }
+
+    const publishHeight = () => {
+      rootStyle.setProperty(BANNER_HEIGHT_CSS_VAR, `${Math.ceil(node.getBoundingClientRect().height)}px`);
+    };
+    publishHeight();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => rootStyle.removeProperty(BANNER_HEIGHT_CSS_VAR);
+    }
+
+    const observer = new ResizeObserver(publishHeight);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      rootStyle.removeProperty(BANNER_HEIGHT_CSS_VAR);
+    };
+  }, [visible]);
 
   if (!visible) return null;
 
@@ -50,8 +79,17 @@ export function CookieConsentBanner({ initialConsentStatus }: CookieConsentBanne
     }
   };
 
+  const closeLabel = pickLocalized(
+    language,
+    'Kapat (yalnızca zorunlu çerezler)',
+    'Close (necessary cookies only)',
+  );
+
   return (
     <div
+      ref={bannerRef}
+      role="region"
+      aria-label={pickLocalized(language, 'Çerez tercihleri', 'Cookie preferences')}
       style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 2147483647, pointerEvents: 'auto', isolation: 'isolate' }}
       className="pointer-events-auto isolate border-t border-white/15 bg-[#0a0f1a]/95 backdrop-blur px-4 py-4"
     >
@@ -84,14 +122,15 @@ export function CookieConsentBanner({ initialConsentStatus }: CookieConsentBanne
           >
             {pickLocalized(language, 'Kabul Et', 'Accept')}
           </button>
+          {/* Dismissing is not consent: closing keeps only strictly necessary cookies. */}
           <button
             type="button"
-            onClick={() => dismiss('accepted')}
-            aria-label={pickLocalized(language, 'Kapat ve kabul et', 'Close and accept')}
-            title={pickLocalized(language, 'Kapat ve kabul et', 'Close and accept')}
+            onClick={() => dismiss('rejected')}
+            aria-label={closeLabel}
+            title={closeLabel}
             className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 text-slate-400 hover:bg-white/10 hover:text-white transition-colors"
           >
-            <X size={14} />
+            <X size={14} aria-hidden="true" />
           </button>
         </div>
       </div>

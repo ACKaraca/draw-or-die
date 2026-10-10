@@ -14,7 +14,14 @@ interface HeroStepProps {
   setStep: (step: StepType) => void;
 }
 
-const HERO_FALLBACK_IMAGE_SRC = '/icon';
+const HERO_FALLBACK_IMAGE_SRC = '/icon.svg';
+// Showcase cards: 1 column below md, 3 columns inside the max-w-7xl container above it.
+const HERO_VISUAL_SIZES = '(max-width: 767px) calc(100vw - 48px), (max-width: 1279px) 33vw, 420px';
+
+/** Hero PNGs have pre-compressed WebP siblings in public/ (~95% smaller); prefer those. */
+function toWebpSrc(src: string): string {
+  return src.replace(/\.png$/i, '.webp');
+}
 
 export function HeroStep({ setStep }: HeroStepProps) {
   const router = useRouter();
@@ -104,15 +111,15 @@ export function HeroStep({ setStep }: HeroStepProps) {
         </div>
 
         <h1 className="font-display font-bold text-white uppercase tracking-tight leading-[1.02] text-[clamp(48px,8vw,96px)] mb-6">
-          {language === 'en' ? (
-            <>
-              Upload your board, <br />
-              <span className="neon-text">face the jury</span>
-            </>
-          ) : (
+          {language === 'tr' ? (
             <>
               Paftanı yükle, <br />
               <span className="neon-text">jüriyle yüzleş</span>
+            </>
+          ) : (
+            <>
+              Upload your board, <br />
+              <span className="neon-text">face the jury</span>
             </>
           )}
         </h1>
@@ -216,20 +223,19 @@ export function HeroStep({ setStep }: HeroStepProps) {
 
         {/* ── Visual showcase (mock board previews) ───────────────────── */}
         <div className="grid md:grid-cols-3 gap-5 mb-20">
-          {HERO_MOCK_VISUALS.map((visual, idx) => (
+          {HERO_MOCK_VISUALS.map((visual) => (
             <figure
               key={visual.id}
               className="group rounded-xl border border-white/8 bg-black/40 overflow-hidden flex flex-col"
             >
               <div className="relative w-full aspect-[5/3]">
+                {/* Below the fold: lazy-loaded (no priority) and served through the Next image optimizer. */}
                 <Image
-                  src={failedVisualIds[visual.id] ? HERO_FALLBACK_IMAGE_SRC : visual.src}
-                  alt={language === 'en' ? visual.altEn : visual.altTr}
+                  src={failedVisualIds[visual.id] ? HERO_FALLBACK_IMAGE_SRC : toWebpSrc(visual.src)}
+                  alt={pickLocalized(language, visual.altTr, visual.altEn)}
                   fill
-                  sizes="(max-width: 768px) 100vw, 33vw"
+                  sizes={HERO_VISUAL_SIZES}
                   className="object-cover opacity-90 transition-opacity group-hover:opacity-100"
-                  unoptimized
-                  priority={idx === 0}
                   onError={() => {
                     setFailedVisualIds((prev) => (prev[visual.id] ? prev : { ...prev, [visual.id]: true }));
                   }}
@@ -237,10 +243,10 @@ export function HeroStep({ setStep }: HeroStepProps) {
               </div>
               <figcaption className="p-5 text-left flex flex-col gap-2 flex-1">
                 <h3 className="font-display text-base uppercase tracking-[0.02em] text-white leading-snug">
-                  {language === 'en' ? visual.titleEn : visual.titleTr}
+                  {pickLocalized(language, visual.titleTr, visual.titleEn)}
                 </h3>
                 <p className="text-sm text-slate-400 leading-relaxed">
-                  {language === 'en' ? visual.captionEn : visual.captionTr}
+                  {pickLocalized(language, visual.captionTr, visual.captionEn)}
                 </p>
               </figcaption>
             </figure>

@@ -11,11 +11,10 @@ import { account } from '@/lib/appwrite';
 
 type FeedbackCategory = 'general' | 'bug' | 'feature' | 'ux' | 'billing';
 
+// de/it stay supported in code (pickLocalized falls back to English) but are not offered until translated.
 const LANGUAGE_OPTIONS: Array<{ value: SupportedLanguage; label: string }> = [
   { value: 'tr', label: 'Türkçe' },
   { value: 'en', label: 'English' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'it', label: 'Italiano' },
 ];
 
 export function SiteFooter() {
@@ -23,7 +22,9 @@ export function SiteFooter() {
   const pathname = usePathname();
   const { user } = useAuth();
   const language = useLanguage();
-  const currentLanguage = LANGUAGE_OPTIONS.find((option) => option.value === language) ?? LANGUAGE_OPTIONS[0];
+  const currentLanguage = LANGUAGE_OPTIONS.find((option) => option.value === language)
+    ?? LANGUAGE_OPTIONS.find((option) => option.value === 'en')
+    ?? LANGUAGE_OPTIONS[0];
 
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -46,7 +47,7 @@ export function SiteFooter() {
   const handleSubmitFeedback = async () => {
     const trimmed = message.trim();
     if (trimmed.length < 8) {
-      setNotice(pickLocalized(language, 'Lutfen en az 8 karakterlik geri bildirim yazin.', 'Please write at least 8 characters for feedback.'));
+      setNotice(pickLocalized(language, 'Lütfen en az 8 karakterlik geri bildirim yazın.', 'Please write at least 8 characters for feedback.'));
       return;
     }
 
@@ -84,17 +85,17 @@ export function SiteFooter() {
 
       const payload = (await response.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!response.ok || !payload.ok) {
-        setNotice(payload.error || pickLocalized(language, 'Geri bildirim gonderilemedi.', 'Feedback could not be sent.'));
+        setNotice(payload.error || pickLocalized(language, 'Geri bildirim gönderilemedi.', 'Feedback could not be sent.'));
         return;
       }
 
       setMessage('');
       setRating(5);
       setCategory('general');
-      setNotice(pickLocalized(language, 'Tesekkurler! Geri bildiriminiz kaydedildi.', 'Thanks! Your feedback has been saved.'));
+      setNotice(pickLocalized(language, 'Teşekkürler! Geri bildiriminiz kaydedildi.', 'Thanks! Your feedback has been saved.'));
       setIsOpen(false);
     } catch {
-      setNotice(pickLocalized(language, 'Geri bildirim gonderilemedi. Lutfen tekrar deneyin.', 'Feedback could not be sent. Please try again.'));
+      setNotice(pickLocalized(language, 'Geri bildirim gönderilemedi. Lütfen tekrar deneyin.', 'Feedback could not be sent. Please try again.'));
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +106,8 @@ export function SiteFooter() {
       <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-slate-400 font-mono">
-            Copyright © {year} Draw or Die. {pickLocalized(language, 'Tum haklari saklidir', 'All rights reserved')}. Developed by{' '}
+            © {year} Draw or Die. {pickLocalized(language, 'Tüm hakları saklıdır', 'All rights reserved')}.{' '}
+            {pickLocalized(language, 'Geliştiren:', 'Developed by')}{' '}
             <a
               href="https://ackaraca.me"
               target="_blank"
@@ -117,15 +119,17 @@ export function SiteFooter() {
             .
           </p>
 
-          <nav className="flex flex-wrap items-center gap-3 text-xs font-mono uppercase tracking-wider text-slate-400">
+          <nav
+            className="flex flex-wrap items-center gap-3 text-xs font-mono uppercase tracking-wider text-slate-400"
+            aria-label={pickLocalized(language, 'Alt bilgi', 'Footer')}
+          >
             <label className="inline-flex items-center gap-2 rounded border border-white/10 bg-black/30 px-2 py-1 text-slate-300">
-              <Globe2 size={12} className="text-cyan-300" />
-              <span className="sr-only">Language</span>
+              <Globe2 size={12} className="text-cyan-300" aria-hidden="true" />
               <select
                 value={currentLanguage.value}
                 onChange={(event) => handleLanguageChange(event.target.value as SupportedLanguage)}
                 className="bg-transparent text-[11px] uppercase tracking-wider text-slate-200 outline-none"
-                aria-label={pickLocalized(language, 'Arayuz dili', 'UI language')}
+                aria-label={pickLocalized(language, 'Arayüz dili', 'Interface language')}
               >
                 {LANGUAGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value} className="bg-[#0A0F1A] text-white">
@@ -139,20 +143,22 @@ export function SiteFooter() {
               type="button"
               onClick={() => setIsOpen((prev) => !prev)}
               className="inline-flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-500/10 px-2 py-1 text-cyan-200 hover:bg-cyan-500/20"
+              aria-expanded={isOpen}
+              aria-controls="footer-feedback-panel"
             >
-              <MessageSquare size={12} /> {pickLocalized(language, 'Geri Bildirim', 'Feedback')}
+              <MessageSquare size={12} aria-hidden="true" /> {pickLocalized(language, 'Geri Bildirim', 'Feedback')}
             </button>
-            <Link href="/legal" className="hover:text-white">Legal</Link>
-            <Link href="/legal/terms" className="hover:text-white">Terms</Link>
-            <Link href="/legal/privacy" className="hover:text-white">Privacy</Link>
-            <Link href="/legal/cookies" className="hover:text-white">Cookies</Link>
+            <Link href="/legal" className="hover:text-white">{pickLocalized(language, 'Yasal', 'Legal')}</Link>
+            <Link href="/legal/terms" className="hover:text-white">{pickLocalized(language, 'Koşullar', 'Terms')}</Link>
+            <Link href="/legal/privacy" className="hover:text-white">{pickLocalized(language, 'Gizlilik', 'Privacy')}</Link>
+            <Link href="/legal/cookies" className="hover:text-white">{pickLocalized(language, 'Çerezler', 'Cookies')}</Link>
           </nav>
         </div>
 
         {isOpen && (
-          <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
-            <h3 className="text-sm font-mono uppercase tracking-wider text-cyan-200">{pickLocalized(language, 'Hizli Geri Bildirim', 'Quick Feedback')}</h3>
-            <p className="mt-1 text-xs text-slate-400">{pickLocalized(language, 'Bu mesaj dogrudan urun gelistirme listesine kaydedilir.', 'This message is directly saved to the product development list.')}</p>
+          <div id="footer-feedback-panel" className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
+            <h3 className="text-sm font-mono uppercase tracking-wider text-cyan-200">{pickLocalized(language, 'Hızlı Geri Bildirim', 'Quick Feedback')}</h3>
+            <p className="mt-1 text-xs text-slate-400">{pickLocalized(language, 'Mesajın doğrudan ürün geliştirme ekibine iletilir.', 'Your message goes straight to the product team.')}</p>
 
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label className="text-xs text-slate-400">
@@ -164,37 +170,39 @@ export function SiteFooter() {
                 >
                   <option value="general">{pickLocalized(language, 'Genel', 'General')}</option>
                   <option value="bug">{pickLocalized(language, 'Hata', 'Bug')}</option>
-                  <option value="feature">{pickLocalized(language, 'Ozellik istegi', 'Feature request')}</option>
-                  <option value="ux">UX</option>
-                  <option value="billing">{pickLocalized(language, 'Odeme', 'Billing')}</option>
+                  <option value="feature">{pickLocalized(language, 'Özellik isteği', 'Feature request')}</option>
+                  <option value="ux">{pickLocalized(language, 'Kullanım deneyimi', 'UX')}</option>
+                  <option value="billing">{pickLocalized(language, 'Ödeme', 'Billing')}</option>
                 </select>
               </label>
 
               <label className="text-xs text-slate-400">
-                {pickLocalized(language, 'Email (opsiyonel)', 'Email (optional)')}
+                {pickLocalized(language, 'E-posta (isteğe bağlı)', 'Email (optional)')}
                 <input
+                  type="email"
+                  autoComplete="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={pickLocalized(language, 'ornek@okul.edu.tr', 'you@example.com')}
                   className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
                 />
               </label>
             </div>
 
             <label className="mt-3 block text-xs text-slate-400">
-              {pickLocalized(language, 'Mesajiniz', 'Your message')}
+              {pickLocalized(language, 'Mesajınız', 'Your message')}
               <textarea
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 rows={3}
-                placeholder={pickLocalized(language, 'Neyi iyilestirmemizi istersin?', 'What should we improve?')}
+                placeholder={pickLocalized(language, 'Neyi iyileştirmemizi istersin?', 'What should we improve?')}
                 className="mt-1 w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-white"
               />
             </label>
 
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <label className="text-xs text-slate-400">
-                {pickLocalized(language, 'Deneyim puani', 'Rating')}
+                {pickLocalized(language, 'Deneyim puanı', 'Rating')}
                 <select
                   value={rating}
                   onChange={(event) => setRating(Number(event.target.value) || 5)}
@@ -214,15 +222,15 @@ export function SiteFooter() {
                 disabled={submitting}
                 className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/50 bg-cyan-500/20 px-3 py-2 text-xs font-mono uppercase tracking-wider text-cyan-100 hover:bg-cyan-500/30 disabled:opacity-60"
               >
-                <Send size={12} /> {submitting ? pickLocalized(language, 'Gonderiliyor...', 'Sending...') : pickLocalized(language, 'Gonder', 'Send')}
+                <Send size={12} aria-hidden="true" /> {submitting ? pickLocalized(language, 'Gönderiliyor...', 'Sending...') : pickLocalized(language, 'Gönder', 'Send')}
               </button>
             </div>
           </div>
         )}
 
-        {notice && (
-          <p className="mt-3 text-xs font-mono text-slate-300">{notice}</p>
-        )}
+        <p className="mt-3 text-xs font-mono text-slate-300 empty:hidden" role="status" aria-live="polite">
+          {notice}
+        </p>
       </div>
     </footer>
   );

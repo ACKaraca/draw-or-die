@@ -10,6 +10,9 @@ import { GoogleAnalytics } from '@/components/GoogleAnalytics';
 import { CookieConsentBanner } from '@/components/CookieConsentBanner';
 import { RuntimeTextLocalizer } from '@/components/RuntimeTextLocalizer';
 import { ReferralCaptureInner } from '@/components/ReferralCapture';
+import { MotionPreferences } from '@/components/ui/MotionPreferences';
+import { SITE_TITLE_TEMPLATE, SITE_URL, resolveServerLanguage } from '@/app/_shared/route-metadata';
+import { pickLocalized } from '@/lib/i18n';
 import {
   COOKIE_CONSENT_STORAGE_KEY,
   normalizeCookieConsentStatus,
@@ -31,33 +34,43 @@ const jetbrainsMono = JetBrains_Mono({
   variable: '--font-jetbrains-mono',
 });
 
-export const metadata: Metadata = {
-  title: 'Draw or Die | Architectural Jury',
-  description: 'AI-powered brutal architectural jury and critique platform.',
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'https://drawordie.ackaraca.me'),
-  alternates: {
-    canonical: '/',
-  },
-  openGraph: {
-    type: 'website',
-    url: '/',
-    siteName: 'Draw or Die',
-    title: 'Draw or Die | Architectural Jury',
-    description: 'AI-powered brutal architectural jury and critique platform.',
-    images: [{ url: '/icon.svg' }],
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Draw or Die | Architectural Jury',
-    description: 'AI-powered brutal architectural jury and critique platform.',
-    images: ['/icon.svg'],
-  },
-  icons: {
-    icon: '/icon.svg',
-    shortcut: '/icon.svg',
-    apple: '/icon.svg',
-  },
-};
+// og:title / og:description / og:image are intentionally left out: Next fills them per route from
+// each page's title/description and from app/opengraph-image.tsx, and twitter inherits from openGraph.
+export async function generateMetadata(): Promise<Metadata> {
+  const language = await resolveServerLanguage();
+  const defaultTitle = pickLocalized(
+    language,
+    'Draw or Die | Yapay Zeka Destekli Mimari Jüri',
+    'Draw or Die | AI Architectural Jury',
+  );
+
+  return {
+    title: {
+      default: defaultTitle,
+      template: SITE_TITLE_TEMPLATE,
+    },
+    description: pickLocalized(
+      language,
+      'Paftanı yükle, jüriyle yüzleş: mimarlık öğrencileri için yapay zeka destekli, çoklu persona jüri değerlendirmesi.',
+      'Upload your board, face the jury: AI-powered, multi-persona architectural critique for architecture students.',
+    ),
+    applicationName: 'Draw or Die',
+    metadataBase: new URL(SITE_URL),
+    openGraph: {
+      type: 'website',
+      siteName: 'Draw or Die',
+      locale: language === 'tr' ? 'tr_TR' : 'en_US',
+    },
+    twitter: {
+      card: 'summary_large_image',
+    },
+    icons: {
+      icon: '/icon.svg',
+      shortcut: '/icon.svg',
+      apple: '/icon.svg',
+    },
+  };
+}
 
 async function resolveInitialConsentStatus(): Promise<CookieConsentStatus> {
   const cookieStore = await cookies();
@@ -66,10 +79,13 @@ async function resolveInitialConsentStatus(): Promise<CookieConsentStatus> {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const initialConsentStatus = await resolveInitialConsentStatus();
+  const [initialConsentStatus, initialLanguage] = await Promise.all([
+    resolveInitialConsentStatus(),
+    resolveServerLanguage(),
+  ]);
 
   return (
-    <html lang="tr" className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
+    <html lang={initialLanguage} className={`${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
       <body className="min-h-screen flex flex-col" suppressHydrationWarning>
         <GoogleAnalytics />
         <GrowthTrackingBoot />
@@ -77,14 +93,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <ReferralCaptureInner />
         </Suspense>
         <AuthProvider>
-          <RuntimeTextLocalizer>
-            <main className="flex-1">
-              {children}
-            </main>
-            <SiteFooter />
+          <RuntimeTextLocalizer initialLanguage={initialLanguage}>
+            <MotionPreferences>
+              <main className="flex-1">
+                {children}
+              </main>
+              <SiteFooter />
+            </MotionPreferences>
+            {/* Inside the localizer so the banner follows the UI language. */}
+            <CookieConsentBanner initialConsentStatus={initialConsentStatus} />
           </RuntimeTextLocalizer>
         </AuthProvider>
-        <CookieConsentBanner initialConsentStatus={initialConsentStatus} />
       </body>
     </html>
   );

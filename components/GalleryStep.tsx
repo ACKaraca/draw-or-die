@@ -11,7 +11,7 @@ import {
   Users,
   Upload,
 } from 'lucide-react';
-import { GalleryItem, GalleryType } from '@/types';
+import type { GalleryItem, GalleryType } from '@/types';
 import { useGallery } from '@/hooks/useGallery';
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,12 +19,19 @@ import { normalizeCritiqueText } from '@/lib/critique';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import { aspectRatioToStyleValue, clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
-import { pickLocalized } from '@/lib/i18n';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
+import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
 
 interface GalleryStepProps {
   currentGallery: GalleryType;
   setCurrentGallery: (gallery: GalleryType) => void;
   galleryItems: GalleryItem[];
+}
+
+function galleryKindLabel(kind: string | undefined, language: SupportedLanguage): string {
+  if (!kind) return analysisKindLabel('SINGLE_JURY', language);
+  if (kind === 'COMMUNITY_UPLOAD') return pickLocalized(language, 'Topluluk Paylaşımı', 'Community share');
+  return analysisKindLabel(kind, language);
 }
 
 function truncateText(value: string, maxLength: number): string {
@@ -130,7 +137,7 @@ async function convertShareFileToJpeg(file: File): Promise<{ base64: string; wid
 
 export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }: GalleryStepProps) {
   const language = useLanguage();
-  const { fetchGallery, loadMore, filterByType, isLoading, hasMore } = useGallery();
+  const { fetchGallery, loadMore, filterByType, isLoading, hasMore, error: galleryError } = useGallery();
   const { user, getJWT } = useAuth();
   const critique = useDrawOrDieStore((s) => s.critique);
   const latestAnalysisKind = useDrawOrDieStore((s) => s.latestAnalysisKind);
@@ -379,24 +386,40 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  value={communityTitle}
-                  onChange={(event) => setCommunityTitle(event.target.value)}
-                  placeholder={pickLocalized(language, 'Başlık (opsiyonel)', 'Title (optional)')}
-                  className="w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
-                />
-                <input
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.pdf"
-                  onChange={handleCommunityFileChange}
-                  className="w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-slate-300"
-                />
+                <div>
+                  <label htmlFor="community-share-title" className="sr-only">
+                    {pickLocalized(language, 'Paylaşım başlığı (isteğe bağlı)', 'Share title (optional)')}
+                  </label>
+                  <input
+                    id="community-share-title"
+                    type="text"
+                    value={communityTitle}
+                    onChange={(event) => setCommunityTitle(event.target.value)}
+                    placeholder={pickLocalized(language, 'Başlık (isteğe bağlı)', 'Title (optional)')}
+                    className="w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="community-share-file" className="sr-only">
+                    {pickLocalized(language, 'Pafta veya görsel (JPG, PNG, PDF)', 'Board or image (JPG, PNG, PDF)')}
+                  </label>
+                  <input
+                    id="community-share-file"
+                    type="file"
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    onChange={handleCommunityFileChange}
+                    className="w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-slate-300"
+                  />
+                </div>
               </div>
+              <label htmlFor="community-share-note" className="sr-only">
+                {pickLocalized(language, 'Paylaşım notu (isteğe bağlı)', 'Share note (optional)')}
+              </label>
               <textarea
+                id="community-share-note"
                 value={communityNote}
                 onChange={(event) => setCommunityNote(event.target.value)}
-                placeholder={pickLocalized(language, 'Paylaşım notu (opsiyonel)', 'Share note (optional)')}
+                placeholder={pickLocalized(language, 'Paylaşım notu (isteğe bağlı)', 'Share note (optional)')}
                 className="mt-3 min-h-20 w-full rounded-lg border border-white/20 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300"
               />
               <label className="mt-3 inline-flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-slate-300">
@@ -423,7 +446,7 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
             </>
           )}
           {communityMessage && (
-            <p className="mt-3 text-xs font-mono text-cyan-100">{communityMessage}</p>
+            <p role="status" className="mt-3 text-xs font-mono text-cyan-100">{communityMessage}</p>
           )}
         </div>
       )}
@@ -445,9 +468,13 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
                 className="relative w-full bg-black"
                 style={{ aspectRatio: getCardAspect(item) }}
               >
+                {/* Plain <img>: sources are arbitrary user uploads; the aspect-ratio box above prevents layout shift. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={item.img}
                   alt={item.title}
+                  loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-contain"
                   onLoad={(event) => {
                     const target = event.currentTarget;
@@ -472,8 +499,8 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
               <div className="p-4 bg-gradient-to-b from-black/0 to-black/70">
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <h3 className="font-display font-bold text-lg text-white line-clamp-1">{item.title}</h3>
-                  <span className="rounded border border-white/20 bg-white/5 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-300">
-                    {item.analysisKind || 'SINGLE_JURY'}
+                  <span className="shrink-0 rounded border border-white/20 bg-white/5 px-2 py-1 text-[10px] font-mono uppercase tracking-wider text-slate-300">
+                    {galleryKindLabel(item.analysisKind, language)}
                   </span>
                 </div>
                 <p className={`font-mono text-xs leading-relaxed whitespace-pre-line ${currentGallery === 'HALL_OF_FAME' ? 'text-emerald-300' : currentGallery === 'WALL_OF_DEATH' ? 'text-neon-red' : 'text-cyan-100'}`}>
@@ -484,7 +511,34 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
           );
         })}
 
-        {filteredItems.length === 0 && !isLoading && (
+        {galleryError && !isLoading && (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-500/25 bg-red-500/8 p-5 sm:col-span-2 lg:col-span-3 xl:col-span-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          >
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-red-300">
+                {pickLocalized(language, 'Galeri yüklenemedi', 'Gallery could not be loaded')}
+              </p>
+              <p className="mt-1 text-sm text-red-200">
+                {pickLocalized(
+                  language,
+                  'Sunucuya şu anda ulaşılamıyor. Bağlantını kontrol edip tekrar dene.',
+                  'We could not reach the server. Check your connection and try again.',
+                )}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void fetchGallery({ type: currentGallery, refresh: true })}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-white/15 px-4 py-2 font-mono text-xs uppercase tracking-wider text-slate-200 hover:border-white/25 hover:text-white"
+            >
+              <RefreshCcw size={14} aria-hidden="true" /> {pickLocalized(language, 'Tekrar Dene', 'Try Again')}
+            </button>
+          </div>
+        )}
+
+        {filteredItems.length === 0 && !isLoading && !galleryError && (
           <div className="text-center py-20 text-slate-500 font-mono border border-white/10 rounded-xl bg-white/5 sm:col-span-2 lg:col-span-3 xl:col-span-5">
             {pickLocalized(language, 'Bu feedde henüz gönderi yok.', 'There are no posts in this feed yet.')}
           </div>
@@ -536,7 +590,16 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {archivedMineItems.map((item) => (
                 <div key={`archived-${item.id}`} className="rounded-lg border border-white/10 bg-white/5 p-3 flex items-start gap-3">
-                  <img src={item.img} alt={item.title} className="w-20 h-24 object-contain rounded border border-white/10 bg-black/40" />
+                  {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size thumbnail of a user upload */}
+                  <img
+                    src={item.img}
+                    alt={item.title}
+                    width={80}
+                    height={96}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-20 h-24 object-contain rounded border border-white/10 bg-black/40"
+                  />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-display text-white truncate">{item.title}</p>
                     <p className="mt-1 text-[11px] text-slate-400 line-clamp-3 whitespace-pre-line">

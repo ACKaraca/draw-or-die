@@ -34,7 +34,7 @@ export function Header({
     setStep,
     onAuthClick,
 }: HeaderProps) {
-    const { user, profile, signOut } = useAuth();
+    const { user, profile, loading: isAuthLoading, signOut } = useAuth();
     const language = useLanguage();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -43,7 +43,7 @@ export function Header({
     const galleryMenuRef = useRef<HTMLDivElement | null>(null);
 
     const copy = useMemo(() => {
-        if (language === 'en') {
+        if (language !== 'tr') {
             return {
                 displayFallbackName: 'Architect',
                 navStudioDesk: 'Studio Desk',
@@ -71,6 +71,10 @@ export function Header({
                 signOut: 'Sign Out',
                 loginJoin: 'Log In / Join',
                 openMobileMenu: 'Open mobile menu',
+                closeMobileMenu: 'Close mobile menu',
+                mainNavigation: 'Main navigation',
+                homeLabel: 'Draw or Die home',
+                authLoading: 'Checking session',
                 premiumShort: 'Premium',
             };
         }
@@ -87,21 +91,25 @@ export function Header({
             galleryHallOfFame: 'Hall of Fame',
             galleryWallOfDeath: 'Wall of Death',
             galleryCommunity: 'Community',
-            galleryPeerReview: 'Akran Jurisi',
-            galleryConfessions: 'Itiraflar',
-            profileMenuTitle: 'Kullanici menusu',
+            galleryPeerReview: 'Akran Jürisi',
+            galleryConfessions: 'İtiraflar',
+            profileMenuTitle: 'Kullanıcı menüsü',
             profile: 'Profil',
-            history: 'Analiz Gecmisi',
-            rapidoShop: 'Rapido Magaza',
-            buyPremium: 'Premium Satin Al',
-            upgrade: 'Upgrade',
+            history: 'Analiz Geçmişi',
+            rapidoShop: 'Rapido Mağazası',
+            buyPremium: 'Premium Satın Al',
+            upgrade: 'Yükselt',
             premiumLabel: 'Premium',
-            goPremium: 'Premiuma Gec',
-            buyRapido: 'Rapido satin al',
+            goPremium: 'Premium’a Geç',
+            buyRapido: 'Rapido satın al',
             score: 'XP',
-            signOut: 'Cikis Yap',
-            loginJoin: 'Log In / Join',
-            openMobileMenu: 'Mobil menuyu ac',
+            signOut: 'Çıkış Yap',
+            loginJoin: 'Giriş Yap / Katıl',
+            openMobileMenu: 'Mobil menüyü aç',
+            closeMobileMenu: 'Mobil menüyü kapat',
+            mainNavigation: 'Ana gezinme',
+            homeLabel: 'Draw or Die ana sayfa',
+            authLoading: 'Oturum kontrol ediliyor',
             premiumShort: 'Premium',
         };
     }, [language]);
@@ -137,8 +145,17 @@ export function Header({
         closeAllMenus();
     };
 
+    const handleSignOut = async () => {
+        closeAllMenus();
+        try {
+            await signOut();
+        } catch {
+            // useAuth clears local auth state in `finally`, so the UI is signed out even if the API call fails.
+        }
+    };
+
     useEffect(() => {
-        if (!isProfileMenuOpen && !isGalleryMenuOpen) return;
+        if (!isProfileMenuOpen && !isGalleryMenuOpen && !isMobileMenuOpen) return;
 
         const handlePointerDown = (event: PointerEvent) => {
             const target = event.target as Node;
@@ -150,17 +167,34 @@ export function Header({
             }
         };
 
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsMobileMenuOpen(false);
+                setIsProfileMenuOpen(false);
+                setIsGalleryMenuOpen(false);
+            }
+        };
+
         window.addEventListener('pointerdown', handlePointerDown);
-        return () => window.removeEventListener('pointerdown', handlePointerDown);
-    }, [isProfileMenuOpen, isGalleryMenuOpen]);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('pointerdown', handlePointerDown);
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isProfileMenuOpen, isGalleryMenuOpen, isMobileMenuOpen]);
 
     return (
         <header className="glass-header fixed top-0 left-0 w-full z-50">
             <div className="h-16 px-4 md:px-6 flex justify-between items-center gap-3">
                 {/* ── Left: Logo + Primary nav ─────────────────────────── */}
                 <div className="flex items-center gap-3 md:gap-7 min-w-0">
-                    <button className="flex items-center gap-2 cursor-pointer group min-w-0" onClick={goHome}>
-                        <div className="relative w-7 h-7 shrink-0">
+                    <button
+                        type="button"
+                        className="flex items-center gap-2 cursor-pointer group min-w-0"
+                        onClick={goHome}
+                        aria-label={copy.homeLabel}
+                    >
+                        <div className="relative w-7 h-7 shrink-0" aria-hidden="true">
                             <div className="absolute inset-0 rounded-md bg-neon-red transform rotate-45 transition-transform duration-300 group-hover:rotate-[135deg]" />
                         </div>
                         <h1 className="font-display font-bold text-base sm:text-lg md:text-xl tracking-[0.2em] text-white truncate">
@@ -169,7 +203,10 @@ export function Header({
                     </button>
 
                     {/* Max 6 top-level items */}
-                    <nav className="hidden xl:flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.12em]">
+                    <nav
+                        className="hidden xl:flex items-center gap-1 font-mono text-[11px] uppercase tracking-[0.12em]"
+                        aria-label={copy.mainNavigation}
+                    >
                         <button
                             onClick={() => goTo('upload')}
                             className="px-3 py-2 text-slate-300 hover:text-white transition-colors"
@@ -201,6 +238,8 @@ export function Header({
                                 type="button"
                                 onClick={() => setIsGalleryMenuOpen((prev) => !prev)}
                                 className="px-3 py-2 text-cyan-300 hover:text-cyan-200 transition-colors flex items-center gap-1"
+                                aria-haspopup="true"
+                                aria-expanded={isGalleryMenuOpen}
                             >
                                 {copy.navGallery}
                                 <ChevronDown size={11} strokeWidth={2} className={`transition-transform ${isGalleryMenuOpen ? 'rotate-180' : ''}`} />
@@ -291,6 +330,8 @@ export function Header({
                                     onClick={() => setIsProfileMenuOpen((prev) => !prev)}
                                     className="flex items-center gap-2 bg-black/40 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-md text-nowrap hover:border-indigo-400/40 transition-colors"
                                     title={copy.profileMenuTitle}
+                                    aria-haspopup="true"
+                                    aria-expanded={isProfileMenuOpen}
                                 >
                                     <UserCircle2 size={14} strokeWidth={1.75} className="text-indigo-300" />
                                     <span className="font-mono text-[11px] font-bold text-white max-w-[120px] truncate">
@@ -359,7 +400,8 @@ export function Header({
                                         </Link>
                                         <div className="my-1 h-px bg-white/8" />
                                         <button
-                                            onClick={() => signOut()}
+                                            type="button"
+                                            onClick={() => void handleSignOut()}
                                             className="w-full text-left px-3 py-2.5 rounded-lg text-[11px] font-mono uppercase tracking-[0.1em] text-slate-400 hover:bg-white/5 hover:text-white flex items-center gap-2"
                                         >
                                             <LogOut size={12} strokeWidth={1.75} /> {copy.signOut}
@@ -368,8 +410,16 @@ export function Header({
                                 )}
                             </div>
                         </>
+                    ) : isAuthLoading ? (
+                        // Neutral placeholder while the session restores, so signed-in users never see "Log In" flash.
+                        <div
+                            role="status"
+                            aria-label={copy.authLoading}
+                            className="h-8 w-28 rounded-full border border-white/10 bg-white/5 pulse-soft"
+                        />
                     ) : (
                         <button
+                            type="button"
                             onClick={onAuthClick}
                             className="flex items-center gap-2 bg-white text-black hover:bg-gray-200 px-4 py-2 rounded-full font-mono font-bold text-[11px] uppercase tracking-[0.1em] transition-colors"
                         >
@@ -381,7 +431,9 @@ export function Header({
                         type="button"
                         onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                         className="xl:hidden p-2 rounded-lg border border-white/15 text-slate-200 hover:bg-white/8 transition-colors"
-                        aria-label={copy.openMobileMenu}
+                        aria-label={isMobileMenuOpen ? copy.closeMobileMenu : copy.openMobileMenu}
+                        aria-expanded={isMobileMenuOpen}
+                        aria-controls="mobile-menu"
                     >
                         {isMobileMenuOpen ? <X size={16} strokeWidth={2} /> : <Menu size={16} strokeWidth={2} />}
                     </button>
@@ -390,7 +442,10 @@ export function Header({
 
             {/* ── Mobile menu ──────────────────────────────────────────── */}
             {isMobileMenuOpen && (
-                <div className="xl:hidden border-t border-white/10 bg-[var(--color-bg-1)]/98 backdrop-blur-xl px-3 pb-3 pt-3">
+                <div
+                    id="mobile-menu"
+                    className="xl:hidden max-h-[calc(100dvh-64px)] overflow-y-auto border-t border-white/10 bg-[var(--color-bg-1)]/98 backdrop-blur-xl px-3 pb-3 pt-3"
+                >
                     {user && (
                         <div className="mb-2.5 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-[11px] font-mono uppercase tracking-[0.1em] text-slate-200 flex items-center justify-between">
                             <span className="truncate">{displayName}</span>
@@ -447,6 +502,13 @@ export function Header({
                                         {copy.premiumShort}
                                     </button>
                                 )}
+                                <button
+                                    type="button"
+                                    onClick={() => void handleSignOut()}
+                                    className="col-span-2 inline-flex items-center justify-center gap-2 rounded-lg border border-red-400/35 bg-red-500/8 px-3 py-2.5 text-red-300 hover:bg-red-500/15"
+                                >
+                                    <LogOut size={12} strokeWidth={1.75} /> {copy.signOut}
+                                </button>
                             </>
                         )}
                     </div>

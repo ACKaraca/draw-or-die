@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { useDropHandler } from '@/hooks/useDropHandler';
 import { useAnalysis } from '@/hooks/useAnalysis';
-import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
+import { useDrawOrDieStore, type Toast } from '@/stores/drawOrDieStore';
 import { reportClientError } from '@/lib/logger';
 import { resolvePathFromStep, resolveStepFromPath } from '@/lib/step-routing';
 import { TIER_DEFAULTS } from '@/lib/pricing';
@@ -13,9 +13,22 @@ import { TIER_DEFAULTS } from '@/lib/pricing';
 import { Header } from '@/components/Header';
 import { AuthModal } from '@/components/AuthModal';
 import { StepRouter } from '@/components/StepRouter';
-import { normalizeLanguage } from '@/lib/i18n';
+import { normalizeLanguage, pickLocalized } from '@/lib/i18n';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import type { StepType } from '@/types';
+
+const FORM_PERSIST_DEBOUNCE_MS = 400;
+const FORM_SETTINGS_STORAGE_KEY = 'drawOrDieSettings';
+
+/** `/?auth=signin` (or `?auth=1`) opens the auth modal; used by standalone pages' sign-in CTAs. */
+const AUTH_OPEN_PARAM_VALUES: ReadonlySet<string> = new Set(['signin', '1']);
+
+const TOAST_STYLES: Record<Toast['type'], { className: string; glyph: string }> = {
+  info: { className: 'bg-blue-600/90 text-white', glyph: 'ℹ' },
+  success: { className: 'bg-emerald-500/90 text-white', glyph: '✓' },
+  error: { className: 'bg-red-600/90 text-white', glyph: '✕' },
+  badge: { className: 'bg-yellow-500/90 text-black', glyph: '★' },
+};
 
 /** Full-height pages that should start below the header instead of vertical centering */
 const TOP_ALIGNED_STEPS: ReadonlySet<StepType> = new Set([
@@ -144,7 +157,7 @@ export default function Home() {
     router.push(nextPath);
   }, [currentGallery, pathname, routeHydrated, router, step]);
 
-  // ---- Stripe redirect handling --------------------------------------------
+  // ---- Stripe / OAuth / auth-modal redirect handling ----------------------
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const checkoutStatus = params.get('checkout');
@@ -159,19 +172,41 @@ export default function Home() {
     } else if (authStatus === 'oauth_failed') {
       let errStr = params.get('error_description') || params.get('error') || params.get('code') || '';
       if (errStr) {
-        try { errStr = decodeURIComponent(errStr); } catch (e) { /* ignore */ }
+        try {
+          errStr = decodeURIComponent(errStr);
+        } catch {
+          // Keep the raw value; it is only used for matching and server-side logging.
+        }
+        // Provider errors are technical (and often English); log them for us instead of showing them to users.
+        void reportClientError({ scope: 'auth.oauth_failed', message: errStr.slice(0, 500) });
       }
-      
+
       const isAccountExists = errStr.toLowerCase().includes('already exists') || errStr.toLowerCase().includes('conflict');
-      const detailMsg = isAccountExists 
-          ? (uiLanguage === 'en' ? ' Account already exists. Please login using email and password.' : ' Bu email ile kayıtlı normal bir hesap mevcut. Lütfen şifrenizle giriş yapın.')
-          : (errStr ? ` (${errStr})` : '');
-          
+      const detailMsg = isAccountExists
+        ? ` ${pickLocalized(
+          uiLanguage,
+          'Bu e-posta ile kayıtlı bir hesap zaten var. Lütfen e-posta ve şifrenle giriş yap.',
+          'An account with this email already exists. Please sign in with your email and password.',
+        )}`
+        : '';
+
       addToast(runtimeCopy.oauthFailed + detailMsg, 'error', 7000);
       window.history.replaceState({}, '', window.location.pathname);
+      if (isAccountExists) setIsAuthModalOpen(true);
+    } else if (authStatus && AUTH_OPEN_PARAM_VALUES.has(authStatus)) {
+      setIsAuthModalOpen(true);
+      window.history.replaceState({}, '', window.location.pathname);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshProfile, runtimeCopy.checkoutCancelled, runtimeCopy.checkoutSuccess, runtimeCopy.oauthFailed, setCheckoutMessage, addToast, uiLanguage]);
+  }, [
+    refreshProfile,
+    runtimeCopy.checkoutCancelled,
+    runtimeCopy.checkoutSuccess,
+    runtimeCopy.oauthFailed,
+    setCheckoutMessage,
+    setIsAuthModalOpen,
+    addToast,
+    uiLanguage,
+  ]);
 
   // Capture uncaught browser errors and mirror them into server-side site logs.
   useEffect(() => {
@@ -211,16 +246,25 @@ export default function Home() {
   // ---- Persist form data to localStorage -----------------------------------
   const formData = useDrawOrDieStore((s) => s.formData);
   useEffect(() => {
-    const saved = localStorage.getItem('drawOrDieSettings');
-    if (saved) {
-      try {
-        setFormData(JSON.parse(saved));
-      } catch (e) { /* ignore */ }
+    try {
+      const saved = localStorage.getItem(FORM_SETTINGS_STORAGE_KEY);
+      if (saved) setFormData(JSON.parse(saved));
+    } catch {
+      // Corrupt or blocked storage: keep the store defaults.
     }
+    // Restore once on mount only; setFormData is a stable store action.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    localStorage.setItem('drawOrDieSettings', JSON.stringify(formData));
+    // Debounced so typing in the upload form does not serialize + write storage on every keystroke.
+    const handle = window.setTimeout(() => {
+      try {
+        localStorage.setItem(FORM_SETTINGS_STORAGE_KEY, JSON.stringify(formData));
+      } catch {
+        // Quota exceeded / private mode: persistence is best-effort.
+      }
+    }, FORM_PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
   }, [formData]);
 
   // ---- File drop handler ---------------------------------------------------
@@ -253,12 +297,19 @@ export default function Home() {
     multiJuryPromoActive,
   });
 
-  // ---- Toast color map -----------------------------------------------------
-  const toastColors: Record<string, string> = {
-    info: 'bg-blue-600/90',
-    success: 'bg-emerald-500/90',
-    error: 'bg-red-600/90',
-    badge: 'bg-yellow-500/90 text-black',
+  const errorToasts = toasts.filter((toast) => toast.type === 'error');
+  const statusToasts = toasts.filter((toast) => toast.type !== 'error');
+  const renderToast = (toast: Toast) => {
+    const style = TOAST_STYLES[toast.type] ?? TOAST_STYLES.info;
+    return (
+      <div
+        key={toast.id}
+        className={`px-[18px] py-3 rounded-[10px] font-mono text-xs max-w-[400px] text-center ${style.className}`}
+      >
+        <span aria-hidden="true" className="mr-2">{style.glyph}</span>
+        {toast.message}
+      </div>
+    );
   };
 
   const shellJustify = TOP_ALIGNED_STEPS.has(step) ? 'justify-start' : 'justify-center';
@@ -269,27 +320,33 @@ export default function Home() {
 
       {/* Stripe checkout banner */}
       {checkoutMessage && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-emerald-500/90 text-white font-mono text-sm rounded-lg shadow-lg flex items-center gap-3">
+        <div
+          role="status"
+          className="fixed top-24 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-emerald-500/90 text-white font-mono text-sm rounded-lg shadow-lg flex items-center gap-3"
+        >
           <span>{checkoutMessage}</span>
           <button
+            type="button"
             onClick={() => setCheckoutMessage(null)}
             className="text-white/70 hover:text-white text-lg leading-none"
+            aria-label={pickLocalized(uiLanguage, 'Bildirimi kapat', 'Dismiss notification')}
           >
             &times;
           </button>
         </div>
       )}
 
-      {/* Toast stack */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
-        {toasts.map((toast) => (
-          <div
-            key={toast.id}
-            className={`px-5 py-3 rounded-lg shadow-lg font-mono text-sm text-white max-w-sm text-center ${toastColors[toast.type] ?? 'bg-blue-600/90'}`}
-          >
-            {toast.message}
-          </div>
-        ))}
+      {/* Toast stack — sits above the cookie banner; live regions stay mounted so screen readers announce updates. */}
+      <div
+        className="fixed left-1/2 -translate-x-1/2 z-[110] flex flex-col gap-2 items-center pointer-events-none w-[calc(100%-32px)] max-w-[400px]"
+        style={{ bottom: 'calc(24px + var(--cookie-banner-h, 0px))' }}
+      >
+        <div role="status" aria-live="polite" className="flex flex-col gap-2 items-center">
+          {statusToasts.map(renderToast)}
+        </div>
+        <div role="alert" aria-live="assertive" className="flex flex-col gap-2 items-center">
+          {errorToasts.map(renderToast)}
+        </div>
       </div>
 
       <Header

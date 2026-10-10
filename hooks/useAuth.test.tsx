@@ -134,6 +134,27 @@ describe('useAuth', () => {
     expect(result.current.user?.identities?.[0]?.provider).toBe('anonymous');
   });
 
+  it('surfaces anonymous sign-in failures to the caller and clears loading', async () => {
+    mockedAccount.createAnonymousSession.mockRejectedValueOnce(new Error('rate limited'));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let caught: unknown = null;
+    await act(async () => {
+      try {
+        await result.current.signInAnonymously();
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe('rate limited');
+    expect(result.current.loading).toBe(false);
+    expect(result.current.user).toBeNull();
+  });
+
   it('signs out and clears local auth state', async () => {
     window.localStorage.setItem('dod_has_appwrite_session', '1');
     mockedAccount.get.mockResolvedValue({

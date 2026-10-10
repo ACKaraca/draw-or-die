@@ -3,12 +3,11 @@ import { motion } from 'framer-motion';
 import { Send, User, Bot, Sparkles, AlertTriangle, Plus, Paperclip, X, Trash2, Loader2 } from 'lucide-react';
 import { generateAIResponse } from '@/lib/ai';
 import Markdown from 'react-markdown';
-import { Badge } from '@/types';
+import type { Badge } from '@/types';
 import { reportClientError } from '@/lib/logger';
 import { account } from '@/lib/appwrite';
-import type { SupportedLanguage } from '@/lib/i18n';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
-import { pickLocalized } from '@/lib/i18n';
+import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
 interface AIMentorStepProps {
     isAuthenticated: boolean;
@@ -658,7 +657,7 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                 <div className="flex-1 min-h-0 p-4">
                     <div
                         ref={messagesContainerRef}
-                        className="h-full overflow-y-auto p-4 space-y-6 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] lg:bg-fixed bg-scroll rounded-xl border border-white/5"
+                        className="h-full overflow-y-auto p-4 space-y-6 custom-scrollbar pattern-dots rounded-xl border border-white/5"
                     >
                     {messages.map((m) => (
                         <div key={m.id} className={`flex gap-3 max-w-[85%] ${m.role === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
@@ -671,14 +670,14 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
                                         <p>{m.text}</p>
                                         {m.attachmentName && (
                                             <p className="mt-2 text-[11px] text-cyan-200 font-mono">
-                                                Ek: {m.attachmentUrl ? <a href={m.attachmentUrl} target="_blank" rel="noreferrer" className="underline">{m.attachmentName}</a> : m.attachmentName}
+                                                {pickLocalized(language, 'Ek:', 'Attachment:')}{' '}
+                                                {m.attachmentUrl ? <a href={m.attachmentUrl} target="_blank" rel="noreferrer" className="underline">{m.attachmentName}</a> : m.attachmentName}
                                             </p>
                                         )}
                                     </>
                                 ) : (
                                     <Markdown>{m.text}</Markdown>
                                 )}
-                                <p className="mt-2 text-[10px] opacity-60 font-mono">~{m.tokens} token</p>
                             </div>
                         </div>
                     ))}
@@ -731,33 +730,42 @@ export function AIMentorStep({ isAuthenticated, userId: _userId, isAnonymous, is
 
                     <div className="flex gap-2">
                         <label className="w-12 flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg cursor-pointer transition-colors" title={pickLocalized(language, '2MB JPG/PNG/PDF ekle', 'Attach 2MB JPG/PNG/PDF') }>
-                            <Paperclip size={18} className="text-slate-300" />
+                            <Paperclip size={18} className="text-slate-300" aria-hidden="true" />
+                            {/* sr-only (not display:none) keeps the picker reachable by keyboard; the label shows the focus ring. */}
                             <input
                                 type="file"
                                 accept=".jpg,.jpeg,.png,.pdf"
-                                className="hidden"
+                                className="sr-only"
                                 onChange={handleAttachmentChange}
                                 disabled={isLoading}
+                                aria-label={pickLocalized(language, 'Dosya ekle (en fazla 2 MB JPG, PNG veya PDF)', 'Attach a file (JPG, PNG or PDF, max 2 MB)')}
                             />
                         </label>
 
+                        <label htmlFor="mentor-message-input" className="sr-only">
+                            {pickLocalized(language, 'Mentora mesajın', 'Your message to the mentor')}
+                        </label>
                         <input
+                            id="mentor-message-input"
                             type="text"
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                             placeholder={pickLocalized(language, 'Mentora danış...', 'Ask the mentor...')}
-                            className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors text-sm"
+                            className="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 transition-colors text-sm"
                             disabled={isLoading}
                         />
                         <button
+                            type="button"
                             onClick={() => {
                                 void handleSend();
                             }}
                             disabled={isLoading || !input.trim()}
+                            aria-label={pickLocalized(language, 'Mesajı gönder', 'Send message')}
+                            title={pickLocalized(language, 'Mesajı gönder', 'Send message')}
                             className="w-12 flex items-center justify-center bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
                         >
-                            <Send size={18} />
+                            <Send size={18} aria-hidden="true" />
                         </button>
                     </div>
                 </div>

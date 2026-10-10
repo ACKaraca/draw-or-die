@@ -102,7 +102,7 @@ describe('CookieConsentBanner', () => {
     });
   });
 
-  it('close button accepts consent and hides banner', async () => {
+  it('close button does not grant consent (necessary cookies only) and hides banner', async () => {
     render(<CookieConsentBanner />);
 
     await waitFor(() => {
@@ -111,10 +111,27 @@ describe('CookieConsentBanner', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /kapat/i }));
 
-    expect(mockedApplyAnalyticsConsent).toHaveBeenCalledWith('accepted');
+    expect(mockedApplyAnalyticsConsent).toHaveBeenCalledWith('rejected');
+    expect(mockedApplyAnalyticsConsent).not.toHaveBeenCalledWith('accepted');
+    expect(mockedTrackConversionEvent).not.toHaveBeenCalled();
+    expect(mockedTrackPageView).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /kapat/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('publishes its height for toasts and clears it once dismissed', async () => {
+    render(<CookieConsentBanner />);
+
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--cookie-banner-h')).not.toBe('');
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: /^reddet$/i }));
+
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--cookie-banner-h')).toBe('');
     });
   });
 

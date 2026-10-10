@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Gavel, Lock } from 'lucide-react';
+import { Gavel, Lock, LogIn } from 'lucide-react';
 import { account } from '@/lib/appwrite';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
@@ -78,9 +78,20 @@ export default function PeerReviewPage() {
           <p className="text-slate-400 mb-6">
             {pickLocalized(language, 'Akran değerlendirmesine katılmak için giriş yapmalısınız.', 'You must sign in to participate in peer review.')}
           </p>
-          <Link href="/" className="inline-block bg-white text-black px-6 py-3 uppercase font-bold tracking-wider rounded">
-            {pickLocalized(language, 'Ana Sayfa', 'Home')}
-          </Link>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/?auth=signin"
+              className="inline-flex items-center gap-2 bg-neon-red px-6 py-3 font-mono text-xs font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#cc0029] cta-primary-glow"
+            >
+              <LogIn size={14} aria-hidden="true" /> {pickLocalized(language, 'Giriş Yap', 'Sign In')}
+            </Link>
+            <Link
+              href="/"
+              className="inline-block rounded-lg border border-white/15 px-6 py-3 font-mono text-xs uppercase tracking-[0.1em] text-slate-300 transition-colors hover:text-white"
+            >
+              {pickLocalized(language, 'Ana Sayfa', 'Home')}
+            </Link>
+          </div>
         </div>
       </main>
     );

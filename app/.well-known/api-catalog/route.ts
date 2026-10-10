@@ -1,4 +1,4 @@
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://drawordie.ackaraca.me';
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://drawordie.app';
 
 const headers = {
   'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400',

@@ -24,11 +24,10 @@ import { ReferralCard } from '@/components/ReferralCard';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { normalizeLanguage, pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
+// de/it responses fall back to English (see lib/i18n.ts), so only offer languages the jury actually writes in.
 const LANGUAGE_OPTIONS: Array<{ value: SupportedLanguage; label: string }> = [
   { value: 'tr', label: 'Türkçe' },
   { value: 'en', label: 'English' },
-  { value: 'de', label: 'Deutsch' },
-  { value: 'it', label: 'Italiano' },
 ];
 
 interface ProfileStepProps {
@@ -308,7 +307,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
   const progression = profile?.progression_score ?? 0;
   const wallCount = profile?.wall_of_death_count ?? 0;
   const badges = profile?.earned_badges ?? [];
-  const currentLanguage = normalizeLanguage(profile?.preferred_language, 'tr');
+  const currentLanguage: SupportedLanguage = normalizeLanguage(profile?.preferred_language, 'tr') === 'tr' ? 'tr' : 'en';
 
   return (
     <motion.div
@@ -375,30 +374,22 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-lg border border-white/10 bg-white/5 p-4">
             <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-              {pickLocalized(language, 'Dil Tercihi', 'Language preference')}
+              {pickLocalized(language, 'Jüri ve Mentor Dili', 'Jury & mentor language')}
             </p>
             <p className="mt-1 text-sm text-slate-300">
               {pickLocalized(
                 language,
-                'Arayüz ve AI yanıtları için varsayılan dili seç.',
-                'Choose the default language for the UI and AI responses.',
-              )}
-            </p>
-            <p className="mt-2 text-[11px] font-mono leading-relaxed text-cyan-200/80">
-              {pickLocalized(
-                language,
-                'Bu tercih AI cevap dilidir. Arayuz dili footerdan degisir ve sadece tarayicida saklanir.',
-                'This controls AI response language. UI language changes from the footer and stays in the browser.',
+                'Jüri eleştirileri ve AI Mentor yanıtları bu dilde yazılır; arayüz dilini sayfanın altındaki dil menüsünden ayrıca değiştirebilirsin.',
+                'Jury critiques and AI Mentor replies are written in this language; change the interface language separately from the language menu at the bottom of the page.',
               )}
             </p>
             <label className="mt-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-200">
-              <Globe2 size={14} className="text-cyan-300 shrink-0" />
-              <span className="sr-only">{pickLocalized(language, 'Dil seçimi', 'Language selection')}</span>
+              <Globe2 size={14} className="text-cyan-300 shrink-0" aria-hidden="true" />
               <select
                 value={currentLanguage}
                 onChange={(event) => handleLanguageChange(event.target.value as SupportedLanguage)}
                 className="w-full bg-transparent text-sm text-white outline-none"
-                aria-label={pickLocalized(language, 'Dil seçimi', 'Language selection')}
+                aria-label={pickLocalized(language, 'Jüri ve mentor dili', 'Jury and mentor language')}
               >
                 {LANGUAGE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value} className="bg-[#0A0F1A] text-white">
@@ -530,7 +521,7 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
         <div className="rounded-xl border border-white/10 bg-[#101A2F] p-5">
           <h3 className="font-mono text-sm uppercase tracking-widest text-slate-300 border-b border-white/10 pb-2 flex items-center gap-2">
             <GalleryHorizontal size={16} className="text-neon-red" />{' '}
-            {pickLocalized(language, 'Rozetler ve Kişisel Ayarlar', 'Badges & personal settings')}
+            {pickLocalized(language, 'Rozetler', 'Badges')}
           </h3>
 
           <div className="mt-4">
@@ -550,23 +541,6 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
                 ))}
               </div>
             )}
-
-            <div className="space-y-2 text-sm">
-              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-slate-300">
-                {pickLocalized(
-                  language,
-                  'Varsayılan analiz uzunluğu ayarı yakında profil üzerinden yönetilebilir olacak.',
-                  'Default analysis length will soon be manageable from your profile.',
-                )}
-              </div>
-              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-slate-300">
-                {pickLocalized(
-                  language,
-                  'Premium kelime hedefi seçimi altyapısı hazırlandı.',
-                  'Premium word-target selection infrastructure is ready.',
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>

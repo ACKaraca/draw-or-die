@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
 import { OAuthProvider } from 'appwrite'
 import { account } from '@/lib/appwrite'
+import { clearAIJwtCache } from '@/lib/ai'
 import type { Badge } from '@/types'
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n'
 
@@ -124,6 +125,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const clearJwtCache = useCallback(() => {
         jwtCacheRef.current = null
         jwtInflightRef.current = null
+        // lib/ai keeps its own JWT; drop it too so a new session never reuses the old user's token.
+        clearAIJwtCache()
     }, [])
 
     const createJwtWithRetry = useCallback(async () => {
@@ -229,6 +232,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const currentUser = await account.get()
             const mappedUser = mapUser(currentUser)
             const existingSession = sessionRef.current
+            if (existingSession && existingSession.user.id !== mappedUser.id) {
+                // Account switched (e.g. guest → registered): never reuse the previous user's JWT.
+                clearJwtCache()
+            }
 
             let accessToken: string | null = null
             try {
@@ -263,7 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } finally {
             setLoading(false)
         }
-    }, [clearAuthState, fetchProfile, getJWT, mapUser, setSessionHint])
+    }, [clearAuthState, clearJwtCache, fetchProfile, getJWT, mapUser, setSessionHint])
 
     const reloadSession = useCallback(async () => {
         await refreshSession()
@@ -416,8 +423,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             window.dispatchEvent(new Event('appwrite-auth-changed'))
             await refreshSession()
         } catch (error) {
-            console.error('Error signing in anonymously:', error)
             setLoading(false)
+            // Rethrow so callers (AuthModal) can show a localized error instead of failing silently.
+            throw error instanceof Error ? error : new Error('Anonymous sign-in failed')
         }
     }
 

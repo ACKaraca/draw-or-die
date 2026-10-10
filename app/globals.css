@@ -43,6 +43,7 @@
   --border-lg: rgba(255, 255, 255, 0.18);
   --border-red: rgba(255, 0, 51, 0.4);
   --border-red-focus: rgba(255, 0, 51, 0.6);
+  --cookie-banner-h: 0px;
 
   /* Layout constants */
   --header-h: 64px;
@@ -63,6 +64,8 @@ body {
     linear-gradient(90deg, var(--color-blueprint-line-strong) 1px, transparent 1px);
   background-size: 20px 20px, 20px 20px, 100px 100px, 100px 100px;
   background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
+  /* Keeps the footer reachable while the fixed cookie banner is open (height set by CookieConsentBanner). */
+  padding-bottom: var(--cookie-banner-h);
 }
 
 ::selection {
@@ -106,6 +109,12 @@ body {
   background: rgba(10, 15, 26, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+/* Subtle dot grid for inset panels (chat transcripts etc.) — local CSS, no third-party assets */
+.pattern-dots {
+  background-image: radial-gradient(var(--color-blueprint-line-strong) 1px, transparent 1px);
+  background-size: 16px 16px;
 }
 
 /* Section divider header — see AGENTS_DESIGN.md §7.5 */
@@ -163,6 +172,47 @@ body {
 }
 .fade-up { animation: fadeUp 0.4s ease both; }
 .pulse-soft { animation: pulseSoft 2s ease-in-out infinite; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Accessibility — keyboard focus ring + reduced motion
+   Unlayered on purpose: it must beat Tailwind's layered `outline-none` /
+   `focus:outline-none` utilities so keyboard users always see focus.
+   ────────────────────────────────────────────────────────────────────────── */
+:is(
+  a[href],
+  button,
+  input,
+  textarea,
+  select,
+  summary,
+  [role='button'],
+  [role='link'],
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  [contenteditable='true'],
+  [tabindex]:not([tabindex='-1'])
+):focus-visible {
+  outline: 2px solid var(--border-red-focus);
+  outline-offset: 2px;
+}
+
+/* Labels wrapping a visually hidden control (e.g. file pickers) show the ring instead. */
+label:has(> .sr-only:focus-visible) {
+  outline: 2px solid var(--border-red-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
    Markdown rendering (AI critique output)

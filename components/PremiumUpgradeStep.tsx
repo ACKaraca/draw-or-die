@@ -10,6 +10,7 @@ import { account } from '@/lib/appwrite';
 import { EduVerificationCard } from '@/components/EduVerificationCard';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized } from '@/lib/i18n';
+import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 import type { StepType } from '@/types';
 import { rapidoCostOperationLabel } from '@/lib/locales/rapidoOperations';
 
@@ -47,6 +48,8 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
     const [promoSummary, setPromoSummary] = useState<string>('');
     const [promoError, setPromoError] = useState<string>('');
     const [promoLoading, setPromoLoading] = useState(false);
+    const [checkoutError, setCheckoutError] = useState('');
+    const setIsAuthModalOpen = useDrawOrDieStore((s) => s.setIsAuthModalOpen);
 
     const email = user?.email ?? '';
     const tierKey = resolveStripeTierForUser({
@@ -86,6 +89,11 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
         }).format((amountCents || 0) / 100);
     };
 
+    const akdenizMonthlyPrice = formatCurrency(
+        STRIPE_PRICES.AKDENIZ_STUDENT.MONTHLY,
+        STRIPE_PRICES.AKDENIZ_STUDENT.CURRENCY,
+    );
+
     const describeCoupon = (payload: PromoValidationResponse): string => {
         const percentOff = Number.isFinite(payload.coupon?.percentOff)
             ? Number(payload.coupon?.percentOff)
@@ -111,7 +119,7 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
 
     const handleValidatePromo = async () => {
         if (!user) {
-            alert(pickLocalized(language, 'Lütfen önce giriş yapın.', 'Please sign in first.'));
+            setIsAuthModalOpen(true);
             return;
         }
 
@@ -164,9 +172,10 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
 
     const handleCheckout = async (mode: 'premium_monthly' | 'premium_yearly' | 'rapido_pack') => {
         if (!user) {
-            alert(pickLocalized(language, 'Lütfen önce giriş yapın.', 'Please sign in first.'));
+            setIsAuthModalOpen(true);
             return;
         }
+        setCheckoutError('');
         setLoading(true);
         try {
             const jwt = await account.createJWT();
@@ -195,13 +204,23 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                         data.error || pickLocalized(language, 'Promo kodu geçersiz.', 'Invalid promo code.'),
                     );
                 }
-                alert(
+                setCheckoutError(
                     data.error ||
-                        pickLocalized(language, 'Ödeme sayfası açılamadı.', 'Could not start checkout.'),
+                        pickLocalized(
+                            language,
+                            'Ödeme sayfası açılamadı. Lütfen birkaç saniye sonra tekrar dene.',
+                            'Could not open the checkout page. Please try again in a few seconds.',
+                        ),
                 );
             }
         } catch {
-            alert(pickLocalized(language, 'Bir hata oluştu.', 'Something went wrong.'));
+            setCheckoutError(
+                pickLocalized(
+                    language,
+                    'Ödeme başlatılamadı. İnternet bağlantını kontrol edip tekrar dene.',
+                    'Checkout could not be started. Check your connection and try again.',
+                ),
+            );
         } finally {
             setLoading(false);
         }
@@ -275,8 +294,8 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                             {isAkdenizStudent
                                 ? pickLocalized(
                                     language,
-                                    'ogr.akdeniz.edu.tr kampanyası aktif: Premium 149 TL',
-                                    'ogr.akdeniz.edu.tr campaign active: Premium 149 TRY',
+                                    `ogr.akdeniz.edu.tr kampanyası aktif: Premium aylık ${akdenizMonthlyPrice}`,
+                                    `ogr.akdeniz.edu.tr campaign active: Premium ${akdenizMonthlyPrice}/month`,
                                 )
                                 : pickLocalized(
                                     language,
@@ -307,6 +326,18 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                     </button>
                 </div>
             </div>
+
+            {checkoutError && (
+                <div
+                    role="alert"
+                    className="mb-6 rounded-lg border border-red-500/25 bg-red-500/8 p-4"
+                >
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-red-300">
+                        {pickLocalized(language, 'Ödeme başlatılamadı', 'Checkout failed')}
+                    </p>
+                    <p className="mt-1 text-sm text-red-200">{checkoutError}</p>
+                </div>
+            )}
 
             {tab === 'premium' && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">

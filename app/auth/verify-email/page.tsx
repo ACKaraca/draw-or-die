@@ -18,12 +18,14 @@ async function applyReferralAfterVerification(): Promise<void> {
   }
 }
 
+type VerifyStatus = 'loading' | 'success' | 'missing-link' | 'invalid-link' | 'failed';
+
 function VerifyEmailContent() {
   const router = useRouter();
   const language = useLanguage();
   const searchParams = useSearchParams();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState(pickLocalizedFour(language, 'Email doğrulanıyor...', 'Email is being verified...', 'E-Mail wird überprüft...', 'Email in verifica...'));
+  // Store a status, not a message, so the copy follows the current UI language at render time.
+  const [status, setStatus] = useState<VerifyStatus>('loading');
 
   const userId = useMemo(() => searchParams.get('userId') || '', [searchParams]);
   const secret = useMemo(() => searchParams.get('secret') || '', [searchParams]);
@@ -31,8 +33,7 @@ function VerifyEmailContent() {
   useEffect(() => {
     const verify = async () => {
       if (!userId || !secret) {
-        setStatus('error');
-        setMessage(pickLocalizedFour(language, 'Doğrulama bağlantısı eksik veya hatalı.', 'The verification link is missing or invalid.', 'Der Verifizierungslink fehlt oder ist ungültig.', 'Il link di verifica è mancante o non valido.'));
+        setStatus('missing-link');
         return;
       }
 
@@ -41,26 +42,50 @@ function VerifyEmailContent() {
         // Referral ödülü varsa uygula (arka planda, sonucu beklenmez)
         void applyReferralAfterVerification();
         setStatus('success');
-        setMessage(pickLocalizedFour(language, 'Email doğrulandı. Ana sayfaya yönlendiriliyorsun...', 'Email verified. Redirecting to the home page...', 'E-Mail bestätigt. Du wirst zur Startseite weitergeleitet...', 'Email verificata. Verrai reindirizzato alla home...'));
         setTimeout(() => router.push('/'), 1800);
       } catch (error) {
-        setStatus('error');
-        setMessage(error instanceof Error ? error.message : pickLocalizedFour(language, 'Email doğrulanamadı.', 'Email could not be verified.', 'E-Mail konnte nicht bestätigt werden.', 'Impossibile verificare l’email.'));
+        const code = typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
+        setStatus(code === 401 || code === 404 ? 'invalid-link' : 'failed');
       }
     };
 
     void verify();
   }, [router, secret, userId]);
 
+  const isError = status === 'missing-link' || status === 'invalid-link' || status === 'failed';
+  const message = (() => {
+    switch (status) {
+      case 'loading':
+        return pickLocalizedFour(language, 'E-posta doğrulanıyor...', 'Verifying your email...', 'E-Mail wird überprüft...', 'Email in verifica...');
+      case 'success':
+        return pickLocalizedFour(language, 'E-posta doğrulandı. Ana sayfaya yönlendiriliyorsun...', 'Email verified. Redirecting to the home page...', 'E-Mail bestätigt. Du wirst zur Startseite weitergeleitet...', 'Email verificata. Verrai reindirizzato alla home...');
+      case 'missing-link':
+        return pickLocalizedFour(language, 'Doğrulama bağlantısı eksik veya hatalı. E-postadaki bağlantıyı eksiksiz açtığından emin ol.', 'The verification link is missing or incomplete. Make sure you open the full link from the email.', 'Der Verifizierungslink fehlt oder ist ungültig.', 'Il link di verifica è mancante o non valido.');
+      case 'invalid-link':
+        return pickLocalizedFour(language, 'Bu doğrulama bağlantısı geçersiz veya süresi dolmuş. Giriş yapıp yeni bir doğrulama e-postası iste.', 'This verification link is invalid or has expired. Sign in and request a new verification email.', '', '');
+      case 'failed':
+        return pickLocalizedFour(language, 'E-posta şu anda doğrulanamadı. Lütfen birkaç dakika sonra bağlantıyı tekrar aç.', 'Your email could not be verified right now. Please open the link again in a few minutes.', 'E-Mail konnte nicht bestätigt werden.', 'Impossibile verificare l’email.');
+      default: {
+        const _exhaustive: never = status;
+        throw new Error(`Unhandled verify status: ${String(_exhaustive)}`);
+      }
+    }
+  })();
+
   return (
     <div className="min-h-screen bg-[#080B14] text-white flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0A0F1A] p-8 text-center shadow-2xl">
-        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-cyan-200">Appwrite Verification</p>
-        <h1 className="mt-3 text-3xl font-display uppercase tracking-wide">{pickLocalizedFour(language, 'Email Doğrulama', 'Email Verification', 'E-Mail-Verifizierung', 'Verifica email')}</h1>
-        <p className={`mt-4 text-sm ${status === 'error' ? 'text-red-300' : status === 'success' ? 'text-emerald-300' : 'text-slate-300'}`}>
+        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-cyan-200">
+          {pickLocalizedFour(language, 'Hesap Doğrulama', 'Account Verification', 'Kontobestätigung', 'Verifica account')}
+        </p>
+        <h1 className="mt-3 text-3xl font-display uppercase tracking-wide">{pickLocalizedFour(language, 'E-posta Doğrulama', 'Email Verification', 'E-Mail-Verifizierung', 'Verifica email')}</h1>
+        <p
+          role={isError ? 'alert' : 'status'}
+          className={`mt-4 text-sm ${isError ? 'text-red-300' : status === 'success' ? 'text-emerald-300' : 'text-slate-300'}`}
+        >
           {message}
         </p>
-        {status === 'error' && (
+        {isError && (
           <button
             type="button"
             onClick={() => router.push('/')}
@@ -80,9 +105,11 @@ function VerifyEmailFallback() {
   return (
     <div className="min-h-screen bg-[#080B14] text-white flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#0A0F1A] p-8 text-center shadow-2xl">
-        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-cyan-200">Appwrite Verification</p>
-        <h1 className="mt-3 text-3xl font-display uppercase tracking-wide">{pickLocalizedFour(language, 'Email Doğrulama', 'Email Verification', 'E-Mail-Verifizierung', 'Verifica email')}</h1>
-        <p className="mt-4 text-sm text-slate-300">{pickLocalizedFour(language, 'Email doğrulanıyor...', 'Email is being verified...', 'E-Mail wird überprüft...', 'Email in verifica...')}</p>
+        <p className="text-[11px] font-mono uppercase tracking-[0.3em] text-cyan-200">
+          {pickLocalizedFour(language, 'Hesap Doğrulama', 'Account Verification', 'Kontobestätigung', 'Verifica account')}
+        </p>
+        <h1 className="mt-3 text-3xl font-display uppercase tracking-wide">{pickLocalizedFour(language, 'E-posta Doğrulama', 'Email Verification', 'E-Mail-Verifizierung', 'Verifica email')}</h1>
+        <p className="mt-4 text-sm text-slate-300">{pickLocalizedFour(language, 'E-posta doğrulanıyor...', 'Verifying your email...', 'E-Mail wird überprüft...', 'Email in verifica...')}</p>
       </div>
     </div>
   );
