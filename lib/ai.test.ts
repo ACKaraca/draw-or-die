@@ -1,4 +1,4 @@
-import { generateAIResponse } from '@/lib/ai';
+import { clearAIJwtCache, generateAIResponse } from '@/lib/ai';
 import { account } from '@/lib/appwrite';
 
 jest.mock('@/lib/appwrite', () => ({
@@ -14,6 +14,7 @@ describe('generateAIResponse', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
+    clearAIJwtCache();
     mockedAccount.createJWT.mockResolvedValue({ jwt: 'jwt-token' } as never);
     mockedFetch.mockResolvedValue({
       ok: true,
@@ -144,5 +145,41 @@ describe('generateAIResponse', () => {
     const assertion = expect(pending).rejects.toThrow('İstek zaman aşımına uğradı. Tekrar deneyin.');
     await jest.advanceTimersByTimeAsync(120_000);
     await assertion;
+  });
+
+  it('reuses the session JWT across consecutive AI calls', async () => {
+    await generateAIResponse({ operation: 'SINGLE_JURY' });
+    await generateAIResponse({ operation: 'SINGLE_JURY' });
+
+    expect(mockedAccount.createJWT).toHaveBeenCalledTimes(1);
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes the JWT once and retries when the API answers 401', async () => {
+    await generateAIResponse({ operation: 'SINGLE_JURY' });
+    mockedAccount.createJWT.mockResolvedValueOnce({ jwt: 'fresh-token' } as never);
+    mockedFetch.mockResolvedValueOnce({ ok: false, status: 401, clone: jest.fn() });
+
+    const response = await generateAIResponse({ operation: 'SINGLE_JURY' });
+
+    expect(mockedAccount.createJWT).toHaveBeenCalledTimes(2);
+    const lastHeaders = (mockedFetch.mock.calls.at(-1)?.[1] as { headers: Record<string, string> }).headers;
+    expect(lastHeaders.Authorization).toBe('Bearer fresh-token');
+    expect(response).toEqual({ result: 'ok', rapido_remaining: 3, game_state: undefined });
+  });
+
+  it('aborts the underlying request when the timeout fires', async () => {
+    jest.useFakeTimers();
+    let capturedSignal: AbortSignal | undefined;
+    mockedFetch.mockImplementation((_url: string, init: { signal?: AbortSignal }) => {
+      capturedSignal = init.signal;
+      return new Promise(() => undefined);
+    });
+
+    const pending = generateAIResponse({ operation: 'SINGLE_JURY' });
+    const assertion = expect(pending).rejects.toThrow('İstek zaman aşımına uğradı. Tekrar deneyin.');
+    await jest.advanceTimersByTimeAsync(120_000);
+    await assertion;
+    expect(capturedSignal?.aborted).toBe(true);
   });
 });

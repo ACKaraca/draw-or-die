@@ -47,6 +47,13 @@ These are used by `/api/ai-generate` to call the LLM.
 | `AI_MODEL_LOW_COST` | Lower-cost model for `DEFENSE`, `AUTO_CONCEPT`, and `AUTO_FILL_FORM` | falls back to `AI_MODEL` |
 | `AI_MODEL_PREMIUM_RESCUE` | Optional stronger model for `PREMIUM_RESCUE` coordinate rescue analysis | falls back to `AI_MODEL_ANALYSIS` |
 | `AI_MODEL_FALLBACKS` | Comma-separated fallback models when primary model is temporarily unavailable | `google/gemini-2.5-flash-lite` |
+| `AI_STRUCTURED_OUTPUTS` | Strict JSON-schema responses for jury, mentor, defense, auto-fill and rescue calls. Set to `off` to roll back to prompt-only JSON if a provider rejects `json_schema`. | on |
+| `AI_REASONING_EFFORT` | Optional `reasoning_effort` sent to the provider for every call (`none`, `minimal`, `low`, `medium`, `high`). Unset = provider default. Check token usage in the `api.ai-generate.usage` logs before/after changing it. | unset |
+| `AI_REASONING_EFFORT_FAST` | Same as above but only for latency-sensitive calls (`DEFENSE`, `AUTO_FILL_FORM`, `AUTO_CONCEPT`, `AI_MENTOR`, `SKILL_ROADMAP`). `low` usually cuts cost and latency for these. | falls back to `AI_REASONING_EFFORT` |
+
+Every successful provider call logs one `[server-info]` line with scope `api.ai-generate.usage` (operation, model, attempts, duration, prompt/completion/reasoning tokens). Use it to measure cost per operation before tuning models or reasoning effort.
+
+Provider calls have a 100 s budget. Transient failures (network errors, 408/425/429/5xx) are retried once, on the first `AI_MODEL_FALLBACKS` entry when the primary is a Gemini 3.1 model. On the Vercel AI Gateway the same fallback is also sent as the gateway's `models` list so most failovers happen inside a single request.
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.ackaraca.me,https://drawordie.app` |
 | `NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED` | Enables the future client-side image-editing rescue path. Keep `false` until manually tested. | `false` |
 

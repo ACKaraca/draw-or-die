@@ -30,8 +30,18 @@ import {
 } from '@/lib/appwrite/server';
 import { getAppwriteErrorDetails, isAppwriteConflict, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 
-const ENSURE_TTL_MS = 5 * 60 * 1000;
+// Schema only changes with deployments (which boot fresh instances), so a successful
+// check is reused for hours instead of re-validating ~200 columns/indexes per request.
+const ENSURE_TTL_MS = 6 * 60 * 60 * 1000;
+const SCHEMA_LIST_LIMIT = 500;
 
+type TableSchemaSnapshot = {
+  columns: Set<string>;
+  indexes: Set<string>;
+};
+
+let tableIdsSnapshot: Promise<Set<string> | null> | null = null;
+let tableSchemaSnapshots = new Map<string, Promise<TableSchemaSnapshot | null>>();
 let coreEnsuredAt = 0;
 let coreEnsurePromise: Promise<void> | null = null;
 let commerceEnsuredAt = 0;
@@ -57,6 +67,77 @@ function isResourceLimitError(error: unknown): boolean {
     || message.includes('limit has been reached');
 }
 
+function resetSchemaSnapshots(): void {
+  tableIdsSnapshot = null;
+  tableSchemaSnapshots = new Map();
+}
+
+async function loadTableIds(tables: TablesDB): Promise<Set<string> | null> {
+  try {
+    const list = await tables.listTables({
+      databaseId: APPWRITE_DATABASE_ID,
+      queries: [Query.limit(SCHEMA_LIST_LIMIT)],
+      total: false,
+    });
+    return new Set(list.tables.map((table) => table.$id));
+  } catch {
+    // Fall back to per-table lookups.
+    return null;
+  }
+}
+
+async function loadTableSchema(tables: TablesDB, tableId: string): Promise<TableSchemaSnapshot | null> {
+  try {
+    const [columnList, indexList] = await Promise.all([
+      tables.listColumns({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId,
+        queries: [Query.limit(SCHEMA_LIST_LIMIT)],
+        total: false,
+      }),
+      tables.listIndexes({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId,
+        queries: [Query.limit(SCHEMA_LIST_LIMIT)],
+        total: false,
+      }),
+    ]);
+    return {
+      columns: new Set(columnList.columns.map((column) => column.key)),
+      indexes: new Set(indexList.indexes.map((index) => index.key)),
+    };
+  } catch {
+    // Fall back to per-column/per-index lookups.
+    return null;
+  }
+}
+
+// A miss never skips work: unknown keys still go through the get → create path.
+async function isKnownTable(tables: TablesDB, tableId: string): Promise<boolean> {
+  tableIdsSnapshot ??= loadTableIds(tables);
+  const ids = await tableIdsSnapshot;
+  return Boolean(ids?.has(tableId));
+}
+
+async function getTableSchema(tables: TablesDB, tableId: string): Promise<TableSchemaSnapshot | null> {
+  let snapshot = tableSchemaSnapshots.get(tableId);
+  if (!snapshot) {
+    snapshot = loadTableSchema(tables, tableId);
+    tableSchemaSnapshots.set(tableId, snapshot);
+  }
+  return snapshot;
+}
+
+async function isKnownColumn(tables: TablesDB, tableId: string, key: string): Promise<boolean> {
+  const schema = await getTableSchema(tables, tableId);
+  return Boolean(schema?.columns.has(key));
+}
+
+async function isKnownIndex(tables: TablesDB, tableId: string, key: string): Promise<boolean> {
+  const schema = await getTableSchema(tables, tableId);
+  return Boolean(schema?.indexes.has(key));
+}
+
 async function ensureDatabase(tables: TablesDB): Promise<void> {
   try {
     await tables.get({ databaseId: APPWRITE_DATABASE_ID });
@@ -75,6 +156,7 @@ async function ensureDatabase(tables: TablesDB): Promise<void> {
 }
 
 async function ensureTable(tables: TablesDB, tableId: string, name: string): Promise<void> {
+  if (await isKnownTable(tables, tableId)) return;
   try {
     await tables.getTable({ databaseId: APPWRITE_DATABASE_ID, tableId });
   } catch (error) {
@@ -103,6 +185,7 @@ async function ensureStringColumn(
   array = false,
   encrypt = false,
 ): Promise<void> {
+  if (await isKnownColumn(tables, tableId, key)) return;
   try {
     await tables.getColumn({ databaseId: APPWRITE_DATABASE_ID, tableId, key });
   } catch (error) {
@@ -138,6 +221,7 @@ async function ensureBooleanColumn(
   defaultValue?: boolean,
   array = false,
 ): Promise<void> {
+  if (await isKnownColumn(tables, tableId, key)) return;
   try {
     await tables.getColumn({ databaseId: APPWRITE_DATABASE_ID, tableId, key });
   } catch (error) {
@@ -173,6 +257,7 @@ async function ensureIntegerColumn(
   max?: number,
   array = false,
 ): Promise<void> {
+  if (await isKnownColumn(tables, tableId, key)) return;
   try {
     await tables.getColumn({ databaseId: APPWRITE_DATABASE_ID, tableId, key });
   } catch (error) {
@@ -208,6 +293,7 @@ async function ensureDatetimeColumn(
   defaultValue?: string,
   array = false,
 ): Promise<void> {
+  if (await isKnownColumn(tables, tableId, key)) return;
   try {
     await tables.getColumn({ databaseId: APPWRITE_DATABASE_ID, tableId, key });
   } catch (error) {
@@ -241,6 +327,7 @@ async function ensureIndex(
   columns: string[],
   orders?: OrderBy[],
 ): Promise<void> {
+  if (await isKnownIndex(tables, tableId, key)) return;
   try {
     await tables.getIndex({ databaseId: APPWRITE_DATABASE_ID, tableId, key });
   } catch (error) {
@@ -307,6 +394,16 @@ async function runBootstrapStep(stepName: string, operation: () => Promise<void>
     }
     throw error;
   }
+}
+
+async function runBootstrapStepsInParallel(
+  steps: Array<[stepName: string, operation: () => Promise<void>]>,
+): Promise<void> {
+  const results = await Promise.allSettled(
+    steps.map(([stepName, operation]) => runBootstrapStep(stepName, operation)),
+  );
+  const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+  if (failure) throw failure.reason;
 }
 
 async function ensureBucket(storage: Storage): Promise<void> {
@@ -888,23 +985,28 @@ async function ensureCoreResourcesOnce(): Promise<void> {
   const client = createAdminClient();
   const tables = new TablesDB(client);
   const storage = new Storage(client);
+  resetSchemaSnapshots();
 
   await runBootstrapStep('database', async () => ensureDatabase(tables));
-  await runBootstrapStep('profiles', async () => setupProfilesTable(tables));
-  await runBootstrapStep('gallery', async () => setupGalleryTable(tables));
-  await runBootstrapStep('stripe_events', async () => setupStripeEventsTable(tables));
-  await runBootstrapStep('billing_events', async () => setupBillingEventsTable(tables));
-  await runBootstrapStep('analysis_history', async () => setupAnalysisHistoryTable(tables));
-  await runBootstrapStep('analysis_file_cache', async () => setupAnalysisFileCacheTable(tables));
-  await runBootstrapStep('memory_snippets', async () => setupMemorySnippetsTable(tables));
-  await runBootstrapStep('mentor_chats', async () => setupMentorChatsTable(tables));
-  await runBootstrapStep('mentor_messages', async () => setupMentorMessagesTable(tables));
-  await runBootstrapStep('feedback', async () => setupFeedbackTable(tables));
-  await runBootstrapStep('promo_codes', async () => setupPromoCodesTable(tables));
-  await runBootstrapStep('promo_redemptions', async () => setupPromoRedemptionsTable(tables));
-  await runBootstrapStep('feature_flags', async () => setupFeatureFlagsTable(tables));
-  await runBootstrapStep('references_library', async () => setupReferencesTable(tables));
-  await runBootstrapStep('gallery_bucket', async () => ensureBucket(storage));
+  // Tables are independent of each other; checking them concurrently turns a long
+  // serial chain of Appwrite round-trips into a handful of parallel list calls.
+  await runBootstrapStepsInParallel([
+    ['profiles', async () => setupProfilesTable(tables)],
+    ['gallery', async () => setupGalleryTable(tables)],
+    ['stripe_events', async () => setupStripeEventsTable(tables)],
+    ['billing_events', async () => setupBillingEventsTable(tables)],
+    ['analysis_history', async () => setupAnalysisHistoryTable(tables)],
+    ['analysis_file_cache', async () => setupAnalysisFileCacheTable(tables)],
+    ['memory_snippets', async () => setupMemorySnippetsTable(tables)],
+    ['mentor_chats', async () => setupMentorChatsTable(tables)],
+    ['mentor_messages', async () => setupMentorMessagesTable(tables)],
+    ['feedback', async () => setupFeedbackTable(tables)],
+    ['promo_codes', async () => setupPromoCodesTable(tables)],
+    ['promo_redemptions', async () => setupPromoRedemptionsTable(tables)],
+    ['feature_flags', async () => setupFeatureFlagsTable(tables)],
+    ['references_library', async () => setupReferencesTable(tables)],
+    ['gallery_bucket', async () => ensureBucket(storage)],
+  ]);
 
   coreEnsuredAt = Date.now();
 }
@@ -917,9 +1019,12 @@ async function ensureCommerceResourcesOnce(): Promise<void> {
 
   const client = createAdminClient();
   const tables = new TablesDB(client);
+  resetSchemaSnapshots();
 
-  await runBootstrapStep('promo_codes', async () => setupPromoCodesTable(tables));
-  await runBootstrapStep('promo_redemptions', async () => setupPromoRedemptionsTable(tables));
+  await runBootstrapStepsInParallel([
+    ['promo_codes', async () => setupPromoCodesTable(tables)],
+    ['promo_redemptions', async () => setupPromoRedemptionsTable(tables)],
+  ]);
 
   commerceEnsuredAt = Date.now();
 }

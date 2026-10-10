@@ -4,6 +4,8 @@ import {
   getAuthenticatedUserFromRequest,
   getReferralSignupCountByCode,
   getOrCreateProfile,
+  normalizeProfileRow,
+  toClientProfile,
   updateProfileById,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       profile: {
-        ...profile,
+        ...toClientProfile(profile),
         referral_signup_count: referralSignupCount,
       },
     });
@@ -87,12 +89,11 @@ export async function PATCH(request: NextRequest) {
 
     const preferredLanguage = normalizeLanguage(payload.preferred_language ?? payload.language, 'tr');
 
-    await updateProfileById(user.id, {
+    const updatedRow = await updateProfileById(user.id, {
       preferred_language: preferredLanguage,
     });
 
-    const profile = await getOrCreateProfile(user);
-    return NextResponse.json({ profile });
+    return NextResponse.json({ profile: toClientProfile(normalizeProfileRow(updatedRow)) });
   } catch (error) {
     logServerError('api.profile.PATCH', error);
     return NextResponse.json({ error: ApiMessages.profileUpdateFailed(lang) }, { status: 500 });

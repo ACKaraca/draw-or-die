@@ -51,6 +51,16 @@ export function logServerError(scope: string, error: unknown, details?: Record<s
   console.error('[server-error]', JSON.stringify(payload));
 }
 
+export function logServerInfo(scope: string, details: Record<string, unknown>) {
+  const payload = {
+    ts: new Date().toISOString(),
+    scope,
+    level: 'info' as const,
+    details,
+  };
+  console.info('[server-info]', JSON.stringify(payload));
+}
+
 export async function reportClientError(payload: ClientLogPayload): Promise<void> {
   if (typeof window === 'undefined') return;
 

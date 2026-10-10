@@ -36,7 +36,8 @@ export function resolveLanguageFromAcceptLanguage(
 }
 
 export function pickLocalized(language: SupportedLanguage, trText: string, enText: string): string {
-  return language === 'en' ? enText : trText;
+  // de/it have no full translation yet; English is far more readable for them than Turkish.
+  return language === 'tr' ? trText : enText;
 }
 
 export function pickLocalizedFour(
@@ -47,8 +48,8 @@ export function pickLocalizedFour(
   itText: string,
 ): string {
   if (language === 'en') return enText;
-  if (language === 'de') return deText || trText;
-  if (language === 'it') return itText || trText;
+  if (language === 'de') return deText || enText;
+  if (language === 'it') return itText || enText;
   return trText;
 }
 
@@ -56,7 +57,8 @@ export function pickLocalizedFour(
 export function responseLanguageClause(language: SupportedLanguage): string {
   return pickLocalized(
     language,
-    'Tum kullaniciya donuk metin alanlari (critique, ozet, mentor yaniti vb.) Turkce yazilsin.',
+    'Tüm kullanıcıya dönük metin alanlarını (critique, özet, mentor yanıtı vb.) doğal ve akıcı Türkçe ile yaz; '
+      + 'Türkçe karakterleri (ç, ğ, ı, İ, ö, ş, ü) eksiksiz kullan, ASCII Türkçe yazma.',
     'All user-facing text fields (critique, summary, mentor reply, etc.) must be written in English.',
   );
 }

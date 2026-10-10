@@ -38,6 +38,24 @@ export interface AIError {
 }
 
 const AI_TIMEOUT_MS = 120_000;
+// Appwrite JWTs live 15 minutes; reusing one saves a round-trip before every AI call.
+// A 401 always forces a fresh token, so a logout/account switch can't reuse a stale one.
+const AI_JWT_CACHE_TTL_MS = 5 * 60 * 1000;
+
+let cachedJwt: { token: string; expiresAt: number } | null = null;
+
+export function clearAIJwtCache(): void {
+    cachedJwt = null;
+}
+
+async function getAIJwt(forceRefresh: boolean): Promise<string> {
+    if (!forceRefresh && cachedJwt && cachedJwt.expiresAt > Date.now()) {
+        return cachedJwt.token;
+    }
+    const jwtRes = await account.createJWT();
+    cachedJwt = { token: jwtRes.jwt, expiresAt: Date.now() + AI_JWT_CACHE_TTL_MS };
+    return jwtRes.jwt;
+}
 
 const formatStructuredAIError = (err: AIError, lang: SupportedLanguage): Error => {
     if (err.code === 'PREMIUM_REQUIRED') {
@@ -153,30 +171,42 @@ const tryExtractEdgeError = async (error: unknown): Promise<AIError | null> => {
  */
 export const generateAIResponse = async (options: AICallOptions): Promise<AIResponse | null> => {
     const lang: SupportedLanguage = options.locale ?? 'tr';
-    let jwt: string;
-    try {
-        const jwtRes = await account.createJWT();
-        jwt = jwtRes.jwt;
-    } catch {
-        throw new Error(pickLocalized(lang, 'Oturum bulunamadı. Lütfen giriş yapın.', 'No session found. Please sign in.'));
-    }
+    const resolveJwt = async (forceRefresh: boolean): Promise<string> => {
+        try {
+            return await getAIJwt(forceRefresh);
+        } catch {
+            clearAIJwtCache();
+            throw new Error(pickLocalized(lang, 'Oturum bulunamadı. Lütfen giriş yapın.', 'No session found. Please sign in.'));
+        }
+    };
+    let jwt = await resolveJwt(false);
+
+    const abortController = new AbortController();
+    const requestBody = JSON.stringify({
+        operation: options.operation,
+        imageBase64: options.imageBase64,
+        imageMimeType: options.imageMimeType,
+        params: options.params || {},
+    });
+    const postToApi = (token: string) => fetch('/api/ai-generate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+            'Accept-Language': lang === 'en' ? 'en' : 'tr',
+        },
+        body: requestBody,
+        signal: abortController.signal,
+    });
 
     const invokePromise = (async () => {
         try {
-            const res = await fetch('/api/ai-generate', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${jwt}`,
-                    'Accept-Language': lang === 'en' ? 'en' : 'tr',
-                },
-                body: JSON.stringify({
-                    operation: options.operation,
-                    imageBase64: options.imageBase64,
-                    imageMimeType: options.imageMimeType,
-                    params: options.params || {},
-                }),
-            });
+            let res = await postToApi(jwt);
+            if (res.status === 401) {
+                clearAIJwtCache();
+                jwt = await resolveJwt(true);
+                res = await postToApi(jwt);
+            }
 
             if (!res.ok) {
                 const err = new Error(`AI route failed with status ${res.status}`) as Error & {
@@ -215,9 +245,14 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
         }
     })();
 
-    const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AbortError')), AI_TIMEOUT_MS)
-    );
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+            // Actually cancel the upload/request instead of leaving it running in the background.
+            abortController.abort();
+            reject(new Error('AbortError'));
+        }, AI_TIMEOUT_MS);
+    });
 
     try {
         const { data, error } = await Promise.race([invokePromise, timeoutPromise]) as {
@@ -288,5 +323,7 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
             throw err;
         }
         throw new Error(pickLocalized(lang, 'Beklenmeyen hata.', 'Unexpected error.'));
+    } finally {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
     }
 };

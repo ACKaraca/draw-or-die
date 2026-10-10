@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { Account, Client, ID, Query, Storage, TablesDB } from 'node-appwrite';
@@ -176,15 +176,46 @@ export function getAdminStorage(): Storage {
   return new Storage(createAdminClient());
 }
 
+// Every API call validates its JWT with an Appwrite round-trip. A short per-instance
+// cache removes that hop for the burst of calls a single page/action makes; 60s keeps
+// the window in which a revoked session is still accepted small.
+const JWT_USER_CACHE_TTL_MS = 60 * 1000;
+const JWT_USER_CACHE_MAX_ENTRIES = 1000;
+const jwtUserCache = new Map<string, { user: AppwriteAuthUser; expiresAt: number }>();
+
+function readCachedJwtUser(cacheKey: string): AppwriteAuthUser | null {
+  const cached = jwtUserCache.get(cacheKey);
+  if (!cached) return null;
+  if (cached.expiresAt <= Date.now()) {
+    jwtUserCache.delete(cacheKey);
+    return null;
+  }
+  return cached.user;
+}
+
+function writeCachedJwtUser(cacheKey: string, user: AppwriteAuthUser): void {
+  if (jwtUserCache.size >= JWT_USER_CACHE_MAX_ENTRIES) {
+    const oldestKey = jwtUserCache.keys().next().value;
+    if (oldestKey !== undefined) jwtUserCache.delete(oldestKey);
+  }
+  jwtUserCache.set(cacheKey, { user, expiresAt: Date.now() + JWT_USER_CACHE_TTL_MS });
+}
+
 export async function getUserFromJwt(jwt: string): Promise<AppwriteAuthUser | null> {
+  const cacheKey = createHash('sha256').update(jwt).digest('hex');
+  const cachedUser = readCachedJwtUser(cacheKey);
+  if (cachedUser) return cachedUser;
+
   try {
     const account = new Account(createJwtClient(jwt));
     const user = await account.get();
-    return {
+    const authUser: AppwriteAuthUser = {
       id: user.$id,
       email: user.email ?? null,
       name: user.name ?? null,
     };
+    writeCachedJwtUser(cacheKey, authUser);
+    return authUser;
   } catch {
     return null;
   }
@@ -463,6 +494,8 @@ export type ConfessionRow = Models.Row & {
 
 export type NormalizedUserProfile = {
   id: string;
+  /** Appwrite row id of the profile (differs from `id` for rows created with ID.unique()). */
+  row_id?: string;
   email: string | null;
   preferred_language?: SupportedLanguage;
   is_premium: boolean;
@@ -526,6 +559,7 @@ export function normalizeProfileRow(row: UserProfileRow): NormalizedUserProfile 
     : row.$id;
   return {
     id: userId,
+    row_id: row.$id,
     email: row.email ?? null,
     preferred_language: normalizeLanguage(row.preferred_language, 'tr'),
     is_premium: Boolean(row.is_premium),
@@ -621,6 +655,16 @@ async function findProfileRowByUserIdWithLegacyFallback(
   }
 }
 
+/**
+ * Profile shape that is safe to send to the browser. The pending edu OTP must stay
+ * server-side, otherwise anyone could "verify" an .edu.tr address they don't own.
+ */
+export function toClientProfile(profile: NormalizedUserProfile): Omit<NormalizedUserProfile, 'edu_verification_code'> {
+  const { edu_verification_code: _omitted, ...clientProfile } = profile;
+  void _omitted;
+  return clientProfile;
+}
+
 export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<NormalizedUserProfile> {
   const tables = getAdminTables();
 
@@ -685,7 +729,9 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
     const created = await tables.createRow<UserProfileRow>({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: APPWRITE_TABLE_PROFILES_ID,
-      rowId: ID.unique(),
+      // Using the user id as row id makes concurrent first requests (profile + referral
+      // on signup) collide with a 409 instead of creating two funded profiles.
+      rowId: isValidAppwriteRowIdCandidate(user.id) ? user.id : ID.unique(),
       data: {
         user_id: user.id,
         email: user.email ?? '',
@@ -731,6 +777,20 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
   }
 }
 
+export async function updateProfileRowById(rowId: string, data: Record<string, unknown>) {
+  const tables = getAdminTables();
+  return tables.updateRow<UserProfileRow>({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_TABLE_PROFILES_ID,
+    rowId,
+    data,
+  });
+}
+
+export async function getProfileRowForUser(userId: string): Promise<UserProfileRow | null> {
+  return findProfileRowByUserIdWithLegacyFallback(getAdminTables(), userId);
+}
+
 export async function updateProfileById(userId: string, data: Record<string, unknown>) {
   const tables = getAdminTables();
   const profileRow = await findProfileRowByUserIdWithLegacyFallback(tables, userId);
@@ -738,7 +798,7 @@ export async function updateProfileById(userId: string, data: Record<string, unk
     throw new Error(`Profile not found for user: ${userId}`);
   }
 
-  return tables.updateRow({
+  return tables.updateRow<UserProfileRow>({
     databaseId: APPWRITE_DATABASE_ID,
     tableId: APPWRITE_TABLE_PROFILES_ID,
     rowId: profileRow.$id,
