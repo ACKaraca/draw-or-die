@@ -14,6 +14,8 @@ import { logServerError } from '@/lib/logger';
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 const SUMMARY_SCAN_LIMIT = 500;
+// The summary scan only sums these; skipping metadata_json keeps the 500-row read small.
+const SUMMARY_COLUMNS = ['$id', 'amount_cents', 'rapido_delta', 'event_type'];
 
 function toDaysRemaining(periodEndIso: string | null): number | null {
   if (!periodEndIso) return null;
@@ -62,6 +64,7 @@ export async function GET(request: NextRequest) {
         queries: [
           Query.equal('user_id', user.id),
           Query.orderDesc('$createdAt'),
+          Query.select(SUMMARY_COLUMNS),
           Query.limit(SUMMARY_SCAN_LIMIT),
         ],
       }),

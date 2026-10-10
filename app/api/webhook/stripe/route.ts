@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { TIER_DEFAULTS } from '@/lib/pricing';
 import {
+    APPWRITE_DATABASE_ID,
+    APPWRITE_TABLE_PROFILES_ID,
     findProfileBySubscriptionId,
     getAdminTables,
     getOrCreateProfile,
     markStripeEventProcessed,
     recordBillingEvent,
     updateProfileById,
+    type NormalizedUserProfile,
+    type UserProfileRow,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
+import { logServerError } from '@/lib/logger';
+import { releaseStripeEvent } from '@/lib/stripe-event-ledger';
 
 let _stripe: Stripe | null = null;
 function getStripe() {
@@ -29,17 +35,55 @@ function getWebhookSecret() {
     return raw.replace(/[\r\n\s"']/g, '').trim();
 }
 
+type EventLedgerState = 'recorded' | 'duplicate' | 'unavailable';
+
 /**
- * Idempotency guard: returns true if this event has already been processed.
- * Uses a `stripe_events` table. If the table doesn't exist yet, silently skips
- * the guard (non-blocking) so deploys before the migration still work.
+ * Idempotency guard backed by the `stripe_events` table. If the table doesn't exist
+ * yet, the guard is skipped (non-blocking) so deploys before the migration still work.
  */
-async function isEventAlreadyProcessed(eventId: string): Promise<boolean> {
+async function recordEventInLedger(eventId: string): Promise<EventLedgerState> {
     try {
-        return await markStripeEventProcessed(eventId);
-    } catch {
-        return false;
+        return (await markStripeEventProcessed(eventId)) ? 'duplicate' : 'recorded';
+    } catch (error) {
+        logServerError('webhook.stripe.ledger', error, { eventId });
+        return 'unavailable';
     }
+}
+
+type BillingEventInput = Parameters<typeof recordBillingEvent>[0];
+
+/**
+ * The credit has already been applied when this runs; a ledger failure must not fail the
+ * webhook, otherwise Stripe's retry would grant the purchase a second time.
+ */
+async function recordBillingEventSafely(event: BillingEventInput): Promise<void> {
+    try {
+        await recordBillingEvent(event);
+    } catch (error) {
+        logServerError('webhook.stripe.billing-event', error, {
+            userId: event.userId,
+            eventType: event.eventType,
+            stripeSessionId: event.stripeSessionId ?? null,
+        });
+    }
+}
+
+/** Atomically adds Rapido to the profile when its row id is known; returns the new balance. */
+async function creditRapidoPens(userId: string, profile: NormalizedUserProfile, amount: number): Promise<number> {
+    if (profile.row_id) {
+        const updated = await getAdminTables().incrementRowColumn<UserProfileRow>({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: APPWRITE_TABLE_PROFILES_ID,
+            rowId: profile.row_id,
+            column: 'rapido_pens',
+            value: amount,
+        });
+        return Number.isFinite(updated.rapido_pens) ? Number(updated.rapido_pens) : profile.rapido_pens + amount;
+    }
+
+    const nextRapidoBalance = profile.rapido_pens + amount;
+    await updateProfileById(userId, { rapido_pens: nextRapidoBalance });
+    return nextRapidoBalance;
 }
 
 export async function POST(request: NextRequest) {
@@ -62,7 +106,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Idempotency: skip already-processed events
-    if (await isEventAlreadyProcessed(event.id)) {
+    const ledgerState = await recordEventInLedger(event.id);
+    if (ledgerState === 'duplicate') {
         return NextResponse.json({ received: true });
     }
 
@@ -91,8 +136,11 @@ export async function POST(request: NextRequest) {
             }
         }
     } catch (error) {
-        const message = error instanceof Error ? error.message : 'unknown error';
-        console.error(`Webhook handler error: ${message}`);
+        logServerError('webhook.stripe.handler', error, { eventId: event.id, eventType: event.type });
+        // Un-mark the event so Stripe's retry is processed instead of hitting the duplicate path.
+        if (ledgerState === 'recorded') {
+            await releaseStripeEvent(event.id);
+        }
         return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 });
     }
 
@@ -157,10 +205,9 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
         if (quantity <= 0) return;
 
         const profile = await getOrCreateProfile({ id: userId, email: null, name: null });
-        const nextRapidoBalance = profile.rapido_pens + quantity;
-        await updateProfileById(userId, { rapido_pens: nextRapidoBalance });
+        const nextRapidoBalance = await creditRapidoPens(userId, profile, quantity);
 
-        await recordBillingEvent({
+        await recordBillingEventSafely({
             userId,
             eventType: checkoutMode,
             amountCents: typeof session.amount_total === 'number' ? session.amount_total : 0,
@@ -212,7 +259,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
             premium_promo_code: promoCode,
         });
 
-        await recordBillingEvent({
+        await recordBillingEventSafely({
             userId,
             eventType: checkoutMode,
             amountCents: typeof session.amount_total === 'number' ? session.amount_total : 0,

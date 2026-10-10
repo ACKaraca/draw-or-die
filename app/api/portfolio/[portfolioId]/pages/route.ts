@@ -16,6 +16,11 @@ import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
 import { RAPIDO_COSTS } from '@/lib/pricing';
+import {
+  AI_AUXILIARY_REQUEST_TIMEOUT_MS,
+  resolveAiProviderConfig,
+  shouldSendJsonObjectFormat,
+} from '@/lib/ai-provider';
 import { rapidoUnitsToCents, toRapidoCents, splitRapidoCents, toRapidoDisplay } from '@/lib/rapido-cents';
 
 interface LayoutElement {
@@ -75,12 +80,14 @@ function stripMarkdownFences(text: string): string {
     .trim();
 }
 
-async function generateAiLayout(imageUrls: string[], theme: string): Promise<PageLayout> {
-  const apiKey = process.env.AI_API_KEY;
-  const baseUrl = (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  const model = process.env.AI_MODEL || 'gpt-4o';
+type LayoutResult = {
+  layout: PageLayout;
+  /** False when the default template was used; the user is only charged for AI layouts. */
+  isAiGenerated: boolean;
+};
 
-  if (!apiKey) return defaultLayout(imageUrls, theme);
+async function generateAiLayout(imageUrls: string[], theme: string): Promise<LayoutResult> {
+  const fallback: LayoutResult = { layout: defaultLayout(imageUrls, theme), isAiGenerated: false };
 
   const prompt = `Design an architecture portfolio page layout as a JSON object. Theme: ${theme}. Images available: ${imageUrls.length}.
 Images: ${imageUrls.slice(0, 8).map((u, i) => `[${i + 1}] ${u}`).join('\n')}
@@ -90,32 +97,39 @@ Return ONLY a JSON object with this exact schema:
 Place 1-3 images, 2-4 text elements. Total canvas is 100x141 (A4). Do not overflow.`;
 
   try {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
+    const provider = resolveAiProviderConfig('low-cost');
+    if (!provider) return fallback;
+
+    const requestBody: Record<string, unknown> = {
+      model: provider.model,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 2048,
+    };
+    if (shouldSendJsonObjectFormat(provider.hostname)) {
+      requestBody.response_format = { type: 'json_object' };
+    }
+
+    const res = await fetch(`${provider.baseUrl}/chat/completions`, { // baseUrl comes from the allowlist
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-        max_tokens: 2048,
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(AI_AUXILIARY_REQUEST_TIMEOUT_MS),
     });
-    if (!res.ok) return defaultLayout(imageUrls, theme);
+    if (!res.ok) {
+      logServerError('portfolio:pages:ai-layout', new Error(`AI layout provider error ${res.status}`));
+      return fallback;
+    }
+
     const json = await res.json() as { choices?: Array<{ message?: { content?: string } }> };
     const rawText = json.choices?.[0]?.message?.content ?? '';
-    const cleaned = stripMarkdownFences(rawText);
-
-    try {
-      const parsed = JSON.parse(cleaned) as PageLayout;
-      if (typeof parsed.background !== 'string' || !Array.isArray(parsed.elements)) {
-        throw new Error('Invalid layout shape');
-      }
-      return parsed;
-    } catch {
-      return defaultLayout(imageUrls, theme);
+    const parsed = JSON.parse(stripMarkdownFences(rawText)) as PageLayout;
+    if (typeof parsed.background !== 'string' || !Array.isArray(parsed.elements)) {
+      throw new Error('Invalid layout shape');
     }
-  } catch {
-    return defaultLayout(imageUrls, theme);
+    return { layout: parsed, isAiGenerated: true };
+  } catch (error) {
+    logServerError('portfolio:pages:ai-layout', error);
+    return fallback;
   }
 }
 
@@ -248,7 +262,7 @@ export async function POST(
     }
 
     // Generate AI layout
-    const layout = await generateAiLayout(imageUrls as string[], resolvedTheme);
+    const { layout, isAiGenerated } = await generateAiLayout(imageUrls as string[], resolvedTheme);
     const layoutJson = JSON.stringify(layout);
     const pageData: PortfolioPageCreateData = {
       portfolio_id: portfolioId,
@@ -277,18 +291,22 @@ export async function POST(
       data: portfolioUpdateData,
     });
 
-    // Deduct rapido
-    const newBalanceCents = currentBalanceCents - costCents;
-    const { rapidoPens, rapidoFractionCents } = splitRapidoCents(newBalanceCents);
-    await updateProfileById(user.id, {
-      rapido_pens: rapidoPens,
-      rapido_fraction_cents: rapidoFractionCents,
-    });
+    // Deduct rapido only when the AI actually produced the layout
+    let newBalanceCents = currentBalanceCents;
+    if (isAiGenerated) {
+      newBalanceCents = currentBalanceCents - costCents;
+      const { rapidoPens, rapidoFractionCents } = splitRapidoCents(newBalanceCents);
+      await updateProfileById(user.id, {
+        rapido_pens: rapidoPens,
+        rapido_fraction_cents: rapidoFractionCents,
+      });
+    }
 
     return NextResponse.json(
       {
         page: toPagePayload(pageRow),
         rapido_remaining: toRapidoDisplay(newBalanceCents),
+        ai_layout_generated: isAiGenerated,
       },
       { status: 201 },
     );

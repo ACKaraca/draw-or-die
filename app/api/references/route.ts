@@ -25,6 +25,22 @@ function slugify(input: string): string {
     .substring(0, 120);
 }
 
+// Columns read by toCardPayload; the list skips analysis_md and the image URL arrays,
+// which can be tens of KB per row.
+const CARD_COLUMNS = [
+  '$id',
+  'slug',
+  'title',
+  'architect',
+  'year',
+  'location',
+  'typology',
+  'summary',
+  'cover_image_url',
+  'tags_json',
+  'is_published',
+];
+
 function toCardPayload(row: ReferenceRow) {
   return {
     id: row.$id,
@@ -81,6 +97,7 @@ export async function GET(request: NextRequest) {
       queries: [
         Query.equal('is_published', true),
         Query.orderDesc('$createdAt'),
+        Query.select(CARD_COLUMNS),
         Query.limit(200),
       ],
     });

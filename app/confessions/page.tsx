@@ -317,30 +317,56 @@ export default function ConfessionsPage() {
         body: JSON.stringify(body),
       });
 
-      const data = (await res.json()) as {
-        ok: boolean;
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        pending?: boolean;
         rejected?: boolean;
-        confession?: ConfessionItem;
+        error?: string;
+        confession?: { id?: string; createdAt?: string };
       };
 
-      if (data.ok && !data.rejected) {
+      if (!res.ok || !data.ok) {
         setToast({
-          message: pickLocalized(language, 'İtirafın yayınlandı!', 'Your confession is live!'),
+          message: res.status === 429
+            ? pickLocalized(language, 'Çok fazla deneme. Lütfen biraz sonra tekrar dene.', 'Too many attempts. Please try again shortly.')
+            : pickLocalized(language, 'İtiraf gönderilemedi. Lütfen tekrar dene.', 'Could not send your confession. Please try again.'),
+          variant: 'error',
+        });
+      } else if (data.rejected) {
+        setToast({
+          message: pickLocalized(language, 'Moderasyondan geçemedi.', "Didn't pass moderation."),
+          variant: 'error',
+        });
+      } else {
+        const submittedText = text.trim();
+        const submittedImageUrl = imageBase64 && imageMimeType
+          ? `data:${imageMimeType};base64,${imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64}`
+          : undefined;
+        setToast({
+          message: data.pending
+            ? pickLocalized(
+              language,
+              'İtirafın alındı; kısa bir incelemeden sonra yayınlanacak.',
+              'Got it! Your confession will appear after a quick review.',
+            )
+            : pickLocalized(language, 'İtirafın yayınlandı!', 'Your confession is live!'),
           variant: 'success',
         });
         setText('');
         clearImage();
         startCooldown();
-        // Prepend to feed if we're on "new" sort or just refresh
-        if (data.confession) {
-          setConfessions((prev) => [data.confession as ConfessionItem, ...prev]);
+        // The API only echoes id/createdAt, so the feed card is built from what was submitted.
+        if (!data.pending && data.confession?.id) {
+          const item: ConfessionItem = {
+            id: data.confession.id,
+            text: submittedText,
+            imageUrl: submittedImageUrl,
+            likes: 0,
+            createdAt: data.confession.createdAt ?? new Date().toISOString(),
+          };
+          setConfessions((prev) => [item, ...prev]);
           setTotal((t) => t + 1);
         }
-      } else {
-        setToast({
-          message: pickLocalized(language, 'Moderasyondan geçemedi.', "Didn't pass moderation."),
-          variant: 'error',
-        });
       }
     } catch {
       setToast({
@@ -369,11 +395,13 @@ export default function ConfessionsPage() {
 
     try {
       const anonKey = getOrCreateAnonKey();
-      await fetch(`/api/confessions/${id}/like`, {
+      const res = await fetch(`/api/confessions/${id}/like`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ anonKey }),
       });
+      // 409 = this browser already liked it; keep the like shown.
+      if (!res.ok && res.status !== 409) throw new Error(`like failed: ${res.status}`);
     } catch {
       // revert on error
       setConfessions((prev) =>

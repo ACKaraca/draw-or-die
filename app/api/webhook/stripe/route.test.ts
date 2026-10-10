@@ -6,6 +6,16 @@ const mockGetOrCreateProfile = jest.fn();
 const mockUpdateProfileById = jest.fn();
 const mockFindProfileBySubscriptionId = jest.fn();
 const mockCreateRow = jest.fn();
+const mockIncrementRowColumn = jest.fn();
+const mockListRows = jest.fn();
+const mockDeleteRow = jest.fn();
+
+jest.mock('node-appwrite', () => ({
+  Query: {
+    equal: jest.fn((column: string, value: unknown) => `equal(${column},${String(value)})`),
+    limit: jest.fn((value: number) => `limit(${value})`),
+  },
+}));
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -39,6 +49,8 @@ jest.mock('@/lib/appwrite/resource-bootstrap', () => ({
 jest.mock('@/lib/appwrite/server', () => ({
   APPWRITE_DATABASE_ID: 'draw_or_die',
   APPWRITE_TABLE_BILLING_EVENTS_ID: 'billing_events',
+  APPWRITE_TABLE_PROFILES_ID: 'profiles',
+  APPWRITE_TABLE_STRIPE_EVENTS_ID: 'stripe_events',
   markStripeEventProcessed: (...args: unknown[]) => mockMarkStripeEventProcessed(...args),
   getOrCreateProfile: (...args: unknown[]) => mockGetOrCreateProfile(...args),
   updateProfileById: (...args: unknown[]) => mockUpdateProfileById(...args),
@@ -46,6 +58,9 @@ jest.mock('@/lib/appwrite/server', () => ({
   recordBillingEvent: (...args: unknown[]) => mockCreateRow(...args),
   getAdminTables: () => ({
     createRow: (...args: unknown[]) => mockCreateRow(...args),
+    incrementRowColumn: (...args: unknown[]) => mockIncrementRowColumn(...args),
+    listRows: (...args: unknown[]) => mockListRows(...args),
+    deleteRow: (...args: unknown[]) => mockDeleteRow(...args),
   }),
 }));
 
@@ -85,6 +100,10 @@ describe('POST /api/webhook/stripe', () => {
     mockUpdateProfileById.mockResolvedValue(undefined);
     mockFindProfileBySubscriptionId.mockResolvedValue(null);
     mockCreateRow.mockResolvedValue(undefined);
+    mockIncrementRowColumn.mockResolvedValue({ $id: 'profile-row-1', rapido_pens: 10 });
+    mockListRows.mockResolvedValue({ total: 1, rows: [{ $id: 'ledger-row-1', event_id: 'evt' }] });
+    mockDeleteRow.mockResolvedValue(undefined);
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
     mockConstructEvent.mockImplementation(() => {
       throw new Error('Invalid signature');
     });
@@ -114,6 +133,7 @@ describe('POST /api/webhook/stripe', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ received: true });
     expect(mockUpdateProfileById).not.toHaveBeenCalled();
+    expect(mockDeleteRow).not.toHaveBeenCalled();
   });
 
   it('credits rapido pens after rapido checkout completion', async () => {
@@ -139,6 +159,148 @@ describe('POST /api/webhook/stripe', () => {
     expect(response.status).toBe(200);
     expect(mockUpdateProfileById).toHaveBeenCalledWith('user-1', { rapido_pens: 10 });
     expect(mockCreateRow).toHaveBeenCalledTimes(1);
+  });
+
+  it('credits rapido atomically when the profile row id is known', async () => {
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_rapido_atomic',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_rapido_atomic',
+          amount_total: 3950,
+          currency: 'TRY',
+          metadata: {
+            user_id: 'user-1',
+            checkout_mode: 'rapido_pack',
+            rapido_quantity: '10',
+          },
+        },
+      },
+    });
+    mockGetOrCreateProfile.mockResolvedValueOnce({
+      id: 'user-1',
+      row_id: 'profile-row-1',
+      rapido_pens: 3,
+      is_premium: false,
+    });
+    mockIncrementRowColumn.mockResolvedValueOnce({ $id: 'profile-row-1', rapido_pens: 21 });
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(200);
+    expect(mockIncrementRowColumn).toHaveBeenCalledWith({
+      databaseId: 'draw_or_die',
+      tableId: 'profiles',
+      rowId: 'profile-row-1',
+      column: 'rapido_pens',
+      value: 10,
+    });
+    expect(mockUpdateProfileById).not.toHaveBeenCalled();
+    expect(mockCreateRow).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        rapidoDelta: 10,
+        rapidoBalanceAfter: 21,
+        currency: 'try',
+      }),
+    );
+  });
+
+  it('releases the ledger row and returns 500 when the handler fails, so the retry is processed', async () => {
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_fail',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_fail',
+          metadata: {
+            user_id: 'user-1',
+            checkout_mode: 'rapido_pack',
+            rapido_quantity: '5',
+          },
+        },
+      },
+    });
+    mockGetOrCreateProfile.mockRejectedValueOnce(new Error('Appwrite down'));
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(500);
+    expect(mockListRows).toHaveBeenCalledWith(
+      expect.objectContaining({ databaseId: 'draw_or_die', tableId: 'stripe_events' }),
+    );
+    expect(mockDeleteRow).toHaveBeenCalledWith({
+      databaseId: 'draw_or_die',
+      tableId: 'stripe_events',
+      rowId: 'ledger-row-1',
+    });
+  });
+
+  it('still returns 500 when releasing the ledger row fails', async () => {
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_fail_release',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_fail_release',
+          metadata: { user_id: 'user-1', checkout_mode: 'rapido_pack', rapido_quantity: '5' },
+        },
+      },
+    });
+    mockGetOrCreateProfile.mockRejectedValueOnce(new Error('Appwrite down'));
+    mockListRows.mockRejectedValueOnce(new Error('ledger unavailable'));
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(500);
+    expect(mockDeleteRow).not.toHaveBeenCalled();
+  });
+
+  it('does not touch the ledger on failure when the event was never recorded', async () => {
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_no_ledger',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_no_ledger',
+          metadata: { user_id: 'user-1', checkout_mode: 'rapido_pack', rapido_quantity: '5' },
+        },
+      },
+    });
+    mockMarkStripeEventProcessed.mockRejectedValueOnce(new Error('stripe_events table missing'));
+    mockGetOrCreateProfile.mockRejectedValueOnce(new Error('Appwrite down'));
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(500);
+    expect(mockListRows).not.toHaveBeenCalled();
+    expect(mockDeleteRow).not.toHaveBeenCalled();
+  });
+
+  it('keeps the credit and returns 200 when only the billing ledger write fails', async () => {
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_billing_fail',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_billing_fail',
+          metadata: { user_id: 'user-1', checkout_mode: 'rapido_pack', rapido_quantity: '5' },
+        },
+      },
+    });
+    mockCreateRow.mockRejectedValueOnce(new Error('billing_events unavailable'));
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateProfileById).toHaveBeenCalledWith('user-1', { rapido_pens: 8 });
+    expect(mockDeleteRow).not.toHaveBeenCalled();
   });
 
   it('activates premium and stores Stripe customer/subscription IDs', async () => {

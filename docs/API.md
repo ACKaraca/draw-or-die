@@ -12,7 +12,7 @@ Creates a Stripe Checkout session.
 ```json
 {
   "mode": "premium_monthly" | "premium_yearly" | "rapido_pack",
-  "quantity": 5  // only for rapido_pack
+  "quantity": 5  // only for rapido_pack; integer 5–1000, defaults to 5 when omitted
 }
 ```
 
@@ -24,6 +24,7 @@ Creates a Stripe Checkout session.
 **Errors:**
 - `401` — Authentication required
 - `400` — Invalid checkout mode
+- `400` — `INVALID_RAPIDO_QUANTITY` (quantity not an integer between 5 and 1000)
 - `429` — Rate limit exceeded
 - `503` — Stripe not configured (`STRIPE_SECRET_KEY` missing)
 - `500` — Unexpected checkout error

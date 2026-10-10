@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse, after, type NextRequest } from 'next/server';
 import { ID, Query, type Models } from 'node-appwrite';
 import {
   APPWRITE_BUCKET_GALLERY_ID,
@@ -10,11 +10,11 @@ import {
   getAdminStorage,
   getAdminTables,
   getAuthenticatedUserFromRequest,
-  updateProfileById,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { getAppwriteErrorDetails } from '@/lib/appwrite/error-utils';
 import { logServerError } from '@/lib/logger';
+import { deductRapidoCents } from '@/lib/rapido-balance';
 import { normalizeCritiqueText } from '@/lib/critique';
 
 const MAX_PAGE_SIZE = 30;
@@ -80,14 +80,6 @@ function toRapidoCents(rapidoPens: number, fractionCents: number): number {
   return whole * RAPIDO_PRECISION_SCALE + normalizeRapidoFractionCents(fractionCents);
 }
 
-function splitRapidoCents(totalCents: number): { rapidoPens: number; rapidoFractionCents: number } {
-  const normalized = Math.max(0, Math.floor(totalCents));
-  return {
-    rapidoPens: Math.floor(normalized / RAPIDO_PRECISION_SCALE),
-    rapidoFractionCents: normalized % RAPIDO_PRECISION_SCALE,
-  };
-}
-
 function toRapidoDisplay(totalCents: number): number {
   return Math.round(totalCents) / RAPIDO_PRECISION_SCALE;
 }
@@ -150,6 +142,28 @@ async function purgeExpiredDeletedRowsForUser(userId: string): Promise<void> {
   );
 }
 
+async function rollbackPreservedAnalysis(rowId: string, fileId: string): Promise<void> {
+  if (rowId) {
+    try {
+      await getAdminTables().deleteRow({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: APPWRITE_TABLE_ANALYSIS_HISTORY_ID,
+        rowId,
+      });
+    } catch (error) {
+      logServerError('api.analysis-history.POST.rollbackRow', error, { rowId });
+    }
+  }
+
+  if (fileId) {
+    try {
+      await getAdminStorage().deleteFile({ bucketId: APPWRITE_BUCKET_GALLERY_ID, fileId });
+    } catch (error) {
+      logServerError('api.analysis-history.POST.rollbackFile', error, { fileId });
+    }
+  }
+}
+
 async function listAnalysisHistoryRows(
   userId: string,
   limit: number,
@@ -193,7 +207,14 @@ export async function GET(request: NextRequest) {
     }
 
     await ensureCoreAppwriteResources();
-    await purgeExpiredDeletedRowsForUser(user.id);
+    // Housekeeping only; it must not delay the list response.
+    after(async () => {
+      try {
+        await purgeExpiredDeletedRowsForUser(user.id);
+      } catch (error) {
+        logServerError('api.analysis-history.GET.purge', error, { userId: user.id });
+      }
+    });
 
     const params = request.nextUrl.searchParams;
     const limitRaw = Number(params.get('limit') ?? '12');
@@ -233,6 +254,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  let uploadedFileId = '';
+  let createdRowId = '';
+
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
@@ -277,6 +301,8 @@ export async function POST(request: NextRequest) {
     }
 
     let preserveRapidoRemaining: number | undefined;
+    let preserveBalanceCents: number | null = null;
+    let preserveProfileRowId: string | undefined;
 
     if (preserveMode) {
       const profile = await getOrCreateProfile(user);
@@ -297,15 +323,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const nextCents = Math.max(0, currentCents - ANALYSIS_PRESERVE_COST_CENTS);
-      const { rapidoPens, rapidoFractionCents } = splitRapidoCents(nextCents);
-
-      await updateProfileById(user.id, {
-        rapido_pens: rapidoPens,
-        rapido_fraction_cents: rapidoFractionCents,
-      });
-
-      preserveRapidoRemaining = toRapidoDisplay(nextCents);
+      preserveBalanceCents = currentCents;
+      preserveProfileRowId = profile.row_id;
     }
 
     const ext = sourceMimeType === 'application/pdf'
@@ -341,6 +360,7 @@ export async function POST(request: NextRequest) {
       fileId,
       file,
     });
+    uploadedFileId = fileId;
 
     const previewUrl = buildPreviewFileUrl(fileId);
     const sourceUrl = buildSourceFileUrl(fileId);
@@ -365,6 +385,18 @@ export async function POST(request: NextRequest) {
         purge_after: '',
       },
     });
+    createdRowId = created.$id;
+
+    // Charged only after the board is stored, so a failed upload/write never costs Rapido.
+    if (preserveBalanceCents !== null) {
+      const nextCents = await deductRapidoCents({
+        userId: user.id,
+        profileRowId: preserveProfileRowId,
+        costCents: ANALYSIS_PRESERVE_COST_CENTS,
+        knownBalanceCents: preserveBalanceCents,
+      });
+      preserveRapidoRemaining = toRapidoDisplay(nextCents);
+    }
 
     return NextResponse.json({
       charged: preserveMode ? ANALYSIS_PRESERVE_COST_CENTS / RAPIDO_PRECISION_SCALE : 0,
@@ -386,6 +418,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    // Roll back a stored board whose charge failed (or that failed mid-way) so it is not kept for free.
+    await rollbackPreservedAnalysis(createdRowId, uploadedFileId);
+
     const appwriteError = getAppwriteErrorDetails(error);
     const type = (appwriteError.type || appwriteError.responseType || '').toLowerCase();
     if (type.includes('storage_invalid_file_size') || type.includes('file_size')) {

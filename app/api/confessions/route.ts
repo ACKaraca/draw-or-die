@@ -11,15 +11,31 @@ import {
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
+import { checkRateLimit, type RateLimitConfig } from '@/lib/rate-limit';
+import { getClientIp } from '@/lib/client-ip';
+import { getRequestLanguage } from '@/lib/server-i18n';
+import { pickLocalized } from '@/lib/i18n';
+import {
+  AI_AUXILIARY_REQUEST_TIMEOUT_MS,
+  resolveAiProviderConfig,
+  shouldSendJsonObjectFormat,
+} from '@/lib/ai-provider';
 import type { ConfessionRow } from '@/lib/appwrite/server';
+
+type ConfessionStatus = ConfessionRow['status'];
 
 type ConfessionCreateData = {
   anon_key: string;
   text: string;
-  status: 'approved' | 'rejected';
+  status: ConfessionStatus;
   likes: number;
   image_url?: string;
   moderation_reason?: string;
+};
+
+type ModerationDecision = {
+  status: ConfessionStatus;
+  reason: string;
 };
 
 // Max decoded base64 bytes for a 2 MB image
@@ -27,6 +43,9 @@ const MAX_IMAGE_BYTES = 2_796_202;
 // Rate limit: max confessions per anon key in 24 hours
 const RATE_LIMIT_COUNT = 5;
 const RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+// anonKey is client-chosen and trivially rotated, so submissions are also capped per IP.
+const IP_RATE_LIMIT: RateLimitConfig = { maxRequests: 10, windowMs: 60 * 60 * 1000 };
+const MODERATION_UNAVAILABLE_REASON = 'Moderation unavailable. Queued for manual review.';
 
 // Attempt to load sharp for image resizing; fall back gracefully if unavailable.
 async function tryResizeImage(buffer: Buffer): Promise<{ buffer: Buffer; mimeType: string }> {
@@ -43,15 +62,15 @@ async function tryResizeImage(buffer: Buffer): Promise<{ buffer: Buffer; mimeTyp
   }
 }
 
+/**
+ * Fails closed: anything other than an explicit model verdict leaves the confession
+ * `pending` (not public) for manual review.
+ */
 async function moderateConfession(
   text: string,
   imageBase64?: string,
-): Promise<{ approved: boolean; reason: string }> {
-  const apiKey = process.env.AI_API_KEY;
-  const baseUrl = (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-  const model = process.env.AI_MODEL || 'gpt-4o';
-
-  if (!apiKey) return { approved: true, reason: '' };
+): Promise<ModerationDecision> {
+  const pendingDecision: ModerationDecision = { status: 'pending', reason: MODERATION_UNAVAILABLE_REASON };
 
   const content: unknown[] = [];
   if (imageBase64) {
@@ -70,27 +89,53 @@ Confession text: <text>${text.substring(0, 500)}</text>`,
   });
 
   try {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
+    const provider = resolveAiProviderConfig();
+    if (!provider) return pendingDecision;
+
+    const requestBody: Record<string, unknown> = {
+      model: provider.model,
+      messages: [{ role: 'user', content }],
+      max_tokens: 256,
+    };
+    if (shouldSendJsonObjectFormat(provider.hostname)) {
+      requestBody.response_format = { type: 'json_object' };
+    }
+
+    const res = await fetch(`${provider.baseUrl}/chat/completions`, { // baseUrl comes from the allowlist
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content }],
-        response_format: { type: 'json_object' },
-        max_tokens: 256,
-      }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(AI_AUXILIARY_REQUEST_TIMEOUT_MS),
     });
-    if (!res.ok) return { approved: true, reason: '' };
+    if (!res.ok) {
+      logServerError('confessions:moderation', new Error(`Moderation provider error ${res.status}`));
+      return pendingDecision;
+    }
+
     const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const raw = json.choices?.[0]?.message?.content ?? '{}';
     const parsed = JSON.parse(
       raw
+        .replace(/^```(?:json)?\s*/i, '')
         .replace(/```\s*$/i, '')
         .trim(),
-    ) as { approved?: boolean; reason?: string };
-    return { approved: parsed.approved !== false, reason: parsed.reason ?? '' };
-  } catch {
-    return { approved: true, reason: '' };
+    ) as { approved?: unknown; reason?: unknown };
+    const reason = typeof parsed.reason === 'string' ? parsed.reason.substring(0, 500) : '';
+
+    if (parsed.approved === true) return { status: 'approved', reason };
+    if (parsed.approved === false) return { status: 'rejected', reason };
+    return pendingDecision;
+  } catch (error) {
+    logServerError('confessions:moderation', error);
+    return pendingDecision;
+  }
+}
+
+async function deleteConfessionImage(fileId: string): Promise<void> {
+  try {
+    await getAdminStorage().deleteFile({ bucketId: APPWRITE_BUCKET_GALLERY_ID, fileId });
+  } catch (error) {
+    logServerError('confessions:image-cleanup', error, { fileId });
   }
 }
 
@@ -102,7 +147,25 @@ function buildConfessionImageUrl(fileId: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  let uploadedFileId = '';
+
   try {
+    const ipLimiter = await checkRateLimit(`confessions-ip:${getClientIp(request)}`, IP_RATE_LIMIT);
+    if (!ipLimiter.allowed) {
+      const lang = getRequestLanguage(request);
+      return NextResponse.json(
+        {
+          error: pickLocalized(
+            lang,
+            'Çok fazla itiraf gönderildi. Lütfen daha sonra tekrar dene.',
+            'Too many confessions submitted. Please try again later.',
+          ),
+          code: 'RATE_LIMIT_EXCEEDED',
+        },
+        { status: 429 },
+      );
+    }
+
     await ensureCoreAppwriteResources();
 
     const body = (await request.json()) as {
@@ -206,21 +269,29 @@ export async function POST(request: NextRequest) {
         file,
       });
 
+      uploadedFileId = fileId;
       imageUrl = buildConfessionImageUrl(fileId);
       resizedBase64ForModeration = finalBuffer.toString('base64');
     }
 
     // AI moderation
     const moderation = await moderateConfession(text, resizedBase64ForModeration);
+    const { status } = moderation;
+    const isRejected = status === 'rejected';
 
-    const status: 'approved' | 'rejected' = moderation.approved ? 'approved' : 'rejected';
+    if (isRejected && uploadedFileId) {
+      await deleteConfessionImage(uploadedFileId);
+      uploadedFileId = '';
+      imageUrl = undefined;
+    }
+
     const createData: ConfessionCreateData = {
       anon_key: anonKey,
       text,
       status,
       likes: 0,
       ...(imageUrl ? { image_url: imageUrl } : {}),
-      ...(!moderation.approved && moderation.reason ? { moderation_reason: moderation.reason } : {}),
+      ...(status !== 'approved' && moderation.reason ? { moderation_reason: moderation.reason } : {}),
     };
 
     // Create row regardless of moderation outcome
@@ -230,13 +301,14 @@ export async function POST(request: NextRequest) {
       rowId: ID.unique(),
       data: createData,
     });
+    uploadedFileId = '';
 
-    if (!moderation.approved) {
+    if (status !== 'approved') {
       // Do not expose the moderation reason to the client
       return NextResponse.json({
         ok: true,
-        pending: false,
-        rejected: true,
+        pending: status === 'pending',
+        rejected: isRejected,
         confession: {
           id: created.$id,
           status: created.status,
@@ -254,6 +326,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (uploadedFileId) {
+      await deleteConfessionImage(uploadedFileId);
+    }
     logServerError('confessions:POST', error);
     return NextResponse.json({ error: 'Failed to submit confession.', code: 'CONFESSION_WRITE_FAILED' }, { status: 500 });
   }

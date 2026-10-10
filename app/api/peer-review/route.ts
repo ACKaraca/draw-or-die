@@ -16,6 +16,8 @@ import { logServerError } from '@/lib/logger';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
+// Appwrite accepts at most 100 values in a single Query.equal.
+const GALLERY_LOOKUP_CHUNK_SIZE = 100;
 
 type GalleryRow = Models.Row & {
   user_id: string;
@@ -69,24 +71,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ openings: [], total: openingsResult.total ?? 0 });
     }
 
-    // Collect unique submission IDs and fetch gallery rows in parallel
-    const submissionIds = [...new Set(openingRows.map((o) => o.submission_id))];
+    // Collect unique submission IDs and fetch their gallery rows in batched list queries
+    const submissionIds = [...new Set(openingRows.map((o) => o.submission_id).filter(Boolean))];
+    const idChunks: string[][] = [];
+    for (let i = 0; i < submissionIds.length; i += GALLERY_LOOKUP_CHUNK_SIZE) {
+      idChunks.push(submissionIds.slice(i, i + GALLERY_LOOKUP_CHUNK_SIZE));
+    }
 
     const galleryResults = await Promise.allSettled(
-      submissionIds.map((sid) =>
-        tables.getRow<GalleryRow>({
+      idChunks.map((ids) =>
+        tables.listRows<GalleryRow>({
           databaseId: APPWRITE_DATABASE_ID,
           tableId: APPWRITE_TABLE_GALLERY_ID,
-          rowId: sid,
+          queries: [
+            Query.equal('$id', ids),
+            Query.select(['$id', 'title', 'jury_quote', 'public_url']),
+            Query.limit(ids.length),
+          ],
         }),
       ),
     );
 
     const galleryMap = new Map<string, GalleryRow>();
-    for (let i = 0; i < submissionIds.length; i += 1) {
-      const result = galleryResults[i];
+    for (const result of galleryResults) {
       if (result.status === 'fulfilled') {
-        galleryMap.set(submissionIds[i], result.value);
+        for (const row of result.value.rows) {
+          galleryMap.set(row.$id, row);
+        }
+      } else {
+        logServerError('peer-review:list:gallery-lookup', result.reason);
       }
     }
 

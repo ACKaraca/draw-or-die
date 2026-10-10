@@ -5,6 +5,10 @@ import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwrite/server';
 import { ensureCommerceAppwriteResources, ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { validatePromoForCheckout } from '@/lib/promo-codes';
+import { getRequestLanguage } from '@/lib/server-i18n';
+import { pickLocalized } from '@/lib/i18n';
+
+const MAX_RAPIDO_PURCHASE = 1000;
 
 function readCleanEnv(name: string): string {
     const raw = process.env[name];
@@ -169,6 +173,24 @@ async function resolvePromotionCode(
     }
 }
 
+/** Missing quantity falls back to the minimum pack; anything else must be an in-range integer. */
+function resolveRapidoQuantity(raw: unknown): number | null {
+    if (raw === undefined || raw === null) {
+        return STRIPE_PRICES.MIN_RAPIDO_PURCHASE;
+    }
+
+    if (
+        typeof raw !== 'number' ||
+        !Number.isInteger(raw) ||
+        raw < STRIPE_PRICES.MIN_RAPIDO_PURCHASE ||
+        raw > MAX_RAPIDO_PURCHASE
+    ) {
+        return null;
+    }
+
+    return raw;
+}
+
 function applyDiscountToAmount(amountCents: number, promo: { rewardKind: string; rewardValue: number }): number {
     if (promo.rewardKind === 'discount_percent') {
         const percent = Math.max(0, Math.min(100, Math.trunc(promo.rewardValue)));
@@ -210,6 +232,23 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Geçersiz checkout modu.' }, { status: 400 });
         }
 
+        const rapidoQuantity = mode === 'rapido_pack' ? resolveRapidoQuantity(quantity) : 0;
+        if (rapidoQuantity === null) {
+            const lang = getRequestLanguage(request);
+            const min = STRIPE_PRICES.MIN_RAPIDO_PURCHASE;
+            return NextResponse.json(
+                {
+                    error: pickLocalized(
+                        lang,
+                        `Rapido adedi ${min} ile ${MAX_RAPIDO_PURCHASE} arasında bir tam sayı olmalıdır.`,
+                        `Rapido quantity must be a whole number between ${min} and ${MAX_RAPIDO_PURCHASE}.`,
+                    ),
+                    code: 'INVALID_RAPIDO_QUANTITY',
+                },
+                { status: 400 },
+            );
+        }
+
         if (normalizedPromoCode) {
             await ensureCommerceAppwriteResources();
         } else {
@@ -245,14 +284,15 @@ export async function POST(request: NextRequest) {
         const internalDiscount = internalPromo?.valid && internalPromo.source === 'internal'
             ? internalPromo.promo
             : null;
-        const resolvedPromotionCode = await resolvePromotionCode(stripe, normalizedPromoCode, promotionCodeId);
+        // An internal promo is applied via custom line-item pricing; Stripe does not know the code.
+        const resolvedPromotionCode = internalDiscount
+            ? null
+            : await resolvePromotionCode(stripe, normalizedPromoCode, promotionCodeId);
 
         let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[];
         let checkoutMode: Stripe.Checkout.SessionCreateParams.Mode;
-        let rapidQuantity = 0;
 
         if (mode === 'rapido_pack') {
-            rapidQuantity = Math.max(quantity ?? STRIPE_PRICES.MIN_RAPIDO_PURCHASE, STRIPE_PRICES.MIN_RAPIDO_PURCHASE);
             if (internalDiscount) {
                 const unitAmount = applyDiscountToAmount(tier.RAPIDO_UNIT, internalDiscount);
                 lineItems = [{
@@ -261,10 +301,10 @@ export async function POST(request: NextRequest) {
                         unit_amount: unitAmount,
                         product: STRIPE_PRICES.RAPIDO_PRODUCT_ID,
                     },
-                    quantity: rapidQuantity,
+                    quantity: rapidoQuantity,
                 }];
             } else {
-                lineItems = [buildRapidoLineItem(tier, rapidQuantity)];
+                lineItems = [buildRapidoLineItem(tier, rapidoQuantity)];
             }
             checkoutMode = 'payment';
         } else {
@@ -306,7 +346,7 @@ export async function POST(request: NextRequest) {
             metadata: {
                 user_id: user.id,
                 checkout_mode: mode,
-                rapido_quantity: mode === 'rapido_pack' ? String(rapidQuantity) : '0',
+                rapido_quantity: mode === 'rapido_pack' ? String(rapidoQuantity) : '0',
                 pricing_tier: tierKey,
                 pricing_email_source: profile.edu_verified && profile.edu_email ? 'edu_verified_email' : 'primary_email',
                 promo_code: internalDiscount?.code || resolvedPromotionCode?.code || '',

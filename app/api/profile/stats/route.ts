@@ -20,6 +20,8 @@ import {
 } from '@/lib/profile-stats-cache';
 
 const BILLING_SUMMARY_SCAN_LIMIT = 500;
+// The billing summary only sums these; skipping metadata_json keeps the 500-row read small.
+const BILLING_SUMMARY_COLUMNS = ['$id', 'amount_cents', 'rapido_delta', 'event_type', 'currency'];
 const MEMORY_SNIPPET_LIMIT = 24;
 
 function normalizeCategory(raw: string): string {
@@ -84,6 +86,7 @@ export async function GET(request: NextRequest) {
           tableId: APPWRITE_TABLE_BILLING_EVENTS_ID,
           queries: [
             Query.equal('user_id', user.id),
+            Query.select(BILLING_SUMMARY_COLUMNS),
             Query.limit(BILLING_SUMMARY_SCAN_LIMIT),
           ],
         }),

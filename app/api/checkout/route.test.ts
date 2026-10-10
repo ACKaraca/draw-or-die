@@ -4,6 +4,8 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { validatePromoForCheckout } from '@/lib/promo-codes';
 
 const mockCreateSession = jest.fn();
+const mockListPromotionCodes = jest.fn();
+const mockRetrievePromotionCode = jest.fn();
 const mockEnsureCoreAppwriteResources = jest.fn();
 const mockEnsureCommerceAppwriteResources = jest.fn();
 
@@ -43,6 +45,10 @@ jest.mock('stripe', () => {
       sessions: {
         create: mockCreateSession,
       },
+    },
+    promotionCodes: {
+      list: mockListPromotionCodes,
+      retrieve: mockRetrievePromotionCode,
     },
   }));
 
@@ -127,6 +133,8 @@ describe('POST /api/checkout', () => {
       error: 'Promo kodu bulunamadi.',
     });
     mockCreateSession.mockResolvedValue({ url: 'https://stripe.test/session' } as Stripe.Checkout.Session);
+    mockListPromotionCodes.mockResolvedValue({ data: [] });
+    mockRetrievePromotionCode.mockRejectedValue(new Error('No such promotion code'));
   });
 
   it('returns 503 when Stripe is not configured', async () => {
@@ -187,7 +195,112 @@ describe('POST /api/checkout', () => {
     expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
-  it('creates rapido checkout sessions with a server-enforced minimum quantity', async () => {
+  it.each([
+    ['below the minimum', 1],
+    ['above the maximum', 1001],
+    ['fractional', 5.5],
+    ['a numeric string', '10'],
+    ['negative', -5],
+  ])('rejects a rapido quantity that is %s', async (_label, quantity) => {
+    const POST = await loadRoute();
+
+    const response = await POST(
+      createRequest({ mode: 'rapido_pack', quantity }) as never
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ code: 'INVALID_RAPIDO_QUANTITY', error: expect.stringContaining('Rapido') })
+    );
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('returns the quantity error in English when requested', async () => {
+    const POST = await loadRoute();
+
+    const response = await POST(
+      createRequest({ mode: 'rapido_pack', quantity: 2 }, { 'accept-language': 'en-US,en;q=0.9' }) as never
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ error: 'Rapido quantity must be a whole number between 5 and 1000.' })
+    );
+  });
+
+  it('accepts an in-range rapido quantity', async () => {
+    const POST = await loadRoute();
+
+    const response = await POST(
+      createRequest({ mode: 'rapido_pack', quantity: 1000 }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: 'price_1TJfaeR9Q18j8gkWLFU14ZxI', quantity: 1000 }],
+        metadata: expect.objectContaining({ rapido_quantity: '1000' }),
+      })
+    );
+  });
+
+  it('applies an internal promo without looking the code up in Stripe', async () => {
+    mockedValidatePromoForCheckout.mockResolvedValueOnce({
+      valid: true,
+      source: 'internal',
+      promotionCodeId: 'promo-row-1',
+      promoCode: 'STUDIO20',
+      promo: {
+        id: 'promo-row-1',
+        code: 'STUDIO20',
+        rewardKind: 'discount_percent',
+        rewardValue: 20,
+      },
+      coupon: null,
+      summary: '',
+    } as never);
+    const POST = await loadRoute();
+
+    const response = await POST(
+      createRequest({ mode: 'rapido_pack', quantity: 10, promoCode: 'STUDIO20' }) as never
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockListPromotionCodes).not.toHaveBeenCalled();
+    expect(mockRetrievePromotionCode).not.toHaveBeenCalled();
+    expect(mockCreateSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allow_promotion_codes: false,
+        line_items: [expect.objectContaining({
+          quantity: 10,
+          price_data: expect.objectContaining({ unit_amount: 63 }),
+        })],
+        metadata: expect.objectContaining({
+          promo_code: 'STUDIO20',
+          promotion_code_id: 'promo-row-1',
+          promo_source: 'internal',
+        }),
+      })
+    );
+    expect(mockCreateSession.mock.calls[0][0]).not.toHaveProperty('discounts');
+  });
+
+  it('still rejects an unknown promo code that is not internal', async () => {
+    const POST = await loadRoute();
+
+    const response = await POST(
+      createRequest({ mode: 'premium_monthly', promoCode: 'NOPE' }) as never
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ code: 'INVALID_PROMO_CODE' })
+    );
+    expect(mockListPromotionCodes).toHaveBeenCalled();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('defaults to the minimum rapido quantity when none is sent', async () => {
     mockedGetAuthenticatedUserFromRequest.mockResolvedValueOnce({
       id: 'user-rapido',
       email: 'user@example.com',
@@ -197,7 +310,7 @@ describe('POST /api/checkout', () => {
 
     const response = await POST(
       createRequest(
-        { mode: 'rapido_pack', quantity: 1 },
+        { mode: 'rapido_pack' },
         { origin: 'https://drawor-die.com', 'content-type': 'application/json' }
       ) as never
     );
