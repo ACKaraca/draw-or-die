@@ -61,6 +61,28 @@ function describeAuthError(error: unknown, copy: AuthErrorCopy): string {
     return copy.authErrorGeneric
 }
 
+type AuthField = 'fullName' | 'email' | 'password'
+
+type AuthFieldErrorCopy = Pick<AuthErrorCopy, 'emailInvalid' | 'userExists' | 'userNotFound' | 'passwordInvalid' | 'passwordPersonalData'> & {
+    fullNameRequired: string
+    emailRequired: string
+    gmailCanonicalConflict: string
+}
+
+/** Which input an error message belongs to, so it can be rendered next to and linked with that input. */
+function resolveErrorField(message: string, copy: AuthFieldErrorCopy): AuthField | null {
+    if (message === copy.fullNameRequired) return 'fullName'
+    if ([copy.emailRequired, copy.emailInvalid, copy.gmailCanonicalConflict, copy.userExists, copy.userNotFound].includes(message)) return 'email'
+    if (message === copy.passwordInvalid || message === copy.passwordPersonalData) return 'password'
+    return null
+}
+
+const FIELD_ERROR_IDS: Record<AuthField, string> = {
+    fullName: 'auth-full-name-error',
+    email: 'auth-email-error',
+    password: 'auth-password-error',
+}
+
 export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) {
     const [mode, setMode] = useState<'login' | 'signup' | 'recovery'>('login')
     const [fullName, setFullName] = useState('')
@@ -452,6 +474,18 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
     }
 
     const showAuthForm = mode !== 'recovery'
+    const matchedField = error ? resolveErrorField(error, copy) : null
+    // A field hidden in the current mode cannot show its error, so it falls back to the form-level alert.
+    const isFieldVisible = (matchedField !== 'fullName' || mode === 'signup') && (matchedField !== 'password' || showAuthForm)
+    const errorField = isFieldVisible ? matchedField : null
+    const fieldA11yProps = (field: AuthField) => errorField === field
+        ? { 'aria-invalid': true, 'aria-describedby': FIELD_ERROR_IDS[field] }
+        : {}
+    const renderFieldError = (field: AuthField) => errorField === field && (
+        <p id={FIELD_ERROR_IDS[field]} role="alert" className="text-xs text-red-300">
+            {error}
+        </p>
+    )
 
     return (
         <div ref={overlayRef} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -511,7 +545,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                     </div>
 
                     <form onSubmit={handleAuth} className="space-y-4">
-                        {error && (
+                        {error && !errorField && (
                             <div role="alert" className="bg-red-500/10 border border-red-500/20 text-red-300 text-sm p-3 rounded-lg text-center">
                                 {error}
                             </div>
@@ -531,8 +565,10 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                                         className="w-full bg-white/5 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-neon-red transition-colors"
                                         placeholder={copy.fullNamePlaceholder}
                                         required={mode === 'signup'}
+                                        {...fieldA11yProps('fullName')}
                                     />
                                 </div>
+                                {renderFieldError('fullName')}
                             </div>
                         )}
 
@@ -549,8 +585,10 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                                     className="w-full bg-white/5 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-neon-red transition-colors"
                                     placeholder="architect@studio.com"
                                     required
+                                    {...fieldA11yProps('email')}
                                 />
                             </div>
+                            {renderFieldError('email')}
                         </div>
 
                         {showAuthForm && (
@@ -567,8 +605,10 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                                         className="w-full bg-white/5 border border-white/10 rounded-lg py-2.5 pl-10 pr-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-neon-red transition-colors"
                                         placeholder="••••••••"
                                         required={mode === 'login' || mode === 'signup'}
+                                        {...fieldA11yProps('password')}
                                     />
                                 </div>
+                                {renderFieldError('password')}
                             </div>
                         )}
 
