@@ -11,6 +11,23 @@ export interface AICallOptions {
     params?: Record<string, unknown>;
     /** Locale for user-facing error strings and Accept-Language on the API request. */
     locale?: SupportedLanguage;
+    /**
+     * Idempotency key for the billed operation (8-64 chars of [A-Za-z0-9_-]). Generated per call when
+     * omitted; pass the same value only to re-send the very same attempt — it is charged at most once.
+     */
+    operationId?: string;
+    /** Aborts the request when the caller no longer needs the result. */
+    signal?: AbortSignal;
+}
+
+function createOperationId(): string {
+    const cryptoApi = globalThis.crypto;
+    if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+        return cryptoApi.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    cryptoApi.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 export interface GameStateUpdate {
@@ -184,10 +201,15 @@ export const generateAIResponse = async (options: AICallOptions): Promise<AIResp
     const abortController = new AbortController();
     const requestBody = JSON.stringify({
         operation: options.operation,
+        operationId: options.operationId ?? createOperationId(),
         imageBase64: options.imageBase64,
         imageMimeType: options.imageMimeType,
         params: options.params || {},
     });
+    // Caller cancellation (e.g. the user leaves the step) aborts the request; the server then voids
+    // the Rapido reservation for this operation.
+    if (options.signal?.aborted) abortController.abort();
+    options.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
     const postToApi = (token: string) => fetch('/api/ai-generate', {
         method: 'POST',
         headers: {

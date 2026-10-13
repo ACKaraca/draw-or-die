@@ -105,6 +105,14 @@ These are used by `/api/ai-generate` to call the LLM.
 Every successful provider call logs one `[server-info]` line with scope `api.ai-generate.usage` (operation, model, attempts, duration, prompt/completion/reasoning tokens). Use it to measure cost per operation before tuning models or reasoning effort.
 
 Provider calls have a 100 s budget. Transient failures (network errors, 408/425/429/5xx) are retried once, on the first `AI_MODEL_FALLBACKS` entry when the primary is a Gemini 3.1 model. On the Vercel AI Gateway the same fallback is also sent as the gateway's `models` list so most failovers happen inside a single request.
+A retry only starts if it still fits the budget after its back-off (`Retry-After` capped at 3 s); timeouts, client cancellation, other 4xx, safety refusals (`content_filter`) and output truncated at the token cap are never retried.
+
+| Variable | Description | Default |
+|---|---|---|
+| `AI_MAX_OUTPUT_TOKENS` | Per-attempt `max_tokens` sent to the provider (ceiling 65536). With the 2-attempt cap this bounds the output one operation can buy. | `16384` |
+| `RAPIDO_LEDGER_MODE` | `off` = legacy charge-after-success only. Anything else = reserve → settle/void through the append-only journal (`lib/rapido-ledger.ts`), automatically falling back to legacy while the journal table is missing. | ledger (auto) |
+| `APPWRITE_TABLE_RAPIDO_LEDGER_ID` | Append-only Rapido journal table, provisioned by `scripts/rapido-ledger-backfill.mjs --apply` (not by runtime bootstrap). | `rapido_ledger_entries` |
+| `APPWRITE_TABLE_DELETION_REQUESTS_ID` | Pseudonymous account-deletion request/tombstone table (`lib/privacy/deletion-store.ts`), created lazily on first use. | `deletion_requests` |
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.app,https://dev.drawordie.app` |
 | `NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED` | Enables the future client-side image-editing rescue path. Keep `false` until manually tested. | `false` |
 

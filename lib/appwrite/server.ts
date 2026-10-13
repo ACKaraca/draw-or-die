@@ -131,6 +131,8 @@ export const APPWRITE_TABLE_PORTFOLIOS_ID = process.env.APPWRITE_TABLE_PORTFOLIO
 export const APPWRITE_TABLE_PORTFOLIO_PAGES_ID = process.env.APPWRITE_TABLE_PORTFOLIO_PAGES_ID ?? 'portfolio_pages';
 export const APPWRITE_TABLE_CONFESSIONS_ID = process.env.APPWRITE_TABLE_CONFESSIONS_ID ?? 'studio_confessions';
 export const APPWRITE_TABLE_DELETION_REQUESTS_ID = process.env.APPWRITE_TABLE_DELETION_REQUESTS_ID ?? 'deletion_requests';
+// Append-only Rapido journal (DOD-23). Provisioned by scripts/rapido-ledger-backfill.mjs, not by runtime bootstrap.
+export const APPWRITE_TABLE_RAPIDO_LEDGER_ID = process.env.APPWRITE_TABLE_RAPIDO_LEDGER_ID ?? 'rapido_ledger_entries';
 
 export function getAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS ?? '';
@@ -347,6 +349,21 @@ export type BillingEventRow = Models.Row & {
   stripe_customer_id?: string;
   stripe_subscription_id?: string;
   metadata_json?: string;
+};
+
+export type RapidoLedgerEntryRow = Models.Row & {
+  user_id: string;
+  operation_id: string;
+  kind: string;
+  bucket?: string | null;
+  delta_cents: number;
+  amount_cents: number;
+  reason: string;
+  actor: string;
+  approved_by?: string | null;
+  operation?: string | null;
+  lease_expires_at?: string | null;
+  occurred_at: string;
 };
 
 export type PromoCodeRow = Models.Row & {
