@@ -94,6 +94,21 @@ describe('referral hardening', () => {
     expect(mockUpdateProfileById).not.toHaveBeenCalled();
   });
 
+  it('rejects linking into an A→B→C→A cycle and fails closed on chain lookup errors', async () => {
+    mockGetOrCreateProfile.mockResolvedValue({ ...REFEREE_PROFILE, referred_by: null });
+    mockFindProfileByReferralCode.mockImplementation(async (code: string) => (code === 'ABCD1234'
+      ? { ...REFERRER_PROFILE, referred_by: 'CCCC1234' }
+      : { ...REFERRER_PROFILE, id: 'c', email: 'c@example.com', referral_code: 'CCCC1234', referred_by: 'NEWU1234' }));
+    expect((await linkReferralToUser(makeUser(), 'ABCD1234')).success).toBe(false);
+
+    mockFindProfileByReferralCode.mockImplementation(async (code: string) => {
+      if (code === 'ABCD1234') return { ...REFERRER_PROFILE, referred_by: 'CCCC1234' };
+      throw new Error('appwrite down');
+    });
+    expect((await linkReferralToUser(makeUser(), 'ABCD1234')).success).toBe(false);
+    expect(mockUpdateProfileById).not.toHaveBeenCalled();
+  });
+
   it('rejects linking a referrer with the same mailbox', async () => {
     mockGetOrCreateProfile.mockResolvedValue({ ...REFEREE_PROFILE, referred_by: null });
     mockFindProfileByReferralCode.mockResolvedValue({ ...REFERRER_PROFILE, email: 'New+alt@Example.com' });
@@ -140,6 +155,16 @@ describe('referral hardening', () => {
     expect(result).toEqual({ success: true, rewarded: false });
     expect(mockClaimOnce).not.toHaveBeenCalled();
     expect(mockCreditRapidoPens).not.toHaveBeenCalled();
+    expect(mockUpdateProfileById).toHaveBeenCalledWith('new-user', { referral_rewarded_at: expect.any(String) });
+  });
+
+  it('settles A→B→C→A cycles without paying anyone', async () => {
+    mockFindProfileByReferralCode.mockImplementation(async (code: string) => (code === 'ABCD1234'
+      ? { ...REFERRER_PROFILE, referred_by: 'CCCC1234' }
+      : { ...REFERRER_PROFILE, id: 'c', email: 'c@example.com', referral_code: 'CCCC1234', referred_by: 'NEWU1234' }));
+    const result = await applyReferralReward(makeUser());
+    expect(result).toEqual({ success: true, rewarded: false });
+    expect(mockClaimOnce).not.toHaveBeenCalled();
     expect(mockUpdateProfileById).toHaveBeenCalledWith('new-user', { referral_rewarded_at: expect.any(String) });
   });
 

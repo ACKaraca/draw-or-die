@@ -57,7 +57,10 @@ const SECRET_ROW = {
 describe('GET /api/profile serialization', () => {
   beforeEach(() => {
     mockGetOrCreateProfile.mockResolvedValue(normalizeProfileRow(SECRET_ROW));
-    mockMaybeGrantRegistrationBonus.mockResolvedValue({ status: 'not_applicable', reason: 'paused' });
+    mockMaybeGrantRegistrationBonus.mockResolvedValue({
+      initial: { status: 'not_applicable', reason: 'legacy_profile' },
+      verified: { status: 'not_applicable', reason: 'initial_not_recorded' },
+    });
   });
 
   it('returns only allow-listed fields', async () => {

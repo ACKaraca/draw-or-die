@@ -20,6 +20,7 @@ import { RAPIDO_PRECISION_SCALE, toRapidoCents } from '@/lib/rapido-cents';
  */
 
 export type RewardKind =
+  | 'registration_bonus_initial'
   | 'registration_bonus'
   | 'referral_new_user'
   | 'referral_referrer'
@@ -70,6 +71,7 @@ type RewardRule = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const REWARD_RULES: Record<RewardKind, RewardRule> = {
+  registration_bonus_initial: { maxAccountAgeDays: 30, billingEventType: 'registration_bonus_initial' },
   registration_bonus: { maxAccountAgeDays: 30, billingEventType: 'registration_bonus' },
   referral_new_user: { maxAccountAgeDays: 30, billingEventType: 'referral_reward_new_user' },
   referral_referrer: { maxAccountAgeDays: null, billingEventType: 'referral_reward_referrer' },
@@ -138,7 +140,8 @@ export function evaluateRewardEligibility(input: RewardEligibilityInput): Reward
   if (areRewardsPaused()) return deny('rewards_paused');
   if (!identity || !identity.id) return deny('identity_unavailable');
   if (!identity.email || !identity.email.trim()) return deny('anonymous');
-  if (identity.emailVerified !== true) return deny('email_unverified');
+  // Only the initial registration bonus is paid before verification; every other kind needs it.
+  if (kind !== 'registration_bonus_initial' && identity.emailVerified !== true) return deny('email_unverified');
 
   const { maxAccountAgeDays } = REWARD_RULES[kind];
   if (maxAccountAgeDays !== null && !isAccountYoungerThan(identity.createdAt, maxAccountAgeDays, nowMs)) {

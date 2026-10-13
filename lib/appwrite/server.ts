@@ -6,6 +6,7 @@ import type { Models } from 'node-appwrite';
 import type { NextRequest } from 'next/server';
 import { getAppwriteErrorDetails, isAppwriteConflict, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
+import { logServerError } from '@/lib/logger';
 import { TIER_DEFAULTS } from '@/lib/pricing';
 
 export const APPWRITE_SERVER_ENDPOINT = process.env.APPWRITE_ENDPOINT ?? 'https://fra.cloud.appwrite.io/v1';
@@ -779,6 +780,11 @@ export async function getAuthUserById(userId: string): Promise<AppwriteAuthUser>
   };
 }
 
+/** Ledger key marking a profile created under the current registration-bonus scheme. */
+export function registrationBonusEntitlementKey(userId: string): string {
+  return `registration-bonus-entitled:${userId}`;
+}
+
 export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<NormalizedUserProfile> {
   const tables = getAdminTables();
 
@@ -811,9 +817,19 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
     }
   }
 
-  // Starting balance only. The early-registration bonus is a reward and is granted later, once
-  // the identity is verified, through `lib/registration-bonus.ts` → `lib/reward-policy.ts`.
+  // Starting balance only. The registration bonus is a reward granted through
+  // `lib/registration-bonus.ts` → `lib/reward-policy.ts` on the profile load.
   const initialRapido = user.email ? TIER_DEFAULTS.REGISTERED : TIER_DEFAULTS.ANONYMOUS;
+
+  if (user.email) {
+    // Written before the row exists, so any request that sees the profile also sees the
+    // entitlement; profiles created before this marker existed never get the bonus.
+    try {
+      await markStripeEventProcessed(registrationBonusEntitlementKey(user.id));
+    } catch (error) {
+      logServerError('appwrite.profile.registration_bonus_entitlement', error, { userId: user.id });
+    }
+  }
 
   try {
     const created = await tables.createRow<UserProfileRow>({

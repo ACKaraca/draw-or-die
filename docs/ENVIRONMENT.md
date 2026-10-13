@@ -13,8 +13,6 @@ APPWRITE_PROJECT_ID=draw-or-die
 APPWRITE_API_KEY=your-appwrite-server-api-key
 # Optional (development): local-only server key override to avoid OS-level env collisions
 APPWRITE_API_KEY_LOCAL=your-local-appwrite-server-api-key
-# Optional: reset the early-registration bonus cohort window.
-APPWRITE_EARLY_REGISTRATION_BONUS_START_AT_V2=2026-04-12T00:00:00.000Z
 
 # Optional: dedicated email provider for edu verification emails.
 # If empty, the default configured Appwrite email provider is used.
@@ -26,10 +24,6 @@ EDU_OTP_HMAC_SECRET=your-random-hex-secret
 # Rewards (lib/reward-policy.ts)
 # Kill switch: `true` stops every reward grant (registration, referral, peer review). Balances are untouched.
 REWARDS_PAUSED=false
-# ISO timestamp of the deploy that moved the early-registration bonus behind the reward policy.
-# Profiles created before it were already funded at creation and are never paid again.
-# Unset = registration bonus paused (fail closed).
-REGISTRATION_BONUS_ACTIVATION_AT=2026-10-13T00:00:00.000Z
 
 # Stripe
 STRIPE_SECRET_KEY=sk_live_xxx
