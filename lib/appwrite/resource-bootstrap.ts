@@ -498,6 +498,11 @@ async function setupProfilesTable(tables: TablesDB): Promise<void> {
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_code', 16, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_email', 255, false);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_expires', false);
+  // Edu OTP v1 (keyed hash, single challenge). `edu_verification_code` is legacy plaintext: no longer written.
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_hash', 128, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_challenge_id', 64, false);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_attempts', false, 0, 0, 1_000);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_delivery', 16, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referral_code', 16, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referred_by', 16, false);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referral_rewarded_at', false);

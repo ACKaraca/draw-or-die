@@ -13,6 +13,7 @@ import { logServerError } from '@/lib/logger';
 import { normalizeLanguage } from '@/lib/i18n';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { ApiMessages } from '@/lib/locales/apiMessages';
+import { maybeGrantRegistrationBonus } from '@/lib/registration-bonus';
 
 function isAppwriteServerUnavailable(): boolean {
   return !APPWRITE_SERVER_API_KEY.trim();
@@ -34,7 +35,16 @@ export async function GET(request: NextRequest) {
     }
 
     await ensureCoreAppwriteResources();
-    const profile = await getOrCreateProfile(user);
+    let profile = await getOrCreateProfile(user);
+    try {
+      const bonus = await maybeGrantRegistrationBonus(user, profile);
+      if (bonus.status === 'granted') {
+        profile = await getOrCreateProfile(user);
+      }
+    } catch (error) {
+      // A reward problem must never block reading the profile.
+      logServerError('api.profile.GET.registrationBonus', error);
+    }
     let referralSignupCount = 0;
 
     if (profile.referral_code) {

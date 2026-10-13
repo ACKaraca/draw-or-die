@@ -235,6 +235,10 @@ async function setupProfilesTable() {
   await ensureStringColumn(tableId, 'edu_verification_code', 16, false);
   await ensureStringColumn(tableId, 'edu_verification_email', 255, false);
   await ensureDatetimeColumn(tableId, 'edu_verification_expires', false);
+  await ensureStringColumn(tableId, 'edu_otp_hash', 128, false);
+  await ensureStringColumn(tableId, 'edu_otp_challenge_id', 64, false);
+  await ensureIntegerColumn(tableId, 'edu_otp_attempts', false, 0, 0, 1000);
+  await ensureStringColumn(tableId, 'edu_otp_delivery', 16, false);
 
   await ensureIndex(
     tableId,

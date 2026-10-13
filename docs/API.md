@@ -149,18 +149,42 @@ Read or send messages in an AI Mentor chat session.
 
 ### POST /api/verify-edu
 
-Initiates educational email verification by sending a confirmation email.
+Emails a 6-digit code to an `.edu.tr` mailbox. The code is never returned to the client or logged.
 
-**Auth:** Valid Appwrite JWT required.
+**Auth:** Valid Appwrite JWT required; the account email must be verified (shared reward policy, `lib/reward-policy.ts`).
 
 **Body:**
 ```json
-{ "edu_email": "string" }
+{ "email": "student@university.edu.tr" }
 ```
 
+**Response (200):** `{ "message": string, "delivery": "email", "requiresManualEntry": false, "expiresAt": string }`
+
 **Errors:**
-- `400` — Not a recognized `.edu` or `.edu.tr` address
-- `409` — Already verified
+- `400` — Missing / non-`.edu.tr` address, invalid body
+- `401` — Not signed in
+- `403` — Anonymous account or unverified account email
+- `429` — Rate limited (3 / 10 min per user, 5 / h per target email, 10 / 10 min per IP)
+- `502` — Email delivery failed; the challenge is invalidated (nothing usable is left behind)
+
+**Storage (profiles table, server-only):** `edu_otp_hash` (HMAC-SHA256 over purpose + user id + normalized
+email + challenge id + code, keyed by `EDU_OTP_HMAC_SECRET`), `edu_otp_challenge_id`, `edu_otp_attempts`
+(max 5, atomic bounded increment), `edu_otp_delivery` (`pending` → `sent`; only `sent` codes are accepted),
+`edu_verification_email`, `edu_verification_expires` (15 min). The legacy plaintext column
+`edu_verification_code` is no longer written, is cleared on the next write, and is never compared.
+
+### PUT /api/verify-edu
+
+Confirms the emailed code. **Body:** `{ "code": "123456" }` → `200 { "verified": true, "message": string }`.
+
+Missing, undelivered, expired, superseded, wrong and replayed codes all return the same `400`. The fifth failed
+attempt invalidates the challenge (`429`). A challenge is consumed at most once (ledger key
+`edu-otp-consume:<challengeId>`), even under concurrent requests. Rate limit: 5 / 10 min per user, 20 / 10 min per IP.
+
+### Profile responses (`GET`/`PATCH /api/profile`)
+
+Serialized with the allow-list `CLIENT_PROFILE_FIELDS` (`lib/appwrite/server.ts`). OTP material, Stripe customer /
+subscription ids and the profile row id are never returned; new columns stay private until added to the list.
 
 ---
 
