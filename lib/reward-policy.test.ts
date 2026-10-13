@@ -91,6 +91,16 @@ describe('evaluateRewardEligibility', () => {
     expect(evaluateRewardEligibility({ ...context, identity: user() })).toMatchObject({ eligible: true });
   });
 
+  it('pays the initial registration bonus to unverified registered accounts, never to anonymous ones', () => {
+    const base = { kind: 'registration_bonus_initial' as const, nowMs: NOW };
+    expect(evaluateRewardEligibility({ ...base, identity: user({ emailVerified: false }) }))
+      .toMatchObject({ eligible: true });
+    expect(evaluateRewardEligibility({ ...base, identity: user({ email: null, emailVerified: false }) }))
+      .toMatchObject({ eligible: false, reason: 'anonymous' });
+    expect(evaluateRewardEligibility({ ...base, identity: null }))
+      .toMatchObject({ eligible: false, reason: 'identity_unavailable' });
+  });
+
   it('applies the account-age window to sign-up rewards only', () => {
     expect(evaluateRewardEligibility({ kind: 'registration_bonus', identity: user({ createdAt: OLD }), nowMs: NOW }))
       .toMatchObject({ eligible: false, reason: 'account_too_old' });

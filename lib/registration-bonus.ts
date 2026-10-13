@@ -1,126 +1,98 @@
-import { Query } from 'node-appwrite';
-
 import {
-  APPWRITE_DATABASE_ID,
-  APPWRITE_TABLE_PROFILES_ID,
-  getAdminTables,
-  getProfileRowForUser,
+  registrationBonusEntitlementKey,
   type AppwriteAuthUser,
   type NormalizedUserProfile,
-  type UserProfileRow,
 } from '@/lib/appwrite/server';
 import { logServerError } from '@/lib/logger';
+import { RAPIDO_REWARDS } from '@/lib/pricing';
 import { rapidoUnitsToCents } from '@/lib/rapido-cents';
 import { evaluateRewardEligibility, grantRewardOnce, type RewardGrantResult } from '@/lib/reward-policy';
+import { findStripeEventRow } from '@/lib/stripe-event-ledger';
 
-export const EARLY_REGISTRATION_BONUS_LIMIT = 100;
-export const EARLY_REGISTRATION_BONUS_RAPIDO = 20;
-// New cohort rollout: only registrations after this timestamp are counted.
-const EARLY_REGISTRATION_BONUS_START_AT =
-  process.env.APPWRITE_EARLY_REGISTRATION_BONUS_START_AT_V2 ?? '2026-04-12T00:00:00.000Z';
-
-/**
- * Profiles created before this instant were funded by the legacy create-time bonus, so they are
- * never paid again. Unset → the bonus is paused (fail closed) until the owner sets it at deploy.
- */
-function getActivationAtMs(): number | null {
-  const raw = (process.env.REGISTRATION_BONUS_ACTIVATION_AT ?? '').trim();
-  if (!raw) return null;
-  const parsed = Date.parse(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-// Per-instance memo so settled users don't hit the cohort query + ledger on every profile load.
+// Per-instance memo so settled users don't hit the ledger on every profile load.
 const SETTLED_CACHE_MAX = 5_000;
-const settledUserIds = new Set<string>();
+const settledKeys = new Set<string>();
 
-function rememberSettled(userId: string): void {
-  if (settledUserIds.size >= SETTLED_CACHE_MAX) settledUserIds.clear();
-  settledUserIds.add(userId);
+function rememberSettled(key: string): void {
+  if (settledKeys.size >= SETTLED_CACHE_MAX) settledKeys.clear();
+  settledKeys.add(key);
 }
 
 export function __resetRegistrationBonusCache(): void {
-  settledUserIds.clear();
+  settledKeys.clear();
 }
 
 export type RegistrationBonusOutcome =
   | RewardGrantResult
-  | {
-      status: 'not_applicable';
-      reason: 'paused' | 'settled' | 'legacy_profile' | 'outside_cohort' | 'profile_missing' | 'cohort_check_failed';
-    };
+  | { status: 'not_applicable'; reason: 'settled' | 'legacy_profile' | 'entitlement_check_failed' | 'initial_not_recorded' };
+
+export type RegistrationBonusResult = {
+  initial: RegistrationBonusOutcome;
+  verified: RegistrationBonusOutcome;
+};
 
 /**
- * Early-registration bonus, paid through the shared reward policy once the account's email is
- * verified. Idempotent per user (`registration-bonus:<userId>`), so it is safe on every profile load.
+ * Registration bonus, paid through the shared reward policy in two idempotent parts:
+ * `registration-bonus-initial:<userId>` for any registered account, and `registration-bonus:<userId>`
+ * once the email is verified. Only profiles created with the entitlement marker qualify, and the
+ * verified part is paid only after the initial part is recorded, so legacy profiles are never paid.
+ * Safe to call on every profile load: a failed grant is retried on the next one.
  */
 export async function maybeGrantRegistrationBonus(
   user: AppwriteAuthUser,
   profile: NormalizedUserProfile,
-): Promise<RegistrationBonusOutcome> {
+): Promise<RegistrationBonusResult> {
+  const initial = await grantInitial(user, profile);
+  const isInitialRecorded = initial.status === 'granted' || initial.status === 'duplicate'
+    || (initial.status === 'not_applicable' && initial.reason === 'settled');
+  if (!isInitialRecorded) {
+    return { initial, verified: { status: 'not_applicable', reason: 'initial_not_recorded' } };
+  }
+  return { initial, verified: await grantVerified(user, profile) };
+}
+
+async function grantInitial(user: AppwriteAuthUser, profile: NormalizedUserProfile): Promise<RegistrationBonusOutcome> {
+  const eligibility = evaluateRewardEligibility({ kind: 'registration_bonus_initial', identity: user });
+  if (!eligibility.eligible) return { status: 'ineligible', reason: eligibility.reason };
+
+  const cacheKey = `initial:${user.id}`;
+  if (settledKeys.has(cacheKey)) return { status: 'not_applicable', reason: 'settled' };
+
+  try {
+    if (!(await findStripeEventRow(registrationBonusEntitlementKey(user.id)))) {
+      rememberSettled(cacheKey);
+      rememberSettled(user.id);
+      return { status: 'not_applicable', reason: 'legacy_profile' };
+    }
+  } catch (error) {
+    logServerError('registration-bonus.entitlement', error, { userId: user.id });
+    return { status: 'not_applicable', reason: 'entitlement_check_failed' };
+  }
+
+  const result = await grantRewardOnce({
+    eligibility,
+    idempotencyKey: `registration-bonus-initial:${user.id}`,
+    sourceId: user.id,
+    amountCents: rapidoUnitsToCents(RAPIDO_REWARDS.REGISTRATION_BONUS_INITIAL),
+    profile,
+  });
+  if (result.status === 'granted' || result.status === 'duplicate') rememberSettled(cacheKey);
+  return result;
+}
+
+async function grantVerified(user: AppwriteAuthUser, profile: NormalizedUserProfile): Promise<RegistrationBonusOutcome> {
+  if (settledKeys.has(user.id)) return { status: 'not_applicable', reason: 'settled' };
+
   const eligibility = evaluateRewardEligibility({ kind: 'registration_bonus', identity: user });
-  if (!eligibility.eligible) {
-    return { status: 'ineligible', reason: eligibility.reason };
-  }
-
-  if (settledUserIds.has(user.id)) {
-    return { status: 'not_applicable', reason: 'settled' };
-  }
-
-  const activationAtMs = getActivationAtMs();
-  if (activationAtMs === null) {
-    return { status: 'not_applicable', reason: 'paused' };
-  }
-
-  let row: UserProfileRow | null;
-  try {
-    row = await getProfileRowForUser(user.id);
-  } catch (error) {
-    logServerError('registration-bonus.profile', error, { userId: user.id });
-    return { status: 'not_applicable', reason: 'profile_missing' };
-  }
-  if (!row) return { status: 'not_applicable', reason: 'profile_missing' };
-
-  const profileCreatedMs = Date.parse(row.$createdAt);
-  if (!Number.isFinite(profileCreatedMs) || profileCreatedMs < activationAtMs) {
-    rememberSettled(user.id);
-    return { status: 'not_applicable', reason: 'legacy_profile' };
-  }
-
-  let earlierRegistrations: number;
-  try {
-    const result = await getAdminTables().listRows<UserProfileRow>({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: APPWRITE_TABLE_PROFILES_ID,
-      queries: [
-        Query.notEqual('email', ''),
-        Query.createdAfter(EARLY_REGISTRATION_BONUS_START_AT),
-        Query.createdBefore(row.$createdAt),
-        Query.limit(1),
-      ],
-      total: true,
-    });
-    earlierRegistrations = result.total;
-  } catch (error) {
-    logServerError('registration-bonus.cohort', error, { userId: user.id });
-    return { status: 'not_applicable', reason: 'cohort_check_failed' };
-  }
-
-  if (!Number.isFinite(earlierRegistrations) || earlierRegistrations >= EARLY_REGISTRATION_BONUS_LIMIT) {
-    rememberSettled(user.id);
-    return { status: 'not_applicable', reason: 'outside_cohort' };
-  }
+  if (!eligibility.eligible) return { status: 'ineligible', reason: eligibility.reason };
 
   const result = await grantRewardOnce({
     eligibility,
     idempotencyKey: `registration-bonus:${user.id}`,
     sourceId: user.id,
-    amountCents: rapidoUnitsToCents(EARLY_REGISTRATION_BONUS_RAPIDO),
+    amountCents: rapidoUnitsToCents(RAPIDO_REWARDS.REGISTRATION_BONUS_VERIFIED),
     profile,
-    metadata: { cohort_position: earlierRegistrations + 1 },
   });
-  if (result.status === 'granted' || result.status === 'duplicate') {
-    rememberSettled(user.id);
-  }
+  if (result.status === 'granted' || result.status === 'duplicate') rememberSettled(user.id);
   return result;
 }

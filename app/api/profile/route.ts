@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     let profile = await getOrCreateProfile(user);
     try {
       const bonus = await maybeGrantRegistrationBonus(user, profile);
-      if (bonus.status === 'granted') {
+      if (bonus.initial.status === 'granted' || bonus.verified.status === 'granted') {
         profile = await getOrCreateProfile(user);
       }
     } catch (error) {
