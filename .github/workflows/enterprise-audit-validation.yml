@@ -2,9 +2,9 @@ name: Enterprise Audit Validation
 
 on:
   pull_request:
-    branches: [main, dev-main]
+    branches: [main]
   push:
-    branches: [main, dev-main]
+    branches: [main]
   merge_group:
   workflow_dispatch:
 

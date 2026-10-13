@@ -2,7 +2,7 @@ name: CodeQL Analysis
 
 on:
   push:
-    branches: [main, dev-main]
+    branches: [main]
     paths:
       - 'app/**'
       - 'components/**'
@@ -18,7 +18,7 @@ on:
       - 'eslint.config.mjs'
       - 'postcss.config.mjs'
   pull_request:
-    branches: [main, dev-main]
+    branches: [main]
     paths:
       - 'app/**'
       - 'components/**'
