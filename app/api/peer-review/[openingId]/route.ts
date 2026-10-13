@@ -10,10 +10,10 @@ import {
   getAdminTables,
   getAuthenticatedUserFromRequest,
   getOrCreateProfile,
-  updateProfileById,
 } from '@/lib/appwrite/server';
 import { RAPIDO_REWARDS } from '@/lib/pricing';
-import { toRapidoCents, splitRapidoCents, rapidoUnitsToCents } from '@/lib/rapido-cents';
+import { rapidoUnitsToCents } from '@/lib/rapido-cents';
+import { evaluateRewardEligibility, grantRewardOnce } from '@/lib/reward-policy';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
@@ -288,17 +288,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       data: { review_count: openingRow.review_count + 1 },
     });
 
-    // Reward the reviewer with +0.25 rapido
-    const rewardCents = rapidoUnitsToCents(RAPIDO_REWARDS.PEER_REVIEW_COMMENT);
+    // Reward the reviewer through the shared policy: verified identity only, once per opening.
     const reviewerProfile = await getOrCreateProfile(user);
-    const currentCents = toRapidoCents(reviewerProfile.rapido_pens, reviewerProfile.rapido_fraction_cents);
-    const newCents = currentCents + rewardCents;
-    const { rapidoPens, rapidoFractionCents } = splitRapidoCents(newCents);
-
-    await updateProfileById(user.id, {
-      rapido_pens: rapidoPens,
-      rapido_fraction_cents: rapidoFractionCents,
+    const rewardResult = await grantRewardOnce({
+      eligibility: evaluateRewardEligibility({ kind: 'peer_review', identity: user }),
+      idempotencyKey: `peer-review-reward:${openingId}:${user.id}`,
+      sourceId: newReview.$id,
+      amountCents: rapidoUnitsToCents(RAPIDO_REWARDS.PEER_REVIEW_COMMENT),
+      profile: reviewerProfile,
+      metadata: { opening_id: openingId, submission_id: openingRow.submission_id },
     });
+    const rapidoEarned = rewardResult.status === 'granted' ? RAPIDO_REWARDS.PEER_REVIEW_COMMENT : 0;
 
     return NextResponse.json({
       review: {
@@ -308,7 +308,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         rating: newReview.rating ?? null,
         createdAt: newReview.created_at,
       },
-      rapido_earned: RAPIDO_REWARDS.PEER_REVIEW_COMMENT,
+      rapido_earned: rapidoEarned,
     });
   } catch (error) {
     logServerError('peer-review:comment', error);
