@@ -2,10 +2,12 @@ import {
   applyAnalyticsConsent,
   captureUTMFromCurrentUrl,
   getPersistedUTM,
+  resolveClientAnalyticsDestinationIds,
   syncAnalyticsConsentFromStorage,
   trackConversionEvent,
 } from '@/lib/growth-tracking';
 import { COOKIE_CONSENT_STORAGE_KEY } from '@/lib/cookie-consent';
+import { PRODUCTION_ANALYTICS_IDS } from '@/lib/site-identity';
 
 describe('growth tracking helpers', () => {
   const originalFetch = global.fetch;
@@ -87,6 +89,22 @@ describe('growth tracking helpers', () => {
       ad_user_data: 'granted',
       ad_personalization: 'granted',
     });
+  });
+
+  it('only resolves production GA destinations on the production host', () => {
+    expect(resolveClientAnalyticsDestinationIds('drawordie.app')).toEqual(PRODUCTION_ANALYTICS_IDS);
+    expect(resolveClientAnalyticsDestinationIds('dev.drawordie.app')).toEqual([]);
+    expect(resolveClientAnalyticsDestinationIds('localhost')).toEqual([]);
+  });
+
+  it('does not push gtag conversion events outside production', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: true } as Response) as never;
+    applyAnalyticsConsent('accepted');
+    window.gtag = jest.fn();
+
+    await trackConversionEvent('campaign_landing_view', { source: 'hero' });
+
+    expect(window.gtag).not.toHaveBeenCalledWith('event', expect.anything(), expect.anything());
   });
 
   it('re-applies persisted consent on boot', () => {

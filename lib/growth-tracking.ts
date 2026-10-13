@@ -6,9 +6,9 @@ import {
   readCookieValueFromDocument,
   type CookieConsentStatus,
 } from '@/lib/cookie-consent';
+import { normalizeHost, PRODUCTION_HOST, resolveAnalyticsDestinationIds } from '@/lib/site-identity';
 
 const UTM_STORAGE_KEY = 'draw_or_die_growth_utm_v1';
-const DEFAULT_GA_DESTINATION_IDS = ['GT-5TCMV7L2', 'G-1159TDRHXC', 'G-53LBVDCHC6'] as const;
 const UTM_KEYS = [
   'utm_source',
   'utm_medium',
@@ -17,33 +17,24 @@ const UTM_KEYS = [
   'utm_content',
 ] as const;
 
-function parseIds(rawValue?: string): string[] {
-  if (!rawValue) {
-    return [];
-  }
-
-  return rawValue
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
+/**
+ * Client mirror of the server-side resolution in GoogleAnalytics: only the production host may send to the
+ * production GA destinations; any other host only gets NEXT_PUBLIC_GA_NON_PRODUCTION_IDS.
+ */
+export function resolveClientAnalyticsDestinationIds(
+  hostname: string | null | undefined = typeof window === 'undefined' ? null : window.location.hostname,
+): string[] {
+  if (!hostname) return [];
+  const isProduction = normalizeHost(hostname) === PRODUCTION_HOST;
+  // Next only inlines literal process.env.NEXT_PUBLIC_* reads in client bundles, so the env is spelled out.
+  return resolveAnalyticsDestinationIds(isProduction, {
+    NEXT_PUBLIC_GOOGLE_TAG_ID: process.env.NEXT_PUBLIC_GOOGLE_TAG_ID,
+    NEXT_PUBLIC_GA_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID,
+    NEXT_PUBLIC_GA_SECONDARY_MEASUREMENT_ID: process.env.NEXT_PUBLIC_GA_SECONDARY_MEASUREMENT_ID,
+    NEXT_PUBLIC_GA_DESTINATION_IDS: process.env.NEXT_PUBLIC_GA_DESTINATION_IDS,
+    NEXT_PUBLIC_GA_NON_PRODUCTION_IDS: process.env.NEXT_PUBLIC_GA_NON_PRODUCTION_IDS,
+  });
 }
-
-function resolveDestinationIds(): string[] {
-  const configured = Array.from(new Set([
-    ...parseIds(process.env.NEXT_PUBLIC_GOOGLE_TAG_ID),
-    ...parseIds(process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID),
-    ...parseIds(process.env.NEXT_PUBLIC_GA_SECONDARY_MEASUREMENT_ID),
-    ...parseIds(process.env.NEXT_PUBLIC_GA_DESTINATION_IDS),
-  ]));
-
-  if (configured.length > 0) {
-    return configured;
-  }
-
-  return [...DEFAULT_GA_DESTINATION_IDS];
-}
-
-const GA_DESTINATION_IDS = resolveDestinationIds();
 
 type UTMKey = (typeof UTM_KEYS)[number];
 type UTMData = Partial<Record<UTMKey, string>> & {
@@ -209,7 +200,7 @@ export function syncAnalyticsConsentFromStorage(): void {
 
 export function trackPageView(pathname: string): void {
   if (typeof window === 'undefined') return;
-  if (!hasAnalyticsConsent() || GA_DESTINATION_IDS.length === 0) return;
+  if (!hasAnalyticsConsent() || resolveClientAnalyticsDestinationIds().length === 0) return;
 
   emitGtag('event', 'page_view', {
     page_path: pathname || window.location.pathname,
@@ -250,7 +241,7 @@ export async function trackConversionEvent(
     // Do not break auth/conversion flows if analytics endpoint is unavailable.
   }
 
-  if (GA_DESTINATION_IDS.length > 0) {
+  if (resolveClientAnalyticsDestinationIds().length > 0) {
     emitGtag('event', eventName, sanitizeAnalyticsParams(metadata));
   }
 }

@@ -7,6 +7,7 @@ import { ArrowLeft, Crown, Loader2, PenTool, ReceiptText, WalletCards } from 'lu
 import { account } from '@/lib/appwrite';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { toBillingEventLabel } from '@/lib/billing-event-labels';
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 
 type BillingHistoryItem = {
@@ -86,19 +87,6 @@ function formatInterval(value: string | null, language: SupportedLanguage): stri
   if (value === 'month') return pickLocalized(language, 'Aylık', 'Monthly');
   if (value === 'year') return pickLocalized(language, 'Yıllık', 'Yearly');
   return value;
-}
-
-function toEventLabel(eventType: string, language: SupportedLanguage): string {
-  switch (eventType) {
-    case 'premium_monthly':
-      return pickLocalized(language, 'Premium Aylık Üyelik', 'Premium monthly');
-    case 'premium_yearly':
-      return pickLocalized(language, 'Premium Yıllık Üyelik', 'Premium yearly');
-    case 'rapido_pack':
-      return pickLocalized(language, 'Rapido Satın Alımı', 'Rapido purchase');
-    default:
-      return eventType || pickLocalized(language, 'Satın Alım', 'Purchase');
-  }
 }
 
 function pickMembershipLabel(language: SupportedLanguage, value: boolean): string {
@@ -474,7 +462,7 @@ export function AccountDetailsStep({ onBack, onOpenRapidoShop, onOpenPremiumShop
                     <tr key={item.id} className="text-slate-200">
                       <td className="py-3 pr-4 font-mono text-xs text-slate-400">{new Date(item.createdAt).toLocaleString('tr-TR')}</td>
                       <td className="py-3 pr-4">
-                        <p>{toEventLabel(item.eventType, language)}</p>
+                        <p>{toBillingEventLabel(item.eventType, language)}</p>
                         {promoCode && (
                           <p className="text-[10px] font-mono uppercase tracking-wider text-emerald-300">
                             {pickLocalized(language, 'Promosyon:', 'Promo:')} {promoCode}

@@ -58,6 +58,7 @@ export default function Home() {
   const uiLanguage = useLanguage();
   const [routeHydrated, setRouteHydrated] = useState(false);
   const [multiJuryPromoActive, setMultiJuryPromoActive] = useState(false);
+  const [isCheckoutPending, setIsCheckoutPending] = useState(false);
 
   // ---- Auth & rapido economy -----------------------------------------------
   const { user, profile, setProfile, refreshProfile, getJWT } = useAuth();
@@ -126,23 +127,27 @@ export default function Home() {
 
   const runtimeCopy = uiLanguage === 'en'
     ? {
+      checkoutProcessing: 'Payment received. Your account is being updated; this can take a minute.',
       checkoutSuccess: 'Payment successful! Your Premium account is now active.',
       checkoutCancelled: 'Payment cancelled. You can try again anytime.',
       oauthFailed: 'Google sign-in could not be completed. Please try again.',
     }
     : uiLanguage === 'de'
       ? {
+        checkoutProcessing: 'Zahlung erhalten. Ihr Konto wird aktualisiert; das kann einen Moment dauern.',
         checkoutSuccess: 'Zahlung erfolgreich! Ihr Premium-Konto ist jetzt aktiv.',
         checkoutCancelled: 'Zahlung abgebrochen. Sie können es jederzeit erneut versuchen.',
         oauthFailed: 'Die Anmeldung mit Google konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.',
       }
       : uiLanguage === 'it'
         ? {
+          checkoutProcessing: 'Pagamento ricevuto. Il tuo account è in aggiornamento; potrebbe volerci un momento.',
           checkoutSuccess: 'Pagamento riuscito! Il tuo account Premium è ora attivo.',
           checkoutCancelled: 'Pagamento annullato. Puoi riprovare in qualsiasi momento.',
           oauthFailed: 'L’accesso con Google non è stato completato. Riprova.',
         }
         : {
+          checkoutProcessing: 'Ödemeniz alındı, hesabınız güncelleniyor. Bu işlem bir dakika kadar sürebilir.',
           checkoutSuccess: 'Ödeme başarılı! Premium hesabınız aktif edildi.',
           checkoutCancelled: 'Ödeme iptal edildi. İstediğiniz zaman tekrar deneyebilirsiniz.',
           oauthFailed: 'Google ile giriş tamamlanamadı. Lütfen tekrar deneyin.',
@@ -163,7 +168,9 @@ export default function Home() {
     const checkoutStatus = params.get('checkout');
     const authStatus = params.get('auth');
     if (checkoutStatus === 'success') {
-      setCheckoutMessage(runtimeCopy.checkoutSuccess);
+      // The Stripe webhook grants Premium asynchronously; activation is only claimed once the profile shows it.
+      setCheckoutMessage(runtimeCopy.checkoutProcessing);
+      setIsCheckoutPending(true);
       refreshProfile();
       window.history.replaceState({}, '', window.location.pathname);
     } else if (checkoutStatus === 'cancelled') {
@@ -200,13 +207,19 @@ export default function Home() {
   }, [
     refreshProfile,
     runtimeCopy.checkoutCancelled,
-    runtimeCopy.checkoutSuccess,
+    runtimeCopy.checkoutProcessing,
     runtimeCopy.oauthFailed,
     setCheckoutMessage,
     setIsAuthModalOpen,
     addToast,
     uiLanguage,
   ]);
+
+  useEffect(() => {
+    if (!isCheckoutPending || !isPremiumUser) return;
+    setCheckoutMessage(runtimeCopy.checkoutSuccess);
+    setIsCheckoutPending(false);
+  }, [isCheckoutPending, isPremiumUser, runtimeCopy.checkoutSuccess, setCheckoutMessage]);
 
   // Capture uncaught browser errors and mirror them into server-side site logs.
   useEffect(() => {
