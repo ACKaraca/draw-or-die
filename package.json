@@ -31,7 +31,9 @@
     "validate:health-check": "node scripts/validate-health-check.mjs",
     "validate:enterprise-audit": "node scripts/validate-enterprise-audit.mjs",
     "test:enterprise-audit-validator": "node --test tests/enterprise-audit-validator/validate-enterprise-audit.test.mjs",
-    "check:payment-system": "node scripts/check-payment-system.mjs"
+    "check:payment-system": "node scripts/check-payment-system.mjs",
+    "check:search-identity": "node scripts/check-search-identity.mjs",
+    "test:search-identity": "node --test tests/search-identity/check-search-identity.test.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.17.0",

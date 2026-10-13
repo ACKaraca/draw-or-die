@@ -1,6 +1,9 @@
 import path from 'path';
 import type {NextConfig} from 'next';
 
+// Relative import: next.config.ts is loaded before the `@/` alias is available.
+import { buildLegacyRedirects, buildSearchIdentityHeaders } from './lib/site-identity';
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: path.join(__dirname),
@@ -28,8 +31,12 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: '/favicon.ico', destination: '/icon' }];
   },
+  async redirects() {
+    return buildLegacyRedirects();
+  },
   async headers() {
     return [
+      ...buildSearchIdentityHeaders(),
       {
         source: '/',
         headers: [

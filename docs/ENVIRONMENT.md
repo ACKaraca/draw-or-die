@@ -26,11 +26,47 @@ STRIPE_WEBHOOK_SECRET=whsec_xxx
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx
 
 # App
-NEXT_PUBLIC_APP_URL=https://drawordie.ackaraca.me
+NEXT_PUBLIC_APP_URL=https://drawordie.app
+# Optional: set to `development`/`staging`/`preview` on non-production deployments (e.g. the Appwrite dev site).
+SITE_ENV=production
 NEXT_PUBLIC_GOOGLE_TAG_ID=GT-XXXXXXXX
 NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
 NEXT_PUBLIC_GA_SECONDARY_MEASUREMENT_ID=G-YYYYYYYYYY
 NEXT_PUBLIC_GA_DESTINATION_IDS=GT-XXXXXXXX,G-XXXXXXXXXX,G-YYYYYYYYYY
+# Optional: separate GA property for dev/preview. Production IDs are always stripped from it.
+NEXT_PUBLIC_GA_NON_PRODUCTION_IDS=G-DEVXXXXXXX
+```
+
+## Search Identity (canonical domain, indexing, analytics isolation)
+
+Source of truth: `lib/site-identity.ts`. A request is **production** only when all of these hold:
+
+1. `NODE_ENV=production`,
+2. `VERCEL_ENV` is unset or `production` (a Vercel preview build is never production),
+3. `SITE_ENV` is unset or `production` (use it to mark non-Vercel non-production deployments),
+4. the request host (`x-forwarded-host`, else `host`) is exactly `drawordie.app`.
+
+| Variable | Description | Default |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | `metadataBase` origin outside production. Ignored in production (always `https://drawordie.app`); legacy domains are rejected. | `https://drawordie.app` |
+| `SITE_ENV` | Deployment label. Any value other than `production` forces noindex and disables production analytics. | unset |
+| `VERCEL_ENV` | Injected by Vercel; `preview`/`development` forces noindex and disables production analytics. | injected |
+| `NEXT_PUBLIC_GA_NON_PRODUCTION_IDS` | Comma-separated GA/Google tag IDs loaded **only** outside production. Production IDs are filtered out. | unset (no analytics) |
+
+Behaviour outside production: `robots.txt` is `Disallow: /` with no sitemap, `sitemap.xml` is empty, every response
+carries `X-Robots-Tag: noindex, nofollow`, every page renders `<meta name="robots" content="noindex, nofollow">`, and the
+production `NEXT_PUBLIC_GOOGLE_TAG_ID` / `NEXT_PUBLIC_GA_*` IDs are never injected.
+
+Legacy hosts `drawordie.ackaraca.me` and `www.drawordie.app` redirect permanently (308) in one hop to the same path on
+`https://drawordie.app` (`next.config.ts` → `redirects`). They only take effect if those domains are attached to the
+production deployment.
+
+Verify a deployment (read-only HTTP GETs):
+
+```bash
+npm run check:search-identity -- https://dev.drawordie.app
+npm run check:search-identity -- https://drawordie.app --check-legacy
+npm run check:search-identity -- https://<preview>.vercel.app --expect=non-production
 ```
 
 ## AI Gateway Variables (Next.js API Route / Server-side)
@@ -54,7 +90,7 @@ These are used by `/api/ai-generate` to call the LLM.
 Every successful provider call logs one `[server-info]` line with scope `api.ai-generate.usage` (operation, model, attempts, duration, prompt/completion/reasoning tokens). Use it to measure cost per operation before tuning models or reasoning effort.
 
 Provider calls have a 100 s budget. Transient failures (network errors, 408/425/429/5xx) are retried once, on the first `AI_MODEL_FALLBACKS` entry when the primary is a Gemini 3.1 model. On the Vercel AI Gateway the same fallback is also sent as the gateway's `models` list so most failovers happen inside a single request.
-| `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.ackaraca.me,https://drawordie.app` |
+| `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.app,https://dev.drawordie.app` |
 | `NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED` | Enables the future client-side image-editing rescue path. Keep `false` until manually tested. | `false` |
 
 ## Release Verification Variables

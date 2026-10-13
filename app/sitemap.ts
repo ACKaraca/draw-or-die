@@ -1,56 +1,37 @@
+import { headers } from 'next/headers';
+
+import { PRODUCTION_ORIGIN, PUBLIC_SITEMAP_PATHS, isProductionRequestHeaders } from '@/lib/site-identity';
+
 import type { MetadataRoute } from 'next';
 
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://drawordie.app';
+type SitemapEntry = MetadataRoute.Sitemap[number];
+type PublicPath = (typeof PUBLIC_SITEMAP_PATHS)[number];
 
-export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    {
-      url: `${siteUrl}/`,
-      lastModified: new Date(),
-      changeFrequency: 'weekly',
-      priority: 1,
-    },
-    {
-      url: `${siteUrl}/community`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.7,
-    },
-    {
-      url: `${siteUrl}/gallery/hall-of-fame`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.6,
-    },
-    {
-      url: `${siteUrl}/gallery/wall-of-death`,
-      lastModified: new Date(),
-      changeFrequency: 'daily',
-      priority: 0.6,
-    },
-    {
-      url: `${siteUrl}/legal`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-    {
-      url: `${siteUrl}/legal/terms`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-    {
-      url: `${siteUrl}/legal/privacy`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-    {
-      url: `${siteUrl}/legal/cookies`,
-      lastModified: new Date(),
-      changeFrequency: 'monthly',
-      priority: 0.4,
-    },
-  ];
+const CHANGE_FREQUENCY: Record<PublicPath, SitemapEntry['changeFrequency']> = {
+  '/': 'weekly',
+  '/archbuilder': 'monthly',
+  '/mentor': 'monthly',
+  '/portfolio': 'monthly',
+  '/legal': 'monthly',
+  '/legal/terms': 'monthly',
+  '/legal/privacy': 'monthly',
+  '/legal/cookies': 'monthly',
+};
+
+function priorityFor(path: PublicPath): number {
+  if (path === '/') return 1;
+  return path.startsWith('/legal') ? 0.4 : 0.7;
+}
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  // Non-production hosts publish nothing: their robots.txt disallows crawling and names no sitemap.
+  if (!isProductionRequestHeaders(await headers())) {
+    return [];
+  }
+
+  return PUBLIC_SITEMAP_PATHS.map((path) => ({
+    url: path === '/' ? `${PRODUCTION_ORIGIN}/` : `${PRODUCTION_ORIGIN}${path}`,
+    changeFrequency: CHANGE_FREQUENCY[path],
+    priority: priorityFor(path),
+  }));
 }
