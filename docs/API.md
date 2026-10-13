@@ -51,28 +51,76 @@ Stripe webhook endpoint. Configure the URL in the Stripe Dashboard.
 
 ---
 
-### POST /api/gallery
+### GET/POST/PATCH /api/gallery
 
-Submit a project to the public gallery or fetch gallery items.
+Explicit, recorded, revocable publishing to Hall of Fame / Wall of Death / Community.
+Approval state is **server-owned** (`lib/gallery-moderation-policy.ts`); nothing is ever published automatically.
 
-**Auth:** Valid Appwrite JWT required for submissions.
+**Auth:** Valid Appwrite JWT required for POST/PATCH. Guest (anonymous, no email) accounts get `403 GUEST_PUBLISH_BLOCKED`.
 
-**GET** — Returns paginated gallery items filtered by `gallery_type` (`HALL_OF_FAME | WALL_OF_DEATH | COMMUNITY`).
+**GET** — Public feed returns only `status = approved` rows that are not revoked (`revoked_at` empty), filtered by
+`type` (`HALL_OF_FAME | WALL_OF_DEATH | COMMUNITY`). `mine=1` (auth) returns the caller's own rows, optionally by `status`.
 
-**POST Body:**
+**POST Body** (only sent from an explicit "Allow" / "Share" click):
 ```json
 {
-  "imageBase64": "string",
-  "critiqueData": {},
-  "galleryType": "HALL_OF_FAME" | "WALL_OF_DEATH",
-  "title": "string"
+  "title": "string",
+  "juryQuote": "string",
+  "galleryType": "HALL_OF_FAME" | "WALL_OF_DEATH" | "COMMUNITY",
+  "imageBase64": "string (JPG/PNG/WEBP, magic bytes checked, <= 5MB)",
+  "mimeType": "image/jpeg",
+  "analysisKind": "SINGLE_JURY",
+  "consent": { "granted": true, "version": "<GALLERY_CONSENT_VERSION>", "scope": "<same as galleryType>" }
 }
 ```
+Client fields such as `autoApproved`, `approved`, `status`, `moderationStatus` are **ignored** (logged as
+`ignoredClientApprovalFields`).
 
-**Errors:**
-- `401` — Authentication required
-- `403` — Submission not eligible
-- `429` — Rate limit exceeded
+Order of operations: auth → durable owner → payload + consent validation → image validation → moderation → storage write → row write.
+No storage or DB write happens before consent is verified; a moderation rejection never reaches storage.
+
+Moderation decision (same policy for Hall/Wall/Community and Confessions):
+- `approved` only for a strict model verdict `{ "approved": true, "category": "SAFE" }` AND no prompt-injection markers
+  in title/text.
+- `pending` for missing key, network/non-2xx, unparsable output, any other shape, or injection suspicion.
+- `rejected` (`422 COMMUNITY_MODERATION_REJECTED` / `GALLERY_MODERATION_REJECTED`) for `approved: false`.
+
+**Success:** `{ item, submissionId, moderationPendingReview, code? }` where `code` is `COMMUNITY_PENDING_REVIEW` or
+`GALLERY_PENDING_REVIEW` when pending.
+
+**Errors:** `400 GALLERY_CONSENT_REQUIRED | GALLERY_CONSENT_SCOPE_MISMATCH | INVALID_GALLERY_PAYLOAD | INVALID_IMAGE_PAYLOAD`,
+`409 GALLERY_CONSENT_VERSION_MISMATCH`, `413 GALLERY_IMAGE_TOO_LARGE`, `415 UNSUPPORTED_IMAGE_TYPE`, `500 GALLERY_WRITE_FAILED`.
+
+**PATCH Body:** `{ "submissionId": "string", "action": "ARCHIVE" | "RESHARE", "consent"?: {...} }` (owner only)
+- `ARCHIVE` revokes consent: allowed from `approved` or `pending`; sets `status=archived`, `revoked_at`,
+  `archived_from_status`.
+- `RESHARE` requires fresh `consent`; restores `approved` only if the row was `approved` before revocation, otherwise
+  `pending` (legacy rows without `archived_from_status` go to `pending`).
+
+#### Gallery row attributes added (additive, optional — created by `ensureCoreAppwriteResources`)
+
+| Attribute | Type | Purpose |
+|---|---|---|
+| `consent_scope` | string(32) | Gallery type the user consented to |
+| `consent_version` | string(64) | `GALLERY_CONSENT_VERSION` shown at consent time |
+| `consented_at` | datetime | Server time of explicit consent |
+| `revoked_at` | datetime | Set when the owner archives (revokes) |
+| `archived_from_status` | string(32) | Status before revocation (`approved`/`pending`) |
+| `moderated_by` | string(64) | Admin user id of the moderator decision |
+| `moderated_at` | datetime | Time of moderator decision |
+
+New status value: `rejected` (moderator rejection; row kept as evidence, image removed).
+
+---
+
+### GET/POST /api/gallery/moderation
+
+Moderator review queue. **Auth:** verified-email admin (`isVerifiedAdmin`, `ADMIN_EMAILS`); others get `403` (logged).
+
+- **GET** — oldest-first list of `pending` submissions.
+- **POST** `{ "submissionId": "string", "action": "APPROVE" | "REJECT", "note"?: "string" }` — only `pending` rows
+  (`409 INVALID_GALLERY_STATUS` otherwise). REJECT removes the stored image (idempotent cleanup). Every attempt is
+  audited via `api.gallery.moderation.audit` logs (actor, action, from/to status).
 
 ---
 

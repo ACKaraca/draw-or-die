@@ -21,6 +21,7 @@ import { aspectRatioToStyleValue, clampAspectRatio, deriveAspectRatio } from '@/
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
+import { buildGalleryConsent } from '@/lib/gallery-consent';
 
 interface GalleryStepProps {
   currentGallery: GalleryType;
@@ -156,7 +157,8 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
   const [measuredRatios, setMeasuredRatios] = useState<Record<string, number>>({});
 
   const canManage = Boolean(user) && Boolean(user?.email);
-  const canSubmitCommunity = Boolean(user);
+  // Guests have no durable identity to manage/revoke a public post, so publishing needs an account.
+  const canSubmitCommunity = Boolean(user?.email);
 
   const authedFetch = async (url: string, init?: RequestInit) => {
     const jwt = await getJWT();
@@ -227,7 +229,12 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
     try {
       const res = await authedFetch('/api/gallery', {
         method: 'PATCH',
-        body: JSON.stringify({ submissionId, action }),
+        // RESHARE publishes again, so it carries fresh explicit consent; ARCHIVE revokes it.
+        body: JSON.stringify(
+          action === 'RESHARE'
+            ? { submissionId, action, consent: buildGalleryConsent(currentGallery) }
+            : { submissionId, action },
+        ),
       });
 
       if (!res.ok) {
@@ -272,7 +279,9 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
 
   const submitCommunityPost = async () => {
     if (!canSubmitCommunity) {
-      setCommunityMessage(pickLocalized(language, 'Paylaşım için giriş yapmalısın.', 'Please sign in to share.'));
+      setCommunityMessage(
+        pickLocalized(language, 'Paylaşım için hesabınla giriş yapmalısın.', 'Sign in with an account to share.'),
+      );
       return;
     }
 
@@ -308,7 +317,7 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
           previewWidth: jpegPayload.width,
           previewHeight: jpegPayload.height,
           aspectRatio,
-          autoApproved: true,
+          consent: buildGalleryConsent('COMMUNITY'),
         }),
       });
 

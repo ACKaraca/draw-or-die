@@ -555,6 +555,14 @@ async function setupGalleryTable(tables: TablesDB): Promise<void> {
   await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'moderation_reason', 500, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'public_url', 2_048, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'storage_path', 255, false);
+  // Explicit publish consent + revocation + moderator audit (additive, all optional).
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'consent_scope', 32, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'consent_version', 64, false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'consented_at', false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'revoked_at', false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'archived_from_status', 32, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'moderated_by', 64, false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'moderated_at', false);
 
   await ensureIndex(
     tables,
