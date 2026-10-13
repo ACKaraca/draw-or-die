@@ -67,7 +67,7 @@ export function ChatDefense({
                             <X size={16} aria-hidden="true" />
                         </button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
+                    <div role="log" aria-live="polite" className="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4">
                         {defenseMessages.map((msg, i) => (
                             <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                 <div className={`max-w-[85%] p-3 rounded-lg text-sm prose prose-invert prose-p:my-1 prose-sm ${msg.role === 'user' ? 'bg-neon-red text-white rounded-br-none' : 'bg-[#111827] border border-white/10 text-slate-300 rounded-bl-none'}`}>

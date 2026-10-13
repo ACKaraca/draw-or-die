@@ -71,9 +71,9 @@ export function MultiResultStep({ multiData, previewUrl, mimeType, handleNewProj
     return (
         <motion.div
             key="multi-result"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 1.05 }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
             className="w-full max-w-6xl grid grid-cols-1 xl:grid-cols-2 gap-5 md:gap-8"
         >
             {/* Left: board preview */}

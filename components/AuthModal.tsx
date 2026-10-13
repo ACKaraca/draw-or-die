@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { ID } from 'appwrite'
 import { useAuth } from '@/hooks/useAuth'
 import { useIsMobile } from '@/hooks/use-mobile'
+import { useInertBackground } from '@/hooks/useInertBackground'
 import { X, Mail, Lock, LogIn, Loader2, Sparkles, User, ArrowLeft, RefreshCw } from 'lucide-react'
 import { trackConversionEvent } from '@/lib/growth-tracking'
 import { account } from '@/lib/appwrite'
@@ -70,6 +71,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
     const [notice, setNotice] = useState<string | null>(null)
     const [isNoticeWarning, setIsNoticeWarning] = useState(false)
     const [isSignupComplete, setIsSignupComplete] = useState(false)
+    const overlayRef = useRef<HTMLDivElement | null>(null)
     const dialogRef = useRef<HTMLDivElement | null>(null)
     const continueButtonRef = useRef<HTMLButtonElement | null>(null)
     const closeHandlerRef = useRef<() => void>(onClose)
@@ -194,6 +196,9 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
     useEffect(() => {
         closeHandlerRef.current = handleClose
     })
+
+    // Declared before the focus effect so the page is un-inerted before focus is restored into it.
+    useInertBackground(overlayRef, isOpen)
 
     useEffect(() => {
         if (!isOpen) return
@@ -449,7 +454,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
     const showAuthForm = mode !== 'recovery'
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div ref={overlayRef} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
             <div
                 ref={dialogRef}
                 role="dialog"
@@ -462,7 +467,7 @@ export function AuthModal({ isOpen, onClose }: { isOpen: boolean, onClose: () =>
                     onClick={handleClose}
                     aria-label={copy.closeLabel}
                     title={copy.closeLabel}
-                    className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+                    className="absolute top-3 right-3 rounded-lg p-1 text-slate-400 hover:text-white transition-colors"
                 >
                     <X size={20} aria-hidden="true" />
                 </button>

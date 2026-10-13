@@ -26,7 +26,6 @@ import { isDesignInsightOperation, type DesignInsightOperation } from '@/lib/des
 import { pickLocalized } from '@/lib/i18n';
 import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
 import { RAPIDO_COSTS, TIER_DEFAULTS } from '@/lib/pricing';
-import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 
 import type { FormData, DefenseMessage, GalleryPlacementType } from '@/types';
 
@@ -116,7 +115,7 @@ export function ResultStep({
     handleDesignInsight,
 }: ResultStepProps) {
     const language = useLanguage();
-    const addToast = useDrawOrDieStore((state) => state.addToast);
+    const [exportError, setExportError] = useState<string | null>(null);
     const exportRef = useRef<HTMLDivElement>(null);
     const [showCompare, setShowCompare] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
@@ -152,6 +151,7 @@ export function ResultStep({
     const handleExport = async () => {
         if (!exportRef.current || isExporting) return;
         setIsExporting(true);
+        setExportError(null);
         try {
             const { default: html2canvas } = await import('html2canvas');
             const canvas = await html2canvas(exportRef.current, { backgroundColor: '#0A0F1A' });
@@ -164,9 +164,12 @@ export function ResultStep({
             link.href = dataUrl;
             link.click();
         } catch {
-            addToast(
-                pickLocalized(language, 'Dışa aktarma başarısız oldu. Lütfen tekrar dene.', 'Export failed. Please try again.'),
-                'error',
+            setExportError(
+                pickLocalized(
+                    language,
+                    'Rapor görseli oluşturulamadı. Sayfayı yenileyip indirmeyi tekrar dene.',
+                    'The report image could not be created. Refresh the page and try the download again.',
+                ),
             );
         } finally {
             setIsExporting(false);
@@ -347,6 +350,14 @@ export function ResultStep({
 
             {/* Right: Critique */}
             <div className="xl:col-span-7 flex flex-col">
+                {exportError ? (
+                  <div role="alert" className="mb-4 rounded-lg border border-red-500/25 bg-red-500/8 p-4">
+                    <p className="font-mono text-[11px] uppercase tracking-wider text-red-300">
+                      {pickLocalized(language, 'Dışa aktarma başarısız', 'Export failed')}
+                    </p>
+                    <p className="mt-1 text-sm text-red-200">{exportError}</p>
+                  </div>
+                ) : null}
                 <div ref={exportRef} className="bg-[#111827] border border-neon-red/30 rounded-xl p-4 sm:p-8 shadow-2xl relative overflow-hidden flex-1">
                     <div className="absolute top-0 left-0 w-1 h-full bg-neon-red"></div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-6 border-b border-white/10 pb-4">
