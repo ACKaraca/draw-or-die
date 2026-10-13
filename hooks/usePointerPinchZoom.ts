@@ -1,4 +1,12 @@
-import { useCallback, useRef, useState, type MouseEvent, type TouchEvent, type WheelEvent } from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type TouchEvent,
+  type WheelEvent,
+} from 'react';
 
 type PanState = {
   x: number;
@@ -9,12 +17,22 @@ type UsePointerPinchZoomOptions = {
   minZoom?: number;
   maxZoom?: number;
   wheelStep?: number;
+  keyPanStep?: number;
+};
+
+// Arrow keys move the view toward that side, so the image itself shifts the opposite way.
+const KEY_PAN_DIRECTIONS: Record<string, PanState> = {
+  ArrowLeft: { x: 1, y: 0 },
+  ArrowRight: { x: -1, y: 0 },
+  ArrowUp: { x: 0, y: 1 },
+  ArrowDown: { x: 0, y: -1 },
 };
 
 export function usePointerPinchZoom(options: UsePointerPinchZoomOptions = {}) {
   const minZoom = options.minZoom ?? 0.5;
   const maxZoom = options.maxZoom ?? 5;
   const wheelStep = options.wheelStep ?? 0.15;
+  const keyPanStep = options.keyPanStep ?? 40;
 
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<PanState>({ x: 0, y: 0 });
@@ -137,6 +155,24 @@ export function usePointerPinchZoom(options: UsePointerPinchZoomOptions = {}) {
     setZoom((prev) => clampZoom(prev - 0.25));
   }, [clampZoom]);
 
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) => {
+    // Only the focused surface itself; keys typed into nested controls keep their own behavior.
+    if (event.target !== event.currentTarget || event.altKey || event.ctrlKey || event.metaKey) return;
+
+    if (event.key === 'Home' || event.key === '0') {
+      event.preventDefault();
+      resetView();
+      return;
+    }
+
+    const direction = KEY_PAN_DIRECTIONS[event.key];
+    if (!direction || zoom <= 1) return;
+
+    event.preventDefault();
+    setHasInteracted(true);
+    setPan((prev) => ({ x: prev.x + direction.x * keyPanStep, y: prev.y + direction.y * keyPanStep }));
+  }, [keyPanStep, resetView, zoom]);
+
   const surfaceTouchAction = zoom > 1 || isDragging || isPinching ? 'none' : 'pan-y';
 
   return {
@@ -149,6 +185,7 @@ export function usePointerPinchZoom(options: UsePointerPinchZoomOptions = {}) {
     zoomIn,
     zoomOut,
     handleWheel,
+    handleKeyDown,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp: endMouseDrag,
