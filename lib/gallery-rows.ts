@@ -1,5 +1,10 @@
 import type { Models } from 'node-appwrite';
 
+import {
+  APPWRITE_BUCKET_GALLERY_ID,
+  APPWRITE_SERVER_ENDPOINT,
+  APPWRITE_SERVER_PROJECT_ID,
+} from '@/lib/appwrite/server';
 import type { GalleryType } from '@/types';
 
 export type GalleryRowStatus = 'approved' | 'pending' | 'archived' | 'rejected';
@@ -26,6 +31,37 @@ export type GalleryRow = Models.Row & {
   moderated_by?: string | null;
   moderated_at?: string | null;
 };
+
+function sanitizeEnv(name: string): string {
+  const raw = process.env[name];
+  if (typeof raw !== 'string') return '';
+
+  const value = raw.trim();
+  if (!value) return '';
+
+  return /[\r\n\0]/.test(value) ? '' : value;
+}
+
+const APPWRITE_PUBLIC_ENDPOINT = sanitizeEnv('NEXT_PUBLIC_APPWRITE_ENDPOINT') || APPWRITE_SERVER_ENDPOINT;
+const APPWRITE_PUBLIC_PROJECT_ID = sanitizeEnv('NEXT_PUBLIC_APPWRITE_PROJECT_ID') || APPWRITE_SERVER_PROJECT_ID;
+
+/** Public preview URL for a file in the gallery bucket (bucket is world-readable). */
+export function buildPreviewFileUrl(fileId: string): string {
+  const endpoint = APPWRITE_PUBLIC_ENDPOINT.replace(/\/$/, '');
+  const project = encodeURIComponent(APPWRITE_PUBLIC_PROJECT_ID);
+  const safeFileId = encodeURIComponent(fileId.trim());
+  return `${endpoint}/storage/buckets/${APPWRITE_BUCKET_GALLERY_ID}/files/${safeFileId}/preview?project=${project}&width=1400&height=1400&quality=76&output=webp`;
+}
+
+export function extractFileIdFromUrl(url: string): string | null {
+  const match = url.match(/\/files\/([^/]+)\//i);
+  if (!match?.[1]) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
 
 /** Magic-byte check so a renamed non-image payload never reaches storage. */
 export function hasAllowedImageSignature(buffer: Buffer, mimeType: string): boolean {

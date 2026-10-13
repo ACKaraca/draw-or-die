@@ -106,6 +106,8 @@ Order of operations: auth → durable owner → payload + consent validation →
 No storage or DB write happens before consent is verified; a moderation rejection never reaches storage.
 
 Moderation decision (same policy for Hall/Wall/Community and Confessions):
+- **`AI_MODERATION_MODE` unset/`off` (default):** no model call; every new submission is stored `pending` with
+  `moderation_reason = "manual_review"` and waits for the moderator. The rules below apply only with `on`.
 - `approved` only for a strict model verdict `{ "approved": true, "category": "SAFE" }` AND no prompt-injection markers
   in title/text.
 - `pending` for missing key, network/non-2xx, unparsable output, any other shape, or injection suspicion.
@@ -141,12 +143,18 @@ New status value: `rejected` (moderator rejection; row kept as evidence, image r
 
 ### GET/POST /api/gallery/moderation
 
-Moderator review queue. **Auth:** verified-email admin (`isVerifiedAdmin`, `ADMIN_EMAILS`); others get `403` (logged).
+Moderator review queue for gallery submissions and confessions. **Auth:** only the verified-email account in
+`GALLERY_MODERATOR_EMAILS` (`isGalleryModerator`, `lib/appwrite/server.ts`). Everyone else, including unauthenticated
+callers, gets `404 { "error": "Not found" }` so the endpoint's existence is hidden; the attempt is still audited.
+UI: unlinked `/admin/moderation` page (renders the normal 404 until this API answers 200).
 
-- **GET** — oldest-first list of `pending` submissions.
-- **POST** `{ "submissionId": "string", "action": "APPROVE" | "REJECT", "note"?: "string" }` — only `pending` rows
-  (`409 INVALID_GALLERY_STATUS` otherwise). REJECT removes the stored image (idempotent cleanup). Every attempt is
-  audited via `api.gallery.moderation.audit` logs (actor, action, from/to status).
+- **GET** — oldest-first `pending` rows: `{ items, total, confessions, confessionsTotal }`. Gallery items carry
+  `id, title, jury, type, createdAt, moderationReason, consentVersion, consentedAt, storagePath, imageUrl`;
+  confessions carry `id, text, createdAt, moderationReason, imageUrl` (public bucket preview/view URLs).
+- **POST** `{ "submissionId": "string", "action": "APPROVE" | "REJECT", "kind"?: "gallery" | "confession", "note"?: "string" }`
+  — `kind` defaults to `gallery`. Only `pending` rows (`409 INVALID_GALLERY_STATUS` otherwise). REJECT keeps the row
+  and removes its stored image (idempotent cleanup). Every attempt is audited via `api.gallery.moderation.audit` logs
+  (actor, action, kind, from/to status).
 
 ---
 

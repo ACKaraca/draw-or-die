@@ -2,6 +2,7 @@ import {
   decidePublication,
   detectPromptInjection,
   findClientApprovalFields,
+  getAiModerationMode,
   isPubliclyVisibleGalleryRow,
   parseModerationVerdict,
   pendingVerdict,
@@ -10,6 +11,21 @@ import { GALLERY_CONSENT_VERSION, buildGalleryConsent, validateGalleryConsent } 
 import { BENIGN_CRITIQUE_CORPUS, PROMPT_INJECTION_CORPUS } from '@/__tests__/fixtures/prompt-injection-corpus';
 
 describe('gallery moderation policy', () => {
+  it('keeps AI moderation offline unless explicitly switched on', () => {
+    const original = process.env.AI_MODERATION_MODE;
+    try {
+      delete process.env.AI_MODERATION_MODE;
+      expect(getAiModerationMode()).toBe('off');
+      process.env.AI_MODERATION_MODE = 'yes';
+      expect(getAiModerationMode()).toBe('off');
+      process.env.AI_MODERATION_MODE = ' ON ';
+      expect(getAiModerationMode()).toBe('on');
+    } finally {
+      if (original === undefined) delete process.env.AI_MODERATION_MODE;
+      else process.env.AI_MODERATION_MODE = original;
+    }
+  });
+
   it.each([
     [undefined],
     [''],

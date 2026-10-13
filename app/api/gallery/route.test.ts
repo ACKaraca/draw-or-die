@@ -105,6 +105,7 @@ describe('/api/gallery', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODERATION_MODE = 'on';
     global.fetch = fetchMock as unknown as typeof fetch;
     fetchMock.mockReset();
     mockedGetUser.mockResolvedValue(OWNER);
@@ -127,6 +128,22 @@ describe('/api/gallery', () => {
   afterAll(() => {
     global.fetch = originalFetch;
     delete process.env.AI_API_KEY;
+    delete process.env.AI_MODERATION_MODE;
+  });
+
+  describe('POST with AI moderation offline (default)', () => {
+    it('makes no provider call and queues every submission for manual review', async () => {
+      delete process.env.AI_MODERATION_MODE;
+      fetchMock.mockResolvedValue(moderationResponse(SAFE_VERDICT));
+      const { POST } = await loadRoute();
+      const response = await POST(createRequest({ body: publishBody() }));
+
+      expect(response.status).toBe(200);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(mockCreateFile).toHaveBeenCalledTimes(1);
+      expect(mockCreateRow.mock.calls[0][0].data).toMatchObject({ status: 'pending', moderation_reason: 'manual_review' });
+      await expect(response.json()).resolves.toMatchObject({ moderationPendingReview: true, code: 'GALLERY_PENDING_REVIEW' });
+    });
   });
 
   describe('POST consent boundary', () => {

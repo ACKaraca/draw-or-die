@@ -22,6 +22,7 @@ import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
 import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
 import { buildGalleryConsent } from '@/lib/gallery-consent';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface GalleryStepProps {
   currentGallery: GalleryType;
@@ -145,6 +146,8 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
 
   const [mineApprovedIds, setMineApprovedIds] = useState<string[]>([]);
   const [archivedMineItems, setArchivedMineItems] = useState<GalleryItem[]>([]);
+  const [pendingMineItems, setPendingMineItems] = useState<GalleryItem[]>([]);
+  const [withdrawTarget, setWithdrawTarget] = useState<GalleryItem | null>(null);
   const [isMineLoading, setIsMineLoading] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [manageError, setManageError] = useState<string | null>(null);
@@ -176,6 +179,7 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
     if (!canManage) {
       setMineApprovedIds([]);
       setArchivedMineItems([]);
+      setPendingMineItems([]);
       return;
     }
 
@@ -183,9 +187,10 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
     setManageError(null);
 
     try {
-      const [approvedRes, archivedRes] = await Promise.all([
+      const [approvedRes, archivedRes, pendingRes] = await Promise.all([
         authedFetch(`/api/gallery?mine=1&type=${galleryType}&status=approved&limit=100&offset=0`),
         authedFetch(`/api/gallery?mine=1&type=${galleryType}&status=archived&limit=100&offset=0`),
+        authedFetch(`/api/gallery?mine=1&type=${galleryType}&status=pending&limit=100&offset=0`),
       ]);
 
       const approvedPayload = approvedRes.ok
@@ -197,6 +202,10 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
 
       setMineApprovedIds((approvedPayload.items ?? []).map((item) => item.id));
       setArchivedMineItems(archivedPayload.items ?? []);
+      const pendingPayload = pendingRes.ok
+        ? (await pendingRes.json()) as { items?: GalleryItem[] }
+        : { items: [] };
+      setPendingMineItems(pendingPayload.items ?? []);
     } catch (error) {
       setManageError(
         error instanceof Error
@@ -579,6 +588,63 @@ export function GalleryStep({ currentGallery, setCurrentGallery, galleryItems }:
           <Loader2 size={32} className="animate-spin text-slate-500" />
         </div>
       )}
+
+      {canManage && pendingMineItems.length > 0 && (
+        <div className="mt-12 rounded-xl border border-white/10 bg-[#101827] p-5">
+          <h3 className="mb-4 font-mono text-sm uppercase tracking-widest text-slate-300">
+            {pickLocalized(language, 'İncelemedeki Paylaşımların', 'Your shares awaiting review')}
+          </h3>
+          <ul className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {pendingMineItems.map((item) => (
+              <li key={`pending-${item.id}`} className="rounded-lg border border-white/10 bg-white/5 p-3 flex items-start gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element -- fixed-size thumbnail of a user upload */}
+                <img
+                  src={item.img}
+                  alt={item.title}
+                  width={80}
+                  height={96}
+                  loading="lazy"
+                  decoding="async"
+                  className="w-20 h-24 object-contain rounded border border-white/10 bg-black/40"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-display text-white truncate">{item.title}</p>
+                  <button
+                    type="button"
+                    onClick={() => setWithdrawTarget(item)}
+                    disabled={mutatingId === item.id}
+                    className="mt-2 inline-flex items-center gap-1 rounded border border-white/15 px-2 py-1 text-[10px] font-mono uppercase tracking-widest text-slate-200 hover:border-white/25 disabled:opacity-50"
+                  >
+                    {mutatingId === item.id ? <Loader2 size={12} className="animate-spin" /> : <EyeOff size={12} />}
+                    {pickLocalized(language, 'Geri Çek', 'Withdraw')}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={withdrawTarget !== null}
+        isDestructive
+        title={pickLocalized(language, 'Paylaşım geri çekilsin mi?', 'Withdraw this share?')}
+        description={pickLocalized(
+          language,
+          'Gönderi incelemeden çıkarılır ve kaldırılan paylaşımlarına taşınır. Daha sonra yeniden paylaşabilirsin.',
+          'The post leaves the review queue and moves to your archived shares. You can reshare it later.',
+        )}
+        icon={<EyeOff size={18} strokeWidth={1.5} />}
+        confirmLabel={pickLocalized(language, 'Geri Çek', 'Withdraw')}
+        cancelLabel={pickLocalized(language, 'Vazgeç', 'Cancel')}
+        busyLabel={pickLocalized(language, 'Geri çekiliyor...', 'Withdrawing...')}
+        isBusy={withdrawTarget !== null && mutatingId === withdrawTarget.id}
+        onConfirm={() => {
+          if (!withdrawTarget) return;
+          void handleVisibilityAction(withdrawTarget.id, 'ARCHIVE').finally(() => setWithdrawTarget(null));
+        }}
+        onCancel={() => setWithdrawTarget(null)}
+      />
 
       {canManage && (
         <div className="mt-12 rounded-xl border border-white/10 bg-[#101827] p-5">

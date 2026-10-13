@@ -155,6 +155,14 @@ export function getVerifiedEmail(user: Pick<AppwriteAuthUser, 'email' | 'emailVe
 export function isVerifiedAdmin(user: Pick<AppwriteAuthUser, 'email' | 'emailVerified'>): boolean {
   return isAdminEmail(getVerifiedEmail(user));
 }
+
+/** Owner decision: only this account may moderate public submissions (not the wider ADMIN_EMAILS list). */
+export const GALLERY_MODERATOR_EMAILS: readonly string[] = ['ahmcemkaraca@gmail.com'];
+
+export function isGalleryModerator(user: Pick<AppwriteAuthUser, 'email' | 'emailVerified'>): boolean {
+  const email = getVerifiedEmail(user)?.trim().toLowerCase();
+  return Boolean(email && GALLERY_MODERATOR_EMAILS.includes(email));
+}
 export const APPWRITE_BUCKET_GALLERY_ID = process.env.APPWRITE_BUCKET_GALLERY_ID ?? 'gallery';
 
 export type AppwriteAuthUser = {

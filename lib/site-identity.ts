@@ -24,7 +24,7 @@ export const PUBLIC_SITEMAP_PATHS = [
 ] as const;
 
 /** Account, admin and API surfaces crawlers should not fetch on production. */
-export const ROBOTS_DISALLOWED_PATHS = ['/api/', '/auth/', '/profile', '/history', '/references/admin'] as const;
+export const ROBOTS_DISALLOWED_PATHS = ['/api/', '/auth/', '/profile', '/history', '/references/admin', '/admin'] as const;
 
 export const NOINDEX_HEADER_VALUE = 'noindex, nofollow';
 

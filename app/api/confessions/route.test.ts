@@ -75,6 +75,7 @@ describe('POST /api/confessions moderation boundary', () => {
     jest.clearAllMocks();
     fetchMock.mockReset();
     process.env.AI_API_KEY = 'test-key';
+    process.env.AI_MODERATION_MODE = 'on';
     global.fetch = fetchMock as unknown as typeof fetch;
     mockListRows.mockResolvedValue({ total: 0, rows: [] });
     mockCreateFile.mockResolvedValue({});
@@ -88,6 +89,24 @@ describe('POST /api/confessions moderation boundary', () => {
   afterAll(() => {
     global.fetch = originalFetch;
     delete process.env.AI_API_KEY;
+    delete process.env.AI_MODERATION_MODE;
+  });
+
+  it('with AI moderation offline (default) makes no provider call and stores pending for manual review', async () => {
+    delete process.env.AI_MODERATION_MODE;
+    fetchMock.mockResolvedValue(moderationResponse(SAFE_VERDICT));
+    const { POST } = await loadRoute();
+    const response = await POST(createRequest({
+      text: VALID_TEXT,
+      anonKey: 'anon-key-123',
+      imageBase64: Buffer.from('jpeg-bytes').toString('base64'),
+      imageMimeType: 'image/jpeg',
+    }));
+
+    await expect(response.json()).resolves.toMatchObject({ pending: true });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockCreateFile).toHaveBeenCalledTimes(1);
+    expect(mockCreateRow.mock.calls[0][0].data).toMatchObject({ status: 'pending', moderation_reason: 'manual_review' });
   });
 
   it.each([
