@@ -428,13 +428,31 @@ Account deletion via the orchestrator in `lib/privacy/deletion.ts` (contract `do
   steps are skipped); `blocked` = a step waits on a dependency or an owner action.
 - Required steps (each must report `done`): `storage_files`, `analysis_history`, `gallery_submissions`, `mentor_chats`,
   `community_content`, `referral_promo`, `billing_records` (retained under legal hold, 10 y), `stripe_customer`
-  (`manual_required` whenever a Stripe customer exists — owner cancels/redacts in Stripe, then records the receipt with
-  `recordManualStepCompletion`), `profile`, `auth_account`.
+  (`manual_required` whenever a Stripe customer exists — owner cancels/redacts in Stripe, then records the receipt via
+  `POST /api/account/delete/manual-step`), `profile`, `auth_account`.
 - Storage: server-only Appwrite table `deletion_requests` (env override `APPWRITE_TABLE_DELETION_REQUESTS_ID`), row id
   derived from a SHA-256 subject hash; no raw user id, email or content is stored. The tombstone (deny scopes +
   time-bounded retention exceptions) is written before the first destructive step and is never cleared.
 - Downstream deny: `isSubjectDenied(store, userId, scope)` for `ai_processing | memory_retrieval | new_uploads |
   public_delivery | analytics_linkage`.
+- Enforced by `checkSubjectAllowed(userId, scope, lang)` (`lib/privacy/subject-guard.ts`) right after auth in
+  `POST /api/ai-generate` (`ai_processing`), `POST /api/gallery` (`new_uploads`) and `GET /api/profile` (`account`:
+  any request blocks profile creation). Denied → `410 { error, code: "ACCOUNT_DELETION_REQUESTED" }`; store lookup
+  error → fail closed with `503 { error, code: "PRIVACY_CHECK_UNAVAILABLE" }`. Denials are cached per instance
+  (tombstones are permanent); allowances are not cached.
+
+### POST /api/account/delete/manual-step
+
+Owner receipt for a deletion step completed by hand (today only the Stripe customer redaction).
+
+- Auth: verified admin only (`isVerifiedAdmin`: admin email + verified); 403 otherwise.
+- Body: `{ "subjectUserId": "<appwrite user id>" | "requestId": "<64-hex subject hash>", "step": "stripe_customer",
+  "note": "<1–500 chars>" }` — exactly one of `subjectUserId` / `requestId` (400 otherwise).
+- Calls `recordManualStepCompletion`; clears the stored Stripe reference and recomputes the request status.
+- Response: `200 { request: <receipt>, alreadyRecorded: boolean }` (idempotent: an already `done` step returns
+  `alreadyRecorded: true` without writing), `404` unknown request, `409 { code: "STEP_NOT_AWAITING_MANUAL_RECEIPT" }`
+  when the step is not `manual_required`, `503` store unavailable.
+- Audit: `privacy.deletion.manual_receipt.admin` log with subject hash, step, operator id and note.
 
 ---
 
