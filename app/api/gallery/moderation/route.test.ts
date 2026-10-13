@@ -22,10 +22,12 @@ jest.mock('next/server', () => ({
 jest.mock('@/lib/appwrite/server', () => ({
   APPWRITE_BUCKET_GALLERY_ID: 'gallery',
   APPWRITE_DATABASE_ID: 'db',
+  APPWRITE_SERVER_ENDPOINT: 'https://appwrite.test/v1',
+  APPWRITE_SERVER_PROJECT_ID: 'project',
+  APPWRITE_TABLE_CONFESSIONS_ID: 'confessions',
   APPWRITE_TABLE_GALLERY_ID: 'gallery_submissions',
   getAuthenticatedUserFromRequest: jest.fn(),
-  isVerifiedAdmin: (user: { email: string | null; emailVerified?: boolean }) =>
-    user.emailVerified === true && user.email === 'admin@example.com',
+  isGalleryModerator: jest.requireActual('@/lib/appwrite/server').isGalleryModerator,
   getAdminStorage: () => ({ deleteFile: mockDeleteFile }),
   getAdminTables: () => ({ getRow: mockGetRow, updateRow: mockUpdateRow, listRows: mockListRows }),
 }));
@@ -42,9 +44,10 @@ jest.mock('@/lib/logger', () => ({
 const mockedGetUser = jest.mocked(getAuthenticatedUserFromRequest);
 const mockedLogInfo = jest.mocked(logServerInfo);
 
-const ADMIN = { id: 'admin-1', email: 'admin@example.com', name: 'Admin', emailVerified: true };
+const ADMIN = { id: 'admin-1', email: 'AhmCemKaraca@gmail.com', name: 'Admin', emailVerified: true };
 const UNVERIFIED_ADMIN = { ...ADMIN, emailVerified: false };
 const USER = { id: 'user-a', email: 'a@example.com', name: 'A', emailVerified: true };
+const OTHER_ADMIN = { id: 'admin-2', email: 'admin@example.com', name: 'Other admin', emailVerified: true };
 
 function createRequest(body?: unknown) {
   return {
@@ -81,23 +84,65 @@ describe('/api/gallery/moderation', () => {
   });
 
   it.each([
-    ['regular user', USER],
-    ['admin with unverified email', UNVERIFIED_ADMIN],
-  ])('forbids and audits a %s', async (_label, user) => {
+    ['regular user', USER, 'forbidden'],
+    ['moderator with unverified email', UNVERIFIED_ADMIN, 'forbidden'],
+    ['ADMIN_EMAILS admin who is not the moderator', OTHER_ADMIN, 'forbidden'],
+    ['unauthenticated caller', null, 'unauthenticated'],
+  ])('hides the API (404) from a %s and audits it', async (_label, user, result) => {
     mockedGetUser.mockResolvedValue(user);
     const { POST, GET } = await loadRoute();
 
     const decision = await POST(createRequest({ submissionId: 'sub-1', action: 'APPROVE' }));
+    const invalid = await POST(createRequest('not-an-object'));
     const queue = await GET(createRequest());
 
-    expect(decision.status).toBe(403);
-    expect(queue.status).toBe(403);
+    expect(decision.status).toBe(404);
+    expect(invalid.status).toBe(404);
+    expect(queue.status).toBe(404);
     expect(mockUpdateRow).not.toHaveBeenCalled();
     expect(mockListRows).not.toHaveBeenCalled();
     expect(mockedLogInfo).toHaveBeenCalledWith(
       'api.gallery.moderation.audit',
-      expect.objectContaining({ actorId: user.id, result: 'forbidden' }),
+      expect.objectContaining({ actorId: user?.id ?? null, result }),
     );
+  });
+
+  it('lists pending gallery submissions and confessions with previews', async () => {
+    mockedGetUser.mockResolvedValue(ADMIN);
+    mockListRows.mockImplementation(async ({ tableId }: { tableId: string }) => (tableId === 'confessions'
+      ? { total: 1, rows: [{ $id: 'c-1', text: 'help', $createdAt: 'd', image_url: 'https://x/files/f-9/view' }] }
+      : { total: 1, rows: [{ ...pendingRow, $createdAt: 'd' }] }));
+    const { GET } = await loadRoute();
+    const response = await GET(createRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.items[0]).toMatchObject({ id: 'sub-1', title: 't', imageUrl: expect.stringContaining('/files/file-1/preview') });
+    expect(body.confessions[0]).toMatchObject({ id: 'c-1', text: 'help', imageUrl: 'https://x/files/f-9/view' });
+    expect(body).toMatchObject({ total: 1, confessionsTotal: 1 });
+  });
+
+  it('rejects a pending confession, keeps the row and removes its image', async () => {
+    mockedGetUser.mockResolvedValue(ADMIN);
+    mockGetRow.mockResolvedValue({ $id: 'c-1', status: 'pending', text: 'x', image_url: 'https://x/files/f-9/view?p=1' });
+    const { POST } = await loadRoute();
+    const response = await POST(createRequest({ submissionId: 'c-1', action: 'REJECT', kind: 'confession', note: 'n' }));
+
+    expect(response.status).toBe(200);
+    expect(mockUpdateRow.mock.calls[0][0]).toMatchObject({
+      tableId: 'confessions',
+      data: { status: 'rejected', moderation_reason: 'n' },
+    });
+    expect(mockDeleteFile).toHaveBeenCalledWith({ bucketId: 'gallery', fileId: 'f-9' });
+  });
+
+  it('rejects an unknown queue kind', async () => {
+    mockedGetUser.mockResolvedValue(ADMIN);
+    const { POST } = await loadRoute();
+    const response = await POST(createRequest({ submissionId: 'c-1', action: 'APPROVE', kind: 'profiles' }));
+
+    expect(response.status).toBe(400);
+    expect(mockGetRow).not.toHaveBeenCalled();
   });
 
   it('lets a verified admin approve a pending submission with an audit record', async () => {

@@ -85,6 +85,7 @@ These are used by `/api/ai-generate` to call the LLM.
 | Variable | Description | Default |
 |---|---|---|
 | `AI_API_KEY` | API key for the AI provider | — |
+| `AI_MODERATION_MODE` | `on` runs the AI moderation model for gallery/confession submissions; anything else keeps it offline and queues every submission as `pending` (`manual_review`) for the moderator | `off` |
 | `AI_BASE_URL` | OpenAI-compatible endpoint base URL | `https://ai-gateway.vercel.sh/v1` |
 | `AI_MODEL` | Model identifier string | `google/gemini-3.1-flash-lite-preview` |
 | `AI_MODEL_ANALYSIS` | Shared model for `MATERIAL_BOARD`, `SINGLE_JURY`, `MULTI_JURY`, and `REVISION_SAME` | falls back to `AI_MODEL` |

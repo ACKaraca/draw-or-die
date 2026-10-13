@@ -4,8 +4,6 @@ import { ID, Query } from 'node-appwrite';
 import {
   APPWRITE_BUCKET_GALLERY_ID,
   APPWRITE_DATABASE_ID,
-  APPWRITE_SERVER_ENDPOINT,
-  APPWRITE_SERVER_PROJECT_ID,
   APPWRITE_TABLE_GALLERY_ID,
   getAdminStorage,
   getAdminTables,
@@ -27,7 +25,13 @@ import {
 } from '@/lib/gallery-moderation-policy';
 import { requestModerationVerdict } from '@/lib/gallery-moderation-provider';
 import { cleanupGalleryUpload } from '@/lib/gallery-storage-cleanup';
-import { hasAllowedImageSignature, type GalleryRow, type GalleryRowStatus } from '@/lib/gallery-rows';
+import {
+  buildPreviewFileUrl,
+  extractFileIdFromUrl,
+  hasAllowedImageSignature,
+  type GalleryRow,
+  type GalleryRowStatus,
+} from '@/lib/gallery-rows';
 import type { GalleryType } from '@/types';
 
 const MAX_PAGE_SIZE = 100;
@@ -35,36 +39,6 @@ const MAX_STORAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
 const ALLOWED_GALLERY_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_GALLERY_STATUSES = new Set(['approved', 'pending', 'archived', 'rejected']);
 const ARCHIVABLE_STATUSES: ReadonlySet<GalleryRowStatus> = new Set(['approved', 'pending']);
-
-function sanitizeEnv(name: string): string {
-  const raw = process.env[name];
-  if (typeof raw !== 'string') return '';
-
-  const value = raw.trim();
-  if (!value) return '';
-
-  return /[\r\n\0]/.test(value) ? '' : value;
-}
-
-const APPWRITE_PUBLIC_ENDPOINT = sanitizeEnv('NEXT_PUBLIC_APPWRITE_ENDPOINT') || APPWRITE_SERVER_ENDPOINT;
-const APPWRITE_PUBLIC_PROJECT_ID = sanitizeEnv('NEXT_PUBLIC_APPWRITE_PROJECT_ID') || APPWRITE_SERVER_PROJECT_ID;
-
-function buildPreviewFileUrl(fileId: string): string {
-  const endpoint = APPWRITE_PUBLIC_ENDPOINT.replace(/\/$/, '');
-  const project = encodeURIComponent(APPWRITE_PUBLIC_PROJECT_ID);
-  const safeFileId = encodeURIComponent(fileId.trim());
-  return `${endpoint}/storage/buckets/${APPWRITE_BUCKET_GALLERY_ID}/files/${safeFileId}/preview?project=${project}&width=1400&height=1400&quality=76&output=webp`;
-}
-
-function extractFileIdFromUrl(url: string): string | null {
-  const match = url.match(/\/files\/([^/]+)\//i);
-  if (!match?.[1]) return null;
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return match[1];
-  }
-}
 
 function toGalleryImageUrl(row: GalleryRow): string {
   if (row.public_url) {

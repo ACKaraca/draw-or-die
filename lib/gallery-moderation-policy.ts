@@ -7,7 +7,9 @@
 
 export type ModerationCategory = 'SAFE' | 'SENSITIVE' | 'REJECT';
 
-export type PendingCause = 'unavailable' | 'uncertain' | 'injection_suspected';
+export type PendingCause = 'unavailable' | 'uncertain' | 'injection_suspected' | 'manual_review';
+
+export type AiModerationMode = 'on' | 'off';
 
 export type ModerationVerdict =
   | { kind: 'approved'; reason: string; category: 'SAFE' }
@@ -20,7 +22,16 @@ export const PUBLIC_GALLERY_STATUS = 'approved';
 export const MODERATION_PENDING_REASON = 'Queued for manual review.';
 export const MODERATION_UNAVAILABLE_REASON = 'Moderation unavailable. Queued for manual review.';
 export const MODERATION_INJECTION_REASON = 'Possible instruction injection. Queued for manual review.';
+export const MODERATION_MANUAL_REVIEW_REASON = 'manual_review';
 const MAX_REASON_LENGTH = 500;
+
+/**
+ * Owner switch for the moderation model. Anything but an explicit `on` keeps AI moderation
+ * offline: no provider call, every new submission waits for the moderator.
+ */
+export function getAiModerationMode(): AiModerationMode {
+  return process.env.AI_MODERATION_MODE?.trim().toLowerCase() === 'on' ? 'on' : 'off';
+}
 
 /** Fields a client could send to try to choose its own approval state. They are always ignored. */
 export const CLIENT_APPROVAL_FIELDS = ['autoApproved', 'approved', 'status', 'moderationStatus', 'isApproved'] as const;
@@ -76,6 +87,8 @@ export function pendingVerdict(cause: PendingCause): ModerationVerdict {
       return { kind: 'pending', reason: MODERATION_INJECTION_REASON, cause };
     case 'uncertain':
       return { kind: 'pending', reason: MODERATION_PENDING_REASON, cause };
+    case 'manual_review':
+      return { kind: 'pending', reason: MODERATION_MANUAL_REVIEW_REASON, cause };
     default: {
       const _exhaustive: never = cause;
       throw new Error(`Unknown pending cause: ${String(_exhaustive)}`);
