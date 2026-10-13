@@ -15,6 +15,7 @@ import {
   resolveRewardIdentity,
   type ReferralContext,
   type ReferralParty,
+  type RewardEligibility,
   type RewardIneligibleReason,
 } from '@/lib/reward-policy';
 
@@ -23,6 +24,7 @@ const DEFAULT_REFERRAL_RAPIDO = 5;
 // Referrals are for genuinely new accounts: old or throwaway (anonymous/unverified) accounts
 // could otherwise be cycled to farm Rapido for the referrer.
 const REFERRAL_LINK_MAX_ACCOUNT_AGE_DAYS = 7;
+const REFERRAL_CHAIN_MAX_DEPTH = 10;
 
 // Relationship and age problems never resolve themselves, so the referral is settled without payout.
 const TERMINAL_REFERRAL_REASONS: ReadonlySet<RewardIneligibleReason> = new Set<RewardIneligibleReason>([
@@ -46,6 +48,33 @@ function toReferralParty(profile: NormalizedUserProfile, email: string | null): 
     referralCode: profile.referral_code,
     referredBy: profile.referred_by,
   };
+}
+
+function normalizeCode(code: string | null | undefined): string {
+  return (code ?? '').trim().toUpperCase();
+}
+
+/**
+ * Walks the referrer's `referred_by` chain upward (bounded) and reports a cycle when it reaches the
+ * referee's own code or revisits any code (A→B→C→A, or a referee joining a B→C→B loop).
+ * Lookup errors propagate so callers can fail closed.
+ */
+async function hasReferralChainCycle(refereeCode: string | null, referrer: NormalizedUserProfile): Promise<boolean> {
+  const seen = new Set<string>();
+  if (normalizeCode(refereeCode)) seen.add(normalizeCode(refereeCode));
+  let current: NormalizedUserProfile | null = referrer;
+  for (let depth = 0; current && depth < REFERRAL_CHAIN_MAX_DEPTH; depth += 1) {
+    const ownCode = normalizeCode(current.referral_code);
+    if (ownCode) {
+      if (seen.has(ownCode)) return true;
+      seen.add(ownCode);
+    }
+    const parentCode = normalizeCode(current.referred_by);
+    if (!parentCode) return false;
+    if (seen.has(parentCode)) return true;
+    current = await findProfileByReferralCode(parentCode);
+  }
+  return false;
 }
 
 export async function getReferralConfig(): Promise<{ enabled: boolean; rapido: number }> {
@@ -130,6 +159,16 @@ export async function linkReferralToUser(
     return { success: false, error: 'Bu referral kodu bu hesap için kullanılamaz.' };
   }
 
+  try {
+    if (await hasReferralChainCycle(userProfile.referral_code, referrer)) {
+      logServerInfo('referral.link_rejected', { userId, referrerId: referrer.id, reason: 'referral_cycle' });
+      return { success: false, error: 'Bu referral kodu bu hesap için kullanılamaz.' };
+    }
+  } catch (error) {
+    logServerError('referral.link_chain', error, { userId });
+    return { success: false, error: 'Referral kodu kontrol edilemedi.' };
+  }
+
   await updateProfileById(userId, { referred_by: normalized });
   return { success: true };
 }
@@ -170,7 +209,18 @@ export async function applyReferralReward(
     referee: toReferralParty(userProfile, user.email),
     referrer: referrer ? toReferralParty(referrer, referrer.email) : null,
   };
-  const refereeDecision = evaluateRewardEligibility({ kind: 'referral_new_user', identity: user, referral });
+  let isChainCycle = false;
+  if (referrer) {
+    try {
+      isChainCycle = await hasReferralChainCycle(userProfile.referral_code, referrer);
+    } catch (error) {
+      logServerError('referral.payout_chain', error, { userId });
+      return { success: false, rewarded: false, error: 'Referrer bulunamadı.' };
+    }
+  }
+  const refereeDecision: RewardEligibility = isChainCycle
+    ? { eligible: false, kind: 'referral_new_user', userId, reason: 'referral_cycle' }
+    : evaluateRewardEligibility({ kind: 'referral_new_user', identity: user, referral });
 
   if (!refereeDecision.eligible || !referrer) {
     if (!refereeDecision.eligible && TERMINAL_REFERRAL_REASONS.has(refereeDecision.reason)) {
