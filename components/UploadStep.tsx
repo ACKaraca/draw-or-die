@@ -85,6 +85,7 @@ interface UploadStepProps {
 }
 
 const STUDIO_TUTORIAL_STORAGE_KEY = 'dod_studio_tutorial_seen_v1';
+const UPLOAD_INPUT_ID = 'studio-desk-upload-input';
 
 function safeParseJsonObject(value: string): Record<string, unknown> {
   try {
@@ -180,6 +181,8 @@ export function UploadStep({
   };
   const tutorialTitleId = `${fieldIdPrefix}-tutorial-title`;
   const tutorialTextId = `${fieldIdPrefix}-tutorial-text`;
+  const dropzoneHintId = `${fieldIdPrefix}-dropzone-hint`;
+  const uploadErrorId = `${fieldIdPrefix}-upload-error`;
   const tutorialNextRef = useRef<HTMLButtonElement>(null);
   const tutorialSteps = useMemo(() => studioTutorialSteps(language), [language]);
   const personaOptions = useMemo(
@@ -499,13 +502,26 @@ export function UploadStep({
     }
   };
 
+  const hasPreviewFiles = previewFiles.length > 0;
   const rootProps = getRootProps({
     onClick: (event: MouseEvent<HTMLElement>) => {
-      if (previewFiles.length > 0) {
+      if (hasPreviewFiles) {
         event.stopPropagation();
       }
     },
+    // Empty zone acts as the file-picker button; once files are previewed it only receives drops and the
+    // explicit "Replace file" button takes over, so the zone must not stay a nameless tab stop.
+    ...(hasPreviewFiles
+      ? { role: undefined, tabIndex: -1 }
+      : {
+          role: 'button',
+          'aria-label': pickLocalized(language, 'Pafta yükle: dosya seç', 'Upload board: choose files'),
+          'aria-describedby': dropzoneHintId,
+        }),
   });
+  const openFilePicker = () => {
+    document.getElementById(UPLOAD_INPUT_ID)?.click();
+  };
 
   return (
     <>
@@ -574,9 +590,9 @@ export function UploadStep({
 
       <motion.div
         key="upload"
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 1.05 }}
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
         className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-5 md:gap-8"
       >
         <div className="flex flex-col gap-4">
@@ -587,31 +603,38 @@ export function UploadStep({
             <button
               type="button"
               onClick={() => setShowTutorial(true)}
-              className="text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:text-white"
+              className="min-h-6 px-2 text-[10px] font-mono uppercase tracking-wider text-slate-400 hover:text-white"
             >
               {pickLocalized(language, 'Rehber', 'Tutorial')}
             </button>
           </div>
 
+          <input
+            {...getInputProps({
+              id: UPLOAD_INPUT_ID,
+              'aria-label': pickLocalized(language, 'Pafta dosyası seç', 'Choose board files'),
+            })}
+          />
           <div
             {...rootProps}
             className={`flex-1 min-h-[340px] sm:min-h-[420px] border-2 border-dashed rounded-xl flex flex-col p-3 sm:p-4 text-center transition-colors relative overflow-hidden ${isDragActive ? 'border-neon-red bg-neon-red/5' : 'border-white/20 hover:border-white/40 bg-white/5'} ${activePreview?.previewUrl ? 'cursor-default' : 'cursor-pointer justify-center items-center p-6 sm:p-8'}`}
           >
-            <input {...getInputProps({ id: 'studio-desk-upload-input' })} />
-
             {activePreview?.previewUrl ? (
               <>
                 <div className="flex items-center justify-between gap-2 mb-3 px-1">
                   <p className="font-mono text-[11px] uppercase tracking-widest text-slate-300">
                     {activePreview.badge}: {activePreview.name}
                   </p>
-                  <label
-                    htmlFor="studio-desk-upload-input"
-                    onClick={(event) => event.stopPropagation()}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      openFilePicker();
+                    }}
                     className="px-3 py-1.5 rounded border border-white/20 text-[11px] font-mono text-slate-200 hover:border-neon-red hover:text-white transition-colors cursor-pointer"
                   >
                     {pickLocalized(language, 'Dosya Değiştir', 'Replace file')}
-                  </label>
+                  </button>
                   {previewFiles.length > 0 && (
                     <button
                       type="button"
@@ -656,12 +679,14 @@ export function UploadStep({
                 <p className="font-mono text-lg mb-2">
                   {pickLocalized(language, 'A0/A1 Pafta, Eskiz veya Render Yükle', 'Upload A0/A1 sheet, sketch, or render')}
                 </p>
-                <p className="text-sm text-slate-500">
-                  {pickLocalized(language, 'Sürükle bırak veya seçmek için tıkla (JPG, PNG, PDF)', 'Drag and drop or click to select (JPG, PNG, PDF)')}
-                </p>
-                <p className="mt-2 text-[11px] text-slate-400 font-mono">
-                  {pickLocalized(language, 'Maksimum 8 dosya, toplam 35 MB', 'Up to 8 files, 35 MB total')}
-                </p>
+                <div id={dropzoneHintId}>
+                  <p className="text-sm text-slate-500">
+                    {pickLocalized(language, 'Sürükle bırak veya seçmek için tıkla (JPG, PNG, PDF)', 'Drag and drop or click to select (JPG, PNG, PDF)')}
+                  </p>
+                  <p className="mt-2 text-[11px] text-slate-400 font-mono">
+                    {pickLocalized(language, 'Maksimum 8 dosya, toplam 35 MB', 'Up to 8 files, 35 MB total')}
+                  </p>
+                </div>
               </>
             )}
           </div>
@@ -729,7 +754,7 @@ export function UploadStep({
           </div>
 
           {autoFillNotice && (
-            <div className="rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-3 py-2 text-[11px] font-mono text-cyan-100">
+            <div role="status" className="rounded-lg border border-cyan-400/20 bg-cyan-500/10 px-3 py-2 text-[11px] font-mono text-cyan-100">
               {autoFillNotice}
             </div>
           )}
@@ -1083,7 +1108,7 @@ export function UploadStep({
             )}
 
             {uploadValidationError && (
-              <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+              <div id={uploadErrorId} role="alert" className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
                 <p className="font-mono text-[11px] leading-relaxed text-red-200">{uploadValidationError}</p>
                 <p className="mt-1 font-mono text-[10px] text-red-200/80">
                   {pickLocalized(
@@ -1099,6 +1124,7 @@ export function UploadStep({
               type="button"
               onClick={isGuestAtLimit ? onGuestUpgradeRequired : (isAuthenticated ? handleAnalyze : onAuthRequired)}
               disabled={(isAuthenticated && (!canRunAnalysis || isFileProcessing)) || isGuestAtLimit}
+              aria-describedby={uploadValidationError ? uploadErrorId : undefined}
               className={`w-full py-4 rounded-none font-mono text-[13px] font-bold uppercase tracking-[0.1em] transition-all flex items-center justify-center gap-2 mb-3 ${(canRunAnalysis && !isGuestAtLimit) || (!isAuthenticated && !isGuestAtLimit) ? 'bg-neon-red text-white shadow-[0_0_24px_rgba(255,0,51,0.35)] hover:bg-neon-red/90' : 'bg-white/[0.06] text-white/25 cursor-not-allowed'}`}
             >
               {isGuestAtLimit ? (

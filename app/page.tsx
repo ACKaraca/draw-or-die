@@ -336,8 +336,10 @@ export default function Home() {
         </div>
       )}
 
-      {/* Toast stack — sits above the cookie banner; live regions stay mounted so screen readers announce updates. */}
+      {/* Toast stack — sits above the cookie banner; live regions stay mounted so screen readers announce updates.
+          Exempt from modal inerting so toasts raised while a dialog is open are still announced. */}
       <div
+        data-inert-exempt=""
         className="fixed left-1/2 -translate-x-1/2 z-[110] flex flex-col gap-2 items-center pointer-events-none w-[calc(100%-32px)] max-w-[400px]"
         style={{ bottom: 'calc(24px + var(--cookie-banner-h, 0px))' }}
       >

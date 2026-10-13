@@ -203,6 +203,12 @@ label:has(> .sr-only:focus-visible) {
   outline-offset: 2px;
 }
 
+/* Step headings receive programmatic focus on step change (screen-reader context only); they are not
+   interactive, so no ring. */
+[data-step-focus-target]:focus {
+  outline: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

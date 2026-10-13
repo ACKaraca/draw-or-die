@@ -3,6 +3,8 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 
+import { useInertBackground } from '@/hooks/useInertBackground';
+
 type Props = {
   isOpen: boolean;
   onClose: () => void;
@@ -34,8 +36,12 @@ export function DialogFrame({
   panelClassName,
   children,
 }: Props) {
+  const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
+
+  // Declared before the focus effect so the page is un-inerted before focus is restored into it.
+  useInertBackground(overlayRef, isOpen);
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -90,6 +96,7 @@ export function DialogFrame({
 
   return createPortal(
     <div
+      ref={overlayRef}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4 backdrop-blur-[8px]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();

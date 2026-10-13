@@ -314,6 +314,7 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                     <button
                         type="button"
                         onClick={() => setTab('premium')}
+                        aria-pressed={tab === 'premium'}
                         className={`px-6 py-2 rounded-full font-mono text-sm uppercase tracking-wider transition-all ${tab === 'premium' ? 'bg-yellow-500 text-black font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
                         Premium
@@ -321,6 +322,7 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                     <button
                         type="button"
                         onClick={() => setTab('rapido')}
+                        aria-pressed={tab === 'rapido'}
                         className={`px-6 py-2 rounded-full font-mono text-sm uppercase tracking-wider transition-all ${tab === 'rapido' ? 'bg-neon-red text-white font-bold' : 'text-slate-400 hover:text-white'}`}
                     >
                         {pickLocalized(language, 'Rapido Satın Al', 'Buy Rapido')}
@@ -348,6 +350,7 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                             <button
                                 type="button"
                                 onClick={() => setBilling('monthly')}
+                                aria-pressed={billing === 'monthly'}
                                 className={`px-5 py-1.5 rounded-full font-mono text-xs uppercase transition-all ${billing === 'monthly' ? 'bg-white/10 text-white' : 'text-slate-500'}`}
                             >
                                 {pickLocalized(language, 'Aylık', 'Monthly')}
@@ -355,6 +358,7 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                             <button
                                 type="button"
                                 onClick={() => setBilling('yearly')}
+                                aria-pressed={billing === 'yearly'}
                                 className={`px-5 py-1.5 rounded-full font-mono text-xs uppercase transition-all ${billing === 'yearly' ? 'bg-white/10 text-white' : 'text-slate-500'}`}
                             >
                                 {pickLocalized(language, 'Yıllık', 'Yearly')}{' '}
@@ -440,8 +444,12 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                                                 : pickLocalized(language, 'Doğrula', 'Validate')}
                                         </button>
                                     </div>
-                                    {promoSummary && <p className="text-[10px] font-mono text-emerald-300">{promoSummary}</p>}
-                                    {promoError && <p className="text-[10px] font-mono text-red-300">{promoError}</p>}
+                                    {promoSummary && (
+                                        <p role="status" className="text-[10px] font-mono text-emerald-300">{promoSummary}</p>
+                                    )}
+                                    {promoError && (
+                                        <p role="alert" className="text-[10px] font-mono text-red-300">{promoError}</p>
+                                    )}
                                 </div>
 
                                 <button
@@ -597,17 +605,19 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                                     <button
                                         type="button"
                                         onClick={() => setRapidoQty(Math.max(STRIPE_PRICES.MIN_RAPIDO_PURCHASE, rapidoQty - 5))}
+                                        aria-label={pickLocalized(language, '5 Rapido azalt', 'Decrease by 5 Rapido')}
                                         className="w-8 h-8 flex items-center justify-center bg-white/5 border border-white/10 rounded-lg text-white hover:bg-white/10 transition-colors"
                                     >
                                         -
                                     </button>
-                                    <div className="w-20 text-center">
+                                    <div className="w-20 text-center" aria-live="polite">
                                         <span className="text-2xl font-display font-bold text-white">{rapidoQty}</span>
                                         <span className="text-slate-500 text-xs block">Rapido</span>
                                     </div>
                                     <button
                                         type="button"
                                         onClick={() => setRapidoQty(rapidoQty + 5)}
+                                        aria-label={pickLocalized(language, '5 Rapido artır', 'Increase by 5 Rapido')}
                                         className="w-8 h-8 flex items-center justify-center bg-white/5 border border-white/10 rounded-lg text-white hover:bg-white/10 transition-colors"
                                     >
                                         +
@@ -631,6 +641,7 @@ export function PremiumUpgradeStep({ setStep, initialTab = 'premium' }: PremiumU
                                         type="button"
                                         key={qty}
                                         onClick={() => setRapidoQty(qty)}
+                                        aria-pressed={rapidoQty === qty}
                                         className={`px-4 py-2 rounded-lg font-mono text-xs uppercase transition-all ${rapidoQty === qty ? 'bg-neon-red text-white' : 'bg-white/5 border border-white/10 text-slate-400 hover:text-white'}`}
                                     >
                                         {qty} Rapido

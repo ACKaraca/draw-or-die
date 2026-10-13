@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { StepRouter } from '@/components/StepRouter';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 
@@ -8,17 +8,23 @@ jest.mock('@/stores/drawOrDieStore', () => ({
 
 jest.mock('@/components/HeroStep', () => ({
   HeroStep: ({ setStep }: { setStep: (s: string) => void }) => (
-    <button data-testid="hero-step" type="button" onClick={() => setStep('upload')}>
-      Hero
-    </button>
+    <div>
+      <h1>Hero heading</h1>
+      <button data-testid="hero-step" type="button" onClick={() => setStep('upload')}>
+        Hero
+      </button>
+    </div>
   ),
 }));
 
 jest.mock('@/components/UploadStep', () => ({
   UploadStep: ({ onGuestUpgradeRequired }: { onGuestUpgradeRequired?: () => void }) => (
-    <button data-testid="upload-step" type="button" onClick={onGuestUpgradeRequired}>
-      Upload
-    </button>
+    <div>
+      <h2>Studio Desk heading</h2>
+      <button data-testid="upload-step" type="button" onClick={onGuestUpgradeRequired}>
+        Upload
+      </button>
+    </div>
   ),
 }));
 jest.mock('@/components/AnalyzingSteps', () => ({
@@ -232,5 +238,40 @@ describe('StepRouter', () => {
     expect(onAuthRequired).toHaveBeenCalledTimes(1);
     expect(setStep).not.toHaveBeenCalledWith('premium-upgrade');
     expect(setShowGuestUpgradePrompt).not.toHaveBeenCalled();
+  });
+
+  it('moves focus to the incoming step heading after a step change', async () => {
+    const routerProps = {
+      getRootProps: jest.fn() as never,
+      getInputProps: jest.fn() as never,
+      isDragActive: false,
+      isAuthenticated: false,
+      userId: null,
+      onAuthRequired: handle,
+      isPremiumUser: false,
+      isAnonymous: false,
+      rapidoPens: 0,
+      progressionScore: 0,
+      earnedBadges: [],
+      handleAnalyze: handle,
+      handleMultiAnalyze: handle,
+      handlePremium: handle,
+      handleAutoConcept: handle,
+      handleMaterialBoard: handle,
+      handleDesignInsight: handle,
+      handleDefenseSubmit: handle,
+      handleGalleryConsent: handle,
+    };
+    const { rerender } = render(<StepRouter {...routerProps} />);
+    const heroButton = screen.getByTestId('hero-step');
+    heroButton.focus();
+    expect(document.activeElement).toBe(heroButton);
+
+    mockedStore.mockReturnValue({ ...mockedStore(), step: 'upload' } as never);
+    rerender(<StepRouter {...routerProps} />);
+
+    const heading = await screen.findByRole('heading', { name: 'Studio Desk heading' });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+    expect(heading).toHaveAttribute('tabindex', '-1');
   });
 });

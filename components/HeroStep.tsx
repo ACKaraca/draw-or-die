@@ -29,7 +29,11 @@ export function HeroStep({ setStep }: HeroStepProps) {
   const [failedVisualIds, setFailedVisualIds] = useState<Record<string, boolean>>({});
 
   const scrollToContent = () => {
-    document.getElementById('landing-discover')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // JS-driven smooth scroll ignores the CSS `scroll-behavior` override, so honor reduced motion here too.
+    const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    document
+      .getElementById('landing-discover')
+      ?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
   };
 
   const features = [
@@ -158,7 +162,7 @@ export function HeroStep({ setStep }: HeroStepProps) {
           <button
             type="button"
             onClick={scrollToContent}
-            className="text-slate-400 hover:text-white transition-colors"
+            className="rounded-lg p-1 text-slate-400 hover:text-white transition-colors"
             aria-label={pickLocalized(language, 'Aşağı kaydır', 'Scroll down')}
           >
             <ChevronDown className="w-5 h-5 pulse-soft" strokeWidth={1.5} />
@@ -179,9 +183,9 @@ export function HeroStep({ setStep }: HeroStepProps) {
                 strokeWidth={1.25}
                 style={{ filter: 'drop-shadow(0 0 8px rgba(255,0,51,0.35))' }}
               />
-              <h3 className="font-display text-base uppercase tracking-[0.04em] text-white mb-2.5">
+              <h2 className="font-display text-base uppercase tracking-[0.04em] text-white mb-2.5">
                 {item.title}
-              </h3>
+              </h2>
               <p className="text-sm text-slate-400 leading-relaxed">{item.body}</p>
             </div>
           ))}
