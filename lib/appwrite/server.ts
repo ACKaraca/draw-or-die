@@ -379,6 +379,23 @@ export type PromoRedemptionRow = Models.Row & {
   note?: string;
   metadata_json?: string;
   redeemed_at?: string;
+  status?: string;
+  stripe_session_id?: string;
+};
+
+export type StripeEventRow = Models.Row & {
+  event_id: string;
+  processed_at: string;
+  status?: string | null;
+  event_type?: string | null;
+  attempts?: number | null;
+  lease_owner?: string | null;
+  lease_expires_at?: string | null;
+  last_error?: string | null;
+  outcome?: string | null;
+  livemode?: boolean | null;
+  stripe_created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type FeatureFlagRow = Models.Row & {

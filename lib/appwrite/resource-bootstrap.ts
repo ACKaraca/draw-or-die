@@ -598,6 +598,17 @@ async function setupStripeEventsTable(tables: TablesDB): Promise<void> {
 
   await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'event_id', 128, true);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'processed_at', true);
+  // Processing state for Stripe webhook events (optional: one-time claim rows leave them empty).
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'status', 16, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'event_type', 128, false);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'attempts', false, undefined, 0, 1_000_000);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'lease_owner', 64, false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'lease_expires_at', false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'last_error', 1_000, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'outcome', 255, false);
+  await ensureBooleanColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'livemode', false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'stripe_created_at', false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'updated_at', false);
 
   await ensureIndex(
     tables,
@@ -919,6 +930,9 @@ async function setupPromoRedemptionsTable(tables: TablesDB): Promise<void> {
   await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'note', 255, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'metadata_json', 10000, false);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'redeemed_at', true);
+  // Checkout reservations: reserved -> redeemed | released. Empty for legacy/redeem rows.
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'status', 16, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'stripe_session_id', 255, false);
 
   await ensureIndex(
     tables,

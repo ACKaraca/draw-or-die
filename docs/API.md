@@ -23,10 +23,17 @@ Creates a Stripe Checkout session.
 { "url": "https://checkout.stripe.com/..." }
 ```
 
+The existing Stripe customer (`profiles.stripe_customer_id`) is reused. An internal promo use is reserved atomically
+before the session is created (`promo_redemptions.status = reserved`), becomes `redeemed` when the webhook confirms
+payment, and is `released` on `checkout.session.expired` or if session creation fails. The success redirect
+(`?checkout=success`) grants nothing; the client only re-reads the profile.
+
 **Errors:**
 - `401` — Authentication required
 - `400` — Invalid checkout mode
 - `400` — `INVALID_RAPIDO_QUANTITY` (quantity not an integer between 5 and 1000)
+- `400` — `PROMO_EXHAUSTED` / `PROMO_USER_LIMIT` (internal promo quota already reserved)
+- `409` — `SUBSCRIPTION_ALREADY_ACTIVE` (premium modes: the user/Stripe customer already has an active, trialing, past_due, unpaid or incomplete subscription)
 - `429` — Rate limit exceeded
 - `503` — Stripe not configured (`STRIPE_SECRET_KEY` missing)
 - `500` — Unexpected checkout error
@@ -39,15 +46,34 @@ Stripe webhook endpoint. Configure the URL in the Stripe Dashboard.
 
 **Headers:** `stripe-signature` (Stripe signature header)
 
-**Processed events:**
-- `checkout.session.completed` — Premium activation or Rapido top-up
-- `customer.subscription.deleted` — Premium cancellation
-- `invoice.payment_failed` — Marks the subscription `past_due`
-- `invoice.paid` (`billing_reason = subscription_cycle`) — Renewal: tops the balance up to the monthly Premium allowance (`TIER_DEFAULTS.PREMIUM`) and records a `premium_renewal` billing event. Yearly plans renew yearly, so they get this top-up once per year.
+**Processing:** each event is claimed in `stripe_events` (`processing → succeeded | ignored | rejected`, or `failed`
+with `attempts`/`last_error`). A live lease blocks parallel workers; a failed or stale event is taken over by the next
+delivery. Rapido/ledger effects are idempotent per source id (`checkout:<session>`, `invoice:<invoice>`,
+`refund:<refund>`, `dispute:<dispute>:<stage>`) and written atomically with the balance change.
 
-**Notes:**
-- Idempotency is enforced via the `stripe_events` table (duplicate events are skipped).
-- Returns `400` if signature verification fails.
+**Processed events:**
+- `checkout.session.completed` / `checkout.session.async_payment_succeeded` — validated against `lib/pricing.ts`
+  (product/price, unit amount, currency, quantity, mode, payment status); then Rapido pack credit or Premium
+  activation + allowance top-up to `TIER_DEFAULTS.PREMIUM`. Mismatches are recorded as `rejected` and grant nothing.
+- `checkout.session.expired` / `checkout.session.async_payment_failed` — releases an internal promo reservation.
+- `customer.subscription.*` and `invoice.payment_failed` — re-read the subscription from Stripe and project its current
+  status (`active`/`trialing` on a known Premium price = premium), so out-of-order events converge.
+- `invoice.paid` (`billing_reason = subscription_cycle`) — renewal: tops the balance up to the monthly Premium allowance
+  once per invoice and records `premium_renewal`. Yearly plans renew yearly, so they get this top-up once per year.
+- `charge.refunded` — Rapido pack: revokes the refunded share per refund (clamped at 0, `rapido_pack_refund`).
+  Subscription payment: recorded as `premium_refund` only; access follows the subscription status.
+- `charge.dispute.created` / `charge.dispute.closed` — recorded; a lost dispute on a Rapido pack revokes the disputed share.
+- Anything else — acknowledged and recorded as `ignored`.
+
+**Responses:** `200` processed/duplicate/ignored/rejected · `400` bad signature · `409` another worker holds the lease ·
+`500` handler failed (event kept as `failed`, Stripe retries) · `503` paused (`STRIPE_WEBHOOK_PAUSED`) or event store unavailable.
+
+### POST /api/webhook/stripe/replay
+
+Admin-only (verified admin email). Body: `{ "eventIds"?: string[], "dryRun"?: boolean, "includeRejected"?: boolean }`.
+Dry-run by default: without ids it lists stored `failed` events; with ids it shows stored state plus the Stripe event.
+`dryRun: false` requires explicit ids (max 25), re-fetches each event from Stripe and runs it through the same processor.
+CLI wrapper: `scripts/replay-stripe-events.mjs`.
 
 ---
 

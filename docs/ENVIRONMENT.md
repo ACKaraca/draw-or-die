@@ -24,6 +24,10 @@ APPWRITE_EDU_EMAIL_PROVIDER_ID=your-email-provider-id
 STRIPE_SECRET_KEY=sk_live_xxx
 STRIPE_WEBHOOK_SECRET=whsec_xxx
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx
+# Optional webhook guards (see "Stripe Webhook Variables" below)
+STRIPE_EXPECTED_LIVEMODE=true
+STRIPE_ACCOUNT_ID=
+STRIPE_WEBHOOK_PAUSED=false
 
 # App
 NEXT_PUBLIC_APP_URL=https://drawordie.ackaraca.me
@@ -56,6 +60,26 @@ Every successful provider call logs one `[server-info]` line with scope `api.ai-
 Provider calls have a 100 s budget. Transient failures (network errors, 408/425/429/5xx) are retried once, on the first `AI_MODEL_FALLBACKS` entry when the primary is a Gemini 3.1 model. On the Vercel AI Gateway the same fallback is also sent as the gateway's `models` list so most failovers happen inside a single request.
 | `ALLOWED_ORIGINS` | Comma-separated CORS allowlist | e.g. `https://drawordie.ackaraca.me,https://drawordie.app` |
 | `NEXT_PUBLIC_PREMIUM_RESCUE_IMAGE_EDITING_ENABLED` | Enables the future client-side image-editing rescue path. Keep `false` until manually tested. | `false` |
+
+## Stripe Webhook Variables (server-side)
+
+Used by `/api/webhook/stripe` (`lib/stripe-webhook-processor.ts`). Every event is signature-verified with
+`STRIPE_WEBHOOK_SECRET`, claimed in `stripe_events` (status/lease/attempts) and processed exactly once in effect.
+
+| Variable | Description | Default |
+|---|---|---|
+| `STRIPE_EXPECTED_LIVEMODE` | `true` / `false`. Events whose `livemode` differs are recorded as `rejected` and grant nothing. | derived from the `STRIPE_SECRET_KEY` prefix (`sk_live_`/`rk_live_` → `true`, `sk_test_`/`rk_test_` → `false`) |
+| `STRIPE_ACCOUNT_ID` | Only needed if Connect events are ever sent to this endpoint. Events carrying an `account` other than this id are rejected. Direct (non-Connect) events have no `account` and are accepted. | unset (all Connect events rejected) |
+| `STRIPE_WEBHOOK_PAUSED` | Kill switch. `true` answers every delivery with 503 without touching state, so Stripe keeps retrying (up to 3 days). Unset/`false` resumes processing. | `false` |
+
+Subscribe the endpoint to: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+`checkout.session.async_payment_failed`, `checkout.session.expired`, `customer.subscription.created|updated|deleted|paused|resumed`,
+`invoice.paid`, `invoice.payment_failed`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`.
+Other event types are acknowledged and recorded as `ignored`.
+
+Failed events stay in `stripe_events` with `status=failed`, `attempts` and `last_error`. Replay them with
+`node scripts/replay-stripe-events.mjs` (dry-run by default; needs `DOD_ADMIN_JWT` of a verified admin and `--execute`
+plus explicit `--event` ids to change anything). Follow the branch-16 replay runbook before executing.
 
 ## Release Verification Variables
 
