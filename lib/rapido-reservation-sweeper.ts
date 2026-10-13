@@ -13,7 +13,8 @@ import { createAppwriteLedgerStore, isLedgerTableMissing, voidExpiredReservation
 
 // shortcut: only leases that expired within the lookback window are swept, so an outage longer than
 // it leaves reservations open; scripts/reconcile-billing.mjs reports them. Widen it if that happens.
-export const SWEEP_LOOKBACK_MS = 24 * 60 * 60 * 1000;
+// Daily cron (Vercel Hobby allows only daily schedules); 48h lookback covers one missed run.
+export const SWEEP_LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const SWEEP_PAGE_SIZE = 500;
 const SWEEP_MAX_PAGES = 4;
 
