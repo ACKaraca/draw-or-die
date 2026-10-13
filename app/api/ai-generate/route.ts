@@ -19,8 +19,14 @@ import {
   REVISION_RESPONSE_FORMAT,
   SINGLE_JURY_RESPONSE_FORMAT,
 } from '@/lib/ai-response-formats';
-import { deductRapidoCents } from '@/lib/rapido-balance';
 import {
+  openAiBilling,
+  resolveOperationId,
+  type AiBillingSession,
+  type AiBillingSettleOutcome,
+} from '@/app/api/ai-generate/billing';
+import {
+  AiRequestCancelledError,
   callAI,
   isProviderCreditRestrictionError,
   readCleanEnv,
@@ -1874,6 +1880,9 @@ export async function POST(request: NextRequest) {
   const headerLangFallback = resolveLanguageFromAcceptLanguage(request.headers.get('accept-language'), 'tr');
   // Large base64 bodies take a while to read; start while auth/profile lookups run.
   const bodyPromise: Promise<unknown> = request.json().catch(() => null);
+  // Opened right before the first AI call; any exit that does not settle it voids it in `finally`.
+  let billing: AiBillingSession | null = null;
+  let billingVoidReason = 'request_rejected';
 
   try {
     const user = await getAuthenticatedUserFromRequest(request);
@@ -1935,6 +1944,18 @@ export async function POST(request: NextRequest) {
         400,
       );
     }
+
+    const operationIdResolution = resolveOperationId(requestBody.operationId);
+    if (!operationIdResolution.ok) {
+      return respond(
+        {
+          error: pickLocalized(requestLanguage, 'Geçersiz işlem kimliği.', 'Invalid operation id.'),
+          code: 'INVALID_OPERATION_ID',
+        },
+        400,
+      );
+    }
+    const { operationId } = operationIdResolution;
 
     const additionalFilesRaw = payload.additionalFiles;
     const additionalFiles: AdditionalRequestFile[] = [];
@@ -2161,7 +2182,7 @@ export async function POST(request: NextRequest) {
       files.additional ?? [],
       requestLanguage,
       responseFormat,
-      { operation, requestId },
+      { operation, requestId, operationId, signal: request.signal },
     );
 
     const harshnessRaw = payload.harshness;
@@ -2395,6 +2416,51 @@ export async function POST(request: NextRequest) {
       reference: pickLocalized(requestLanguage, 'Belirtilmedi', 'Not specified'),
     });
     const invalidCritiqueFallback = pickLocalized(requestLanguage, 'Hata', 'Error');
+
+    if (request.signal.aborted) throw new AiRequestCancelledError();
+    const billingOpen = await openAiBilling({
+      userId: user.id,
+      profileRowId: profile.row_id,
+      operationId,
+      operation,
+      requestId,
+      amountCents: requiredBaseCostCents,
+      knownBalanceCents: currentRapidoCents,
+    });
+    if (billingOpen.kind === 'insufficient') {
+      return respond(
+        {
+          error: pickLocalized(requestLanguage, 'Yetersiz Rapido.', 'Insufficient Rapido.'),
+          code: 'INSUFFICIENT_RAPIDO',
+          required: effectiveBaseCost,
+          available: toRapidoDisplay(currentRapidoCents),
+        },
+        402,
+      );
+    }
+    if (billingOpen.kind === 'duplicate') {
+      const isCompleted = billingOpen.state === 'settled';
+      return respond(
+        {
+          error: isCompleted
+            ? pickLocalized(
+              requestLanguage,
+              'Bu işlem zaten tamamlandı; tekrar ücretlendirilmedi.',
+              'This operation was already completed and was not charged again.',
+            )
+            : pickLocalized(
+              requestLanguage,
+              'Bu işlem zaten işleniyor veya kapatıldı. Yeni bir deneme başlatın.',
+              'This operation is already in progress or closed. Start a new attempt.',
+            ),
+          code: isCompleted ? 'OPERATION_ALREADY_COMPLETED' : 'OPERATION_IN_PROGRESS',
+          operationId,
+        },
+        409,
+      );
+    }
+    billing = billingOpen.session;
+    const activeBilling = billingOpen.session;
 
     if (operation === 'SINGLE_JURY') {
       const singlePersona = resolveSinglePersona(promptPayload);
@@ -3327,39 +3393,55 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const gameStateWrite = gameStateResult
-      ? (() => {
-        const gameStateData = {
-          progression_score: gameStateResult.progression_score,
-          wall_of_death_count: gameStateResult.wall_of_death_count,
-          earned_badges: JSON.stringify(gameStateResult.earned_badges),
-        };
-        return profile.row_id
-          ? updateProfileRowById(profile.row_id, gameStateData)
-          : updateProfileById(user.id, gameStateData);
-      })()
-      : Promise.resolve(null);
+    const writeGameState = (): Promise<unknown> => {
+      if (!gameStateResult) return Promise.resolve(null);
+      const gameStateData = {
+        progression_score: gameStateResult.progression_score,
+        wall_of_death_count: gameStateResult.wall_of_death_count,
+        earned_badges: JSON.stringify(gameStateResult.earned_badges),
+      };
+      return profile.row_id
+        ? updateProfileRowById(profile.row_id, gameStateData)
+        : updateProfileById(user.id, gameStateData);
+    };
 
-    // The AI work is already done (and paid for); a failed bookkeeping write is logged rather
-    // than turned into an error that would make the user pay for a retry.
-    const [chargeResult, gameStateWriteResult] = await Promise.allSettled([
-      deductRapidoCents({
-        userId: user.id,
-        profileRowId: profile.row_id,
-        costCents: finalCostCents,
-        knownBalanceCents: currentRapidoCents,
-      }),
-      gameStateWrite,
-    ]);
+    // The accepted result settles exactly once. Mentor rounds are metered after the fact and are
+    // clamped to what is left; every other operation must afford its full price or is voided.
+    const shortfallPolicy = operation === 'AI_MENTOR' ? 'clamp' : 'reject';
+    let chargeResult: PromiseSettledResult<AiBillingSettleOutcome>;
+    let gameStateWriteResult: PromiseSettledResult<unknown>;
+    if (finalCostCents > activeBilling.reservedCents) {
+      [chargeResult] = await Promise.allSettled([activeBilling.settle(finalCostCents, shortfallPolicy)]);
+      if (chargeResult.status === 'fulfilled' && chargeResult.value.kind === 'insufficient') {
+        return respond(
+          {
+            error: pickLocalized(requestLanguage, 'Yetersiz Rapido.', 'Insufficient Rapido.'),
+            code: 'INSUFFICIENT_RAPIDO',
+            required: toRapidoDisplay(finalCostCents),
+            available: toRapidoDisplay(currentRapidoCents),
+          },
+          402,
+        );
+      }
+      [gameStateWriteResult] = await Promise.allSettled([writeGameState()]);
+    } else {
+      // The AI work is already done; a failed bookkeeping write is logged rather than turned into
+      // an error that would make the user pay for a retry.
+      [chargeResult, gameStateWriteResult] = await Promise.allSettled([
+        activeBilling.settle(finalCostCents, shortfallPolicy),
+        writeGameState(),
+      ]);
+    }
     if (gameStateWriteResult.status === 'rejected') {
       logServerError('api.ai-generate.game-state', gameStateWriteResult.reason, { requestId, userId: user.id, operation });
     }
     let nextRapidoCents = Math.max(0, currentRapidoCents - finalCostCents);
-    if (chargeResult.status === 'fulfilled') {
-      nextRapidoCents = chargeResult.value;
-    } else {
+    if (chargeResult.status === 'fulfilled' && chargeResult.value.kind === 'settled') {
+      nextRapidoCents = chargeResult.value.balanceCents;
+    } else if (chargeResult.status === 'rejected') {
       logServerError('api.ai-generate.charge', chargeResult.reason, {
         requestId,
+        operationId,
         userId: user.id,
         operation,
         costCents: finalCostCents,
@@ -3372,6 +3454,22 @@ export async function POST(request: NextRequest) {
       game_state: gameStateResult,
     });
   } catch (error) {
+    if (error instanceof AiRequestCancelledError) {
+      billingVoidReason = 'cancelled';
+      // The client is gone; this body is only for logs/proxies. 499 = client closed request.
+      return respond(
+        {
+          error: pickLocalized(
+            headerLangFallback,
+            'İstek iptal edildi. Rapido düşülmedi.',
+            'The request was cancelled. Rapido was not charged.',
+          ),
+          code: 'REQUEST_CANCELLED',
+        },
+        499,
+      );
+    }
+
     const typed = error as {
       isProviderFailure?: boolean;
       providerStatus?: number;
@@ -3380,6 +3478,12 @@ export async function POST(request: NextRequest) {
       message?: string;
     };
     if (typed?.isProviderFailure) {
+      const failureStage = typed.providerDebug?.failureStage;
+      billingVoidReason = failureStage === 'timeout'
+        ? 'timeout'
+        : failureStage === 'refusal'
+          ? 'provider_refusal'
+          : 'provider_failure';
       logServerError('api.ai-generate.provider', error, {
         requestId,
         ip,
@@ -3387,6 +3491,21 @@ export async function POST(request: NextRequest) {
         providerRequestId: typed.providerRequestId ?? null,
         providerDebug: typed.providerDebug ?? null,
       });
+
+      if (failureStage === 'refusal') {
+        return respond(
+          {
+            error: pickLocalized(
+              headerLangFallback,
+              'AI bu isteği güvenlik nedeniyle yanıtlamadı. Rapido düşülmedi.',
+              'The AI declined this request for safety reasons. Rapido was not charged.',
+            ),
+            code: 'AI_REFUSED',
+            requestId,
+          },
+          422,
+        );
+      }
 
       if (isProviderCreditRestrictionError(typed.providerStatus, typed.providerDebug)) {
         return respond(
@@ -3419,6 +3538,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    billingVoidReason = 'server_error';
     logServerError('api.ai-generate', error, {
       requestId,
       ip,
@@ -3433,6 +3553,12 @@ export async function POST(request: NextRequest) {
       },
       500,
     );
+  } finally {
+    // Every exit that did not settle (validation, invalid AI output, provider failure, timeout,
+    // cancel, insufficient top-up, crash) releases the reservation: zero Rapido for that operation.
+    if (billing?.isOpen) {
+      await billing.void(billingVoidReason);
+    }
   }
 }
 

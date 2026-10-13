@@ -312,6 +312,7 @@ Core AI jury analysis endpoint. Handles authentication, Rapido deduction, LLM pr
 ```json
 {
   "operation": "SINGLE_JURY" | "PREMIUM_RESCUE" | "REVISION_SAME" | "REVISION_DIFFERENT" | "MULTI_JURY" | "MULTI_JURY_REVISION" | "DEFENSE" | "AI_MENTOR" | "AUTO_CONCEPT" | "MATERIAL_BOARD" | "DRAWING_CONSISTENCY" | "CIRCULATION_ADJACENCY" | "ACCESSIBILITY_EGRESS" | "SKILL_ROADMAP",
+  "operationId": "optional idempotency key, 8-64 chars [A-Za-z0-9_-]; generated server-side when absent",
   "imageBase64": "base64_encoded_image_data",
   "imageMimeType": "image/jpeg" | "image/png" | "application/pdf",
   "params": {
@@ -338,7 +339,8 @@ Core AI jury analysis endpoint. Handles authentication, Rapido deduction, LLM pr
 4. Applies rate limits per bucket: `analysis` (paid jury/insight operations), `assist` (`AUTO_FILL_FORM`), `chat` (`AI_MENTOR`, `DEFENSE`).
 5. Constructs prompt based on `operation`, `params.harshness`, and persona IDs. Uploaded files are always sent to the model; earlier summaries of the same file are added as context.
 6. Calls the LLM through `lib/ai-completion.ts` with a strict JSON schema (`lib/ai-response-formats.ts`), a 100 s budget and one retry on transient provider errors.
-7. Deducts Rapido atomically (`lib/rapido-balance.ts`) and writes `game_state` in parallel, then returns the result. File-cache and memory-snippet rows are written after the response is sent.
+7. Right before the first LLM call, reserves the base cost for `operationId` in the append-only Rapido journal (`lib/rapido-ledger.ts`, atomic counter debit). Client disconnect (`request.signal`) aborts the provider call.
+8. An accepted result settles the reservation exactly once (extra cost such as `REVISION_DIFFERENT` or metered mentor tokens is debited atomically) and writes `game_state`. Every other exit — validation error, invalid/refused/truncated output, provider failure, timeout, cancellation — voids the reservation: zero Rapido. File-cache and memory-snippet rows are written after the response is sent.
 
 Design insight operations return `{ "critique": "string", "score": number }`. `ACCESSIBILITY_EGRESS` is an advisory visual pre-check, not a code-compliance certification. `SKILL_ROADMAP` combines `currentCritique` with the authenticated user's recent analysis-memory snippets.
 
@@ -359,7 +361,11 @@ Design insight operations return `{ "critique": "string", "score": number }`. `A
 **Errors:**
 - `401` — Invalid or missing JWT
 - `402` — Insufficient Rapido (`INSUFFICIENT_RAPIDO`)
+- `400` — Malformed `operationId` (`INVALID_OPERATION_ID`)
 - `403` — Premium required (`PREMIUM_REQUIRED`)
+- `409` — `operationId` already used: `OPERATION_ALREADY_COMPLETED` (settled, not charged again) or `OPERATION_IN_PROGRESS` (open or voided — send a new id)
+- `422` — Provider safety refusal (`AI_REFUSED`); Rapido is not charged
+- `499` — Client cancelled the request (`REQUEST_CANCELLED`); Rapido is not charged
 - `429` — Rate limit exceeded (`RATE_LIMITED`, includes `waitSeconds`)
 - `502` — AI provider failure (`AI_PROVIDER_FAILURE`) or unusable model output (`INVALID_AI_RESULT`); Rapido is not charged
 - `503` — `AI_API_KEY` not configured, or provider credits restricted (`AI_PROVIDER_CREDITS_REQUIRED`)
