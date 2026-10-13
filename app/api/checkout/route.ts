@@ -4,11 +4,15 @@ import { STRIPE_PRICES, StripeTierKey, resolveStripeTierForUser } from '@/lib/pr
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { getAuthenticatedUserFromRequest, getOrCreateProfile, getVerifiedEmail } from '@/lib/appwrite/server';
 import { ensureCommerceAppwriteResources, ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
-import { validatePromoForCheckout } from '@/lib/promo-codes';
+import { releaseCheckoutPromoReservation, reserveCheckoutPromo, validatePromoForCheckout } from '@/lib/promo-codes';
+import { logServerError } from '@/lib/logger';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 
-const MAX_RAPIDO_PURCHASE = 1000;
+const MAX_RAPIDO_PURCHASE = STRIPE_PRICES.MAX_RAPIDO_PURCHASE;
+// Checkout sessions holding an internal promo reservation expire sooner to free the slot.
+const PROMO_SESSION_TTL_SECONDS = 60 * 60;
+const BLOCKING_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing', 'past_due', 'unpaid', 'incomplete']);
 
 function readCleanEnv(name: string): string {
     const raw = process.env[name];
@@ -191,6 +195,31 @@ function resolveRapidoQuantity(raw: unknown): number | null {
     return raw;
 }
 
+/**
+ * True when the customer already has a subscription that would make a second one a
+ * duplicate. The Stripe customer is the source of truth; the profile is a fast pre-check.
+ */
+async function hasBlockingSubscription(
+    stripe: Stripe,
+    profile: { stripe_customer_id: string | null; stripe_subscription_id: string | null; subscription_status: string | null; is_premium: boolean },
+): Promise<boolean> {
+    if (
+        profile.is_premium &&
+        profile.stripe_subscription_id &&
+        BLOCKING_SUBSCRIPTION_STATUSES.has(profile.subscription_status ?? '')
+    ) {
+        return true;
+    }
+
+    if (!profile.stripe_customer_id) return false;
+    const subscriptions = await stripe.subscriptions.list({
+        customer: profile.stripe_customer_id,
+        status: 'all',
+        limit: 20,
+    });
+    return subscriptions.data.some((subscription) => BLOCKING_SUBSCRIPTION_STATUSES.has(subscription.status));
+}
+
 function applyDiscountToAmount(amountCents: number, promo: { rewardKind: string; rewardValue: number }): number {
     if (promo.rewardKind === 'discount_percent') {
         const percent = Math.max(0, Math.min(100, Math.trunc(promo.rewardValue)));
@@ -265,6 +294,21 @@ export async function POST(request: NextRequest) {
         });
         const tier = getTierConfig(tierKey);
         const stripe = getStripe();
+
+        if (mode !== 'rapido_pack' && await hasBlockingSubscription(stripe, profile)) {
+            const lang = getRequestLanguage(request);
+            return NextResponse.json(
+                {
+                    error: pickLocalized(
+                        lang,
+                        'Zaten aktif bir aboneliğin var. Planını abonelik yönetiminden değiştirebilirsin.',
+                        'You already have an active subscription. Manage your plan from the billing portal.',
+                    ),
+                    code: 'SUBSCRIPTION_ALREADY_ACTIVE',
+                },
+                { status: 409 },
+            );
+        }
         const internalPromo = normalizedPromoCode
             ? await validatePromoForCheckout({
                 code: normalizedPromoCode,
@@ -291,10 +335,12 @@ export async function POST(request: NextRequest) {
 
         let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[];
         let checkoutMode: Stripe.Checkout.SessionCreateParams.Mode;
+        let expectedUnitAmount = '';
 
         if (mode === 'rapido_pack') {
             if (internalDiscount) {
                 const unitAmount = applyDiscountToAmount(tier.RAPIDO_UNIT, internalDiscount);
+                expectedUnitAmount = String(unitAmount);
                 lineItems = [{
                     price_data: {
                         currency: tier.CURRENCY,
@@ -312,6 +358,7 @@ export async function POST(request: NextRequest) {
             if (internalDiscount) {
                 const baseAmount = cycle === 'monthly' ? tier.MONTHLY : tier.YEARLY;
                 const discountedAmount = applyDiscountToAmount(baseAmount, internalDiscount);
+                expectedUnitAmount = String(discountedAmount);
                 lineItems = [{
                     price_data: {
                         currency: tier.CURRENCY,
@@ -334,26 +381,58 @@ export async function POST(request: NextRequest) {
             process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
         );
 
-        const session = await stripe.checkout.sessions.create({
-            customer_email: user.email || undefined,
-            client_reference_id: user.id,
-            mode: checkoutMode,
-            line_items: lineItems,
-            ...(resolvedPromotionCode ? { discounts: [{ promotion_code: resolvedPromotionCode.id }] } : {}),
-            allow_promotion_codes: !resolvedPromotionCode && !internalDiscount,
-            success_url: `${origin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${origin}?checkout=cancelled`,
-            metadata: {
-                user_id: user.id,
-                checkout_mode: mode,
-                rapido_quantity: mode === 'rapido_pack' ? String(rapidoQuantity) : '0',
-                pricing_tier: tierKey,
-                pricing_email_source: profile.edu_verified && profile.edu_email ? 'edu_verified_email' : 'primary_email',
-                promo_code: internalDiscount?.code || resolvedPromotionCode?.code || '',
-                promotion_code_id: internalDiscount?.id || resolvedPromotionCode?.id || '',
-                promo_source: internalDiscount ? 'internal' : (resolvedPromotionCode ? 'stripe' : ''),
-            },
-        });
+        // Internal promo quota is consumed atomically here and given back if the session
+        // expires (checkout.session.expired webhook) or cannot be created.
+        let promoReservationId = '';
+        if (internalDiscount) {
+            const reservation = await reserveCheckoutPromo({ promo: internalDiscount, userId: user.id, mode });
+            if (!reservation.ok) {
+                return NextResponse.json({ error: reservation.error, code: reservation.code }, { status: 400 });
+            }
+            promoReservationId = reservation.reservation.reservationId;
+        }
+
+        let session: Stripe.Checkout.Session;
+        try {
+            session = await stripe.checkout.sessions.create({
+                // Reuse the known Stripe customer so subscriptions and payments stay on one record.
+                ...(profile.stripe_customer_id
+                    ? { customer: profile.stripe_customer_id }
+                    : { customer_email: user.email || undefined }),
+                client_reference_id: user.id,
+                mode: checkoutMode,
+                line_items: lineItems,
+                ...(resolvedPromotionCode ? { discounts: [{ promotion_code: resolvedPromotionCode.id }] } : {}),
+                allow_promotion_codes: !resolvedPromotionCode && !internalDiscount,
+                ...(promoReservationId
+                    ? { expires_at: Math.floor(Date.now() / 1000) + PROMO_SESSION_TTL_SECONDS }
+                    : {}),
+                // The success page only re-reads the profile; entitlements come from the webhook.
+                success_url: `${origin}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+                cancel_url: `${origin}?checkout=cancelled`,
+                metadata: {
+                    user_id: user.id,
+                    checkout_mode: mode,
+                    rapido_quantity: mode === 'rapido_pack' ? String(rapidoQuantity) : '0',
+                    pricing_tier: tierKey,
+                    pricing_email_source: profile.edu_verified && profile.edu_email ? 'edu_verified_email' : 'primary_email',
+                    promo_code: internalDiscount?.code || resolvedPromotionCode?.code || '',
+                    promotion_code_id: internalDiscount?.id || resolvedPromotionCode?.id || '',
+                    promo_source: internalDiscount ? 'internal' : (resolvedPromotionCode ? 'stripe' : ''),
+                    promo_reservation_id: promoReservationId,
+                    expected_unit_amount: expectedUnitAmount,
+                },
+            });
+        } catch (error) {
+            if (promoReservationId) {
+                try {
+                    await releaseCheckoutPromoReservation(promoReservationId);
+                } catch (releaseError) {
+                    logServerError('checkout.promo-release', releaseError, { promoReservationId });
+                }
+            }
+            throw error;
+        }
 
         return NextResponse.json({ url: session.url });
     } catch (error) {

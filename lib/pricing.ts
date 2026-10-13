@@ -130,4 +130,5 @@ export const STRIPE_PRICES = {
     },
     RAPIDO_PRODUCT_ID: 'prod_U6U8yxnUXmfYYw',
     MIN_RAPIDO_PURCHASE: 5,
+    MAX_RAPIDO_PURCHASE: 1000,
 } as const;

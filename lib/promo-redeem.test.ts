@@ -8,7 +8,13 @@ const mockCreditRapidoPens = jest.fn();
 
 jest.mock('node-appwrite', () => ({
   ID: { unique: jest.fn(() => 'row_1') },
-  Query: { equal: jest.fn(() => 'equal'), limit: jest.fn(() => 'limit') },
+  Query: {
+    equal: jest.fn(() => 'equal'),
+    limit: jest.fn(() => 'limit'),
+    isNull: jest.fn(() => 'isNull'),
+    notEqual: jest.fn(() => 'notEqual'),
+    or: jest.fn(() => 'or'),
+  },
 }));
 jest.mock('@/lib/appwrite/server', () => ({
   APPWRITE_DATABASE_ID: 'db',
