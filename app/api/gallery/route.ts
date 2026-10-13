@@ -13,6 +13,7 @@ import {
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError, logServerInfo } from '@/lib/logger';
+import { checkSubjectAllowed } from '@/lib/privacy/subject-guard';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { clampAspectRatio, deriveAspectRatio } from '@/lib/aspect-ratio';
 import { getRequestLanguage } from '@/lib/server-i18n';
@@ -183,6 +184,9 @@ export async function POST(request: NextRequest) {
     }
 
     const lang = getRequestLanguage(request);
+
+    const privacyDenial = await checkSubjectAllowed(user.id, 'new_uploads', lang);
+    if (privacyDenial) return NextResponse.json(privacyDenial.body, { status: privacyDenial.status });
 
     // Guests have no durable identity to manage or revoke a public post later.
     if (!user.email) {

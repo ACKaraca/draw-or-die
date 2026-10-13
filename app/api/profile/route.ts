@@ -10,6 +10,7 @@ import {
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
+import { checkSubjectAllowed } from '@/lib/privacy/subject-guard';
 import { normalizeLanguage } from '@/lib/i18n';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { ApiMessages } from '@/lib/locales/apiMessages';
@@ -33,6 +34,9 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: ApiMessages.signInRequired(lang) }, { status: 401 });
     }
+
+    const privacyDenial = await checkSubjectAllowed(user.id, 'account', lang);
+    if (privacyDenial) return NextResponse.json(privacyDenial.body, { status: privacyDenial.status });
 
     await ensureCoreAppwriteResources();
     let profile = await getOrCreateProfile(user);

@@ -32,10 +32,18 @@ jest.mock('@/lib/appwrite/resource-bootstrap', () => ({ ensureCoreAppwriteResour
 jest.mock('@/lib/registration-bonus', () => ({
   maybeGrantRegistrationBonus: (...args: unknown[]) => mockMaybeGrantRegistrationBonus(...args),
 }));
+jest.mock('@/lib/privacy/deletion-store', () => ({
+  createAppwriteDeletionStore: () => mockDeletionStore,
+}));
 jest.mock('@/lib/logger', () => ({ logServerError: jest.fn(), logServerInfo: jest.fn() }));
 
 import { GET } from '@/app/api/profile/route';
 import { normalizeProfileRow, type UserProfileRow } from '@/lib/appwrite/server';
+import { InMemoryDeletionStore } from '@/lib/privacy/__testing__/fake-privacy-port';
+import { createDeletionRequest } from '@/lib/privacy/deletion';
+import { resetSubjectGuardCache } from '@/lib/privacy/subject-guard';
+
+const mockDeletionStore = new InMemoryDeletionStore();
 
 const SECRET_ROW = {
   $id: 'u1',
@@ -95,5 +103,32 @@ describe('GET /api/profile serialization', () => {
     mockMaybeGrantRegistrationBonus.mockRejectedValueOnce(new Error('reward failure'));
     const response = await GET({ headers: new Headers() } as unknown as NextRequest);
     expect(response.status).toBe(200);
+  });
+});
+
+describe('GET /api/profile deletion tombstone', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDeletionStore.records.clear();
+    resetSubjectGuardCache();
+  });
+
+  it('does not create or read a profile for a subject with a deletion request', async () => {
+    await mockDeletionStore.save(createDeletionRequest('u1', null, new Date()));
+
+    const response = await GET({ headers: new Headers() } as unknown as NextRequest);
+
+    expect(response.status).toBe(410);
+    await expect(response.json()).resolves.toMatchObject({ code: 'ACCOUNT_DELETION_REQUESTED' });
+    expect(mockGetOrCreateProfile).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the deletion store is unavailable', async () => {
+    jest.spyOn(mockDeletionStore, 'get').mockRejectedValueOnce(new Error('down'));
+
+    const response = await GET({ headers: new Headers() } as unknown as NextRequest);
+
+    expect(response.status).toBe(503);
+    expect(mockGetOrCreateProfile).not.toHaveBeenCalled();
   });
 });
