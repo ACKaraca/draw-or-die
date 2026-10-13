@@ -69,6 +69,8 @@ function mockLookups(maxTotalUses: number | null) {
 
 describe('redeemPromoCode concurrency', () => {
   beforeEach(() => {
+    // Legacy counter path; the journaled path is covered in lib/rapido-ledger-runtime.test.ts.
+    process.env.RAPIDO_LEDGER_MODE = 'off';
     jest.clearAllMocks();
     mockClaimOnce.mockResolvedValue(true);
     mockIncrementRowColumn.mockResolvedValue({ used_count: 1 });
