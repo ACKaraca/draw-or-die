@@ -22,6 +22,7 @@ import type { AppUser } from '@/hooks/useAuth';
 import { normalizeCritiqueText } from '@/lib/critique';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
 import { deriveAspectRatio } from '@/lib/aspect-ratio';
+import { buildGalleryConsent } from '@/lib/gallery-consent';
 import { analysisKindLabel } from '@/lib/locales/analysisKindLabels';
 import type { DesignInsightOperation } from '@/lib/design-insights';
 
@@ -1096,10 +1097,20 @@ export function useAnalysis({
   const submitGalleryItem = useCallback(
     async (
       galleryType: 'HALL_OF_FAME' | 'WALL_OF_DEATH' | 'COMMUNITY',
-      options?: { autoApproved?: boolean; title?: string; juryQuote?: string; analysisKind?: string }
+      options?: { title?: string; juryQuote?: string; analysisKind?: string }
     ) => {
       if (!user?.id) {
         store.addToast(t('Galeriye eklemek için giriş yapmalısınız.', 'Sign in to add to the gallery.'), 'error');
+        return false;
+      }
+
+      // Guests cannot later manage or revoke a public post, so publishing needs a real account.
+      if (!user.email) {
+        store.addToast(
+          t('Galeride paylaşmak için hesap oluşturmalısın.', 'Create an account to publish to the gallery.'),
+          'error',
+        );
+        store.setIsAuthModalOpen(true);
         return false;
       }
 
@@ -1131,7 +1142,8 @@ export function useAnalysis({
             imageBase64: previewPayload.imageBase64,
             mimeType: previewPayload.mimeType,
             aspectRatio: previewPayload.aspectRatio,
-            autoApproved: Boolean(options?.autoApproved),
+            // Approval state is decided by the server; the client only records explicit consent.
+            consent: buildGalleryConsent(galleryType),
             analysisKind: options?.analysisKind ?? store.latestAnalysisKind ?? 'SINGLE_JURY',
           }),
         });
@@ -1147,7 +1159,7 @@ export function useAnalysis({
             rawBody: payload.rawBody,
           });
 
-          if (payload.code === 'COMMUNITY_MODERATION_REJECTED') {
+          if (payload.code === 'COMMUNITY_MODERATION_REJECTED' || payload.code === 'GALLERY_MODERATION_REJECTED') {
             store.addToast(
               payload.error || t('Paylaşım topluluk moderasyonundan geçemedi.', 'Share did not pass community moderation.'),
               'error',
@@ -1168,6 +1180,15 @@ export function useAnalysis({
               payload.error || t('Desteklenmeyen format. JPG/PNG/WEBP kullanın.', 'Unsupported format. Please use JPG/PNG/WEBP.'),
               'error',
             );
+            return false;
+          }
+
+          if (payload.code === 'GUEST_PUBLISH_BLOCKED') {
+            store.addToast(
+              payload.error || t('Galeride paylaşmak için hesap oluşturmalısın.', 'Create an account to publish to the gallery.'),
+              'error',
+            );
+            store.setIsAuthModalOpen(true);
             return false;
           }
 
@@ -1220,8 +1241,8 @@ export function useAnalysis({
         if (payload.moderationPendingReview) {
           store.addToast(
             t(
-              'Moderasyon servisi geçici olarak yanıt vermedi. Paylaşımın inceleme kuyruğuna alındı.',
-              'Moderation service is temporarily unavailable. Your share was queued for review.',
+              'Paylaşımın inceleme kuyruğuna alındı. Moderasyon tamamlanınca galeride görünecek.',
+              'Your share is queued for review. It will appear in the gallery after moderation.',
             ),
             'info',
             6500,
@@ -1296,7 +1317,6 @@ export function useAnalysis({
     }
 
     return submitGalleryItem('COMMUNITY', {
-      autoApproved: true,
       title,
       juryQuote: juryQuote.substring(0, 1200),
       analysisKind,
@@ -1439,7 +1459,7 @@ export function useAnalysis({
       if (!consent || store.galleryPlacement === 'NONE') return true;
 
       const galleryType = store.galleryPlacement as 'HALL_OF_FAME' | 'WALL_OF_DEATH';
-      const isSubmitted = await submitGalleryItem(galleryType, { autoApproved: true });
+      const isSubmitted = await submitGalleryItem(galleryType);
       if (!isSubmitted) {
         // Let the user retry instead of showing "allowed" for a submission that never happened.
         store.setGalleryConsent(null);

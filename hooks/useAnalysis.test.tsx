@@ -206,7 +206,7 @@ describe('useAnalysis', () => {
 
     const { result } = renderHook(() =>
       useAnalysis({
-        user: { id: 'user-1' } as never,
+        user: { id: 'user-1', email: 'user-1@example.com' } as never,
         profile: null,
         isPremiumUser: true,
         rapidoPens: 10,
@@ -222,6 +222,86 @@ describe('useAnalysis', () => {
     });
 
     expect(addToast).toHaveBeenCalledWith('Moderation blocked this share.', 'error');
+  });
+
+  describe('gallery publish consent', () => {
+    const okGalleryResponse = {
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({ submissionId: 'sub-1', moderationPendingReview: true }),
+    };
+
+    function mockPlacementStore(galleryPlacement: string) {
+      mockedStore.mockReturnValue({
+        imageBase64: 'data:image/png;base64,abc',
+        mimeType: 'image/png',
+        formData: { category: 'concept', topic: 'Test', site: '', concept: '', defense: '', harshness: 2, analysisLength: 'SHORT' },
+        latestAnalysisKind: 'SINGLE_JURY',
+        galleryPlacement,
+        critique: 'Test critique',
+        premiumData: null,
+        multiData: null,
+        addToast,
+        setStep,
+        setIsAuthModalOpen,
+        setGalleryConsent: jest.fn(),
+        setGalleryItems: jest.fn(),
+      } as never);
+    }
+
+    function renderWithUser(user: { id: string; email?: string | null }) {
+      return renderHook(() =>
+        useAnalysis({
+          user: user as never,
+          profile: null,
+          isPremiumUser: false,
+          rapidoPens: 10,
+          getJWT,
+          refreshProfile,
+          setProfile: jest.fn(),
+          preferredLanguage: 'tr',
+        }),
+      );
+    }
+
+    it('sends explicit consent and never a client approval flag when the user allows publishing', async () => {
+      mockPlacementStore('HALL_OF_FAME');
+      (global.fetch as jest.Mock).mockResolvedValue(okGalleryResponse);
+      const { result } = renderWithUser({ id: 'user-1', email: 'user-1@example.com' });
+
+      await act(async () => {
+        await result.current.handleGalleryConsent(true);
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body as string);
+      expect(body).not.toHaveProperty('autoApproved');
+      expect(body).not.toHaveProperty('status');
+      expect(body.consent).toEqual({ granted: true, version: expect.any(String), scope: 'HALL_OF_FAME' });
+    });
+
+    it('creates no gallery artifact when the user keeps the board private', async () => {
+      mockPlacementStore('HALL_OF_FAME');
+      const { result } = renderWithUser({ id: 'user-1', email: 'user-1@example.com' });
+
+      await act(async () => {
+        await result.current.handleGalleryConsent(false);
+      });
+
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('blocks guest publishing on the client before any request', async () => {
+      mockPlacementStore('WALL_OF_DEATH');
+      const { result } = renderWithUser({ id: 'guest-1', email: null });
+
+      await act(async () => {
+        await result.current.handleGalleryConsent(true);
+      });
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(setIsAuthModalOpen).toHaveBeenCalledWith(true);
+    });
   });
 
   describe('analysis flows', () => {
