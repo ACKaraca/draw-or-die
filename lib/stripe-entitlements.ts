@@ -11,6 +11,9 @@ import {
 } from '@/lib/appwrite/server';
 import { isAppwriteConflict, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import { logServerError } from '@/lib/logger';
+import { RAPIDO_PRECISION_SCALE } from '@/lib/rapido-cents';
+import { correct, grant } from '@/lib/rapido-ledger';
+import { withRapidoLedger } from '@/lib/rapido-ledger-runtime';
 
 /**
  * The single seam through which the Stripe webhook changes a user's value or access.
@@ -21,7 +24,9 @@ import { logServerError } from '@/lib/logger';
  *   any partial failure either finds the row (already applied) or re-runs the whole effect.
  * - `subscription_state` effects are idempotent "set to Stripe's current truth" writes.
  *
- * When the append-only Rapido ledger lands, only this module needs to switch over.
+ * - Every non-zero Rapido change is also journaled in the append-only Rapido ledger under the same
+ *   `sourceKey` (credits before the balance change, revocations after it — the ledger write-order
+ *   rule), so `reconcileShadowProjection` explains webhook-driven balance changes.
  */
 
 export type LedgerEntry = {
@@ -122,6 +127,53 @@ async function changeBalance(rowId: string, delta: number, transactionId?: strin
   }
 }
 
+/**
+ * Journal-only ledger entry for a webhook balance change; the counter itself is changed by the
+ * transaction below. Packs are `purchase`d value; allowance top-ups are `allowance` grants. A
+ * revocation (Stripe refund/dispute of a pack) is a `correction` approved by the verified Stripe
+ * event — the ledger `refund` kind returns settled AI spend to the user and does not fit.
+ */
+async function journalRapidoChange(
+  effect: Extract<EntitlementEffect, { kind: 'ledger' }>,
+  rapidoDelta: number,
+): Promise<void> {
+  const cents = Math.abs(rapidoDelta) * RAPIDO_PRECISION_SCALE;
+  const isPack = effect.entry.eventType === 'rapido_pack';
+  await withRapidoLedger({ userId: effect.userId, isJournalOnly: true }, (deps) =>
+    rapidoDelta > 0
+      ? grant(deps, {
+          userId: effect.userId,
+          sourceId: effect.sourceKey,
+          kind: isPack ? 'purchase' : 'grant',
+          bucket: isPack ? 'purchased' : 'allowance',
+          amountCents: cents,
+          reason: effect.entry.eventType,
+          actor: 'stripe_webhook',
+        })
+      : correct(deps, {
+          userId: effect.userId,
+          correctionId: effect.sourceKey,
+          bucket: 'purchased',
+          deltaCents: -cents,
+          reason: effect.entry.eventType,
+          actor: 'stripe_webhook',
+          approvedBy: 'stripe_verified_event',
+        }),
+  );
+}
+
+async function journalRevocation(
+  effect: Extract<EntitlementEffect, { kind: 'ledger' }>,
+  rapidoDelta: number,
+): Promise<void> {
+  try {
+    await journalRapidoChange(effect, rapidoDelta);
+  } catch (error) {
+    // The debit is durable; reconciliation surfaces the un-journaled revocation.
+    logServerError('stripe-entitlements.journal_revocation', error, { sourceKey: effect.sourceKey });
+  }
+}
+
 async function applyLedgerEffect(
   effect: Extract<EntitlementEffect, { kind: 'ledger' }>,
 ): Promise<EntitlementEffectResult> {
@@ -157,6 +209,9 @@ async function applyLedgerEffect(
     throw new Error(`Profile row id missing for ledger effect ${effect.sourceKey}`);
   }
 
+  // Idempotent per sourceKey: a retry after a crash past this point re-appends nothing.
+  if (rapidoDelta > 0) await journalRapidoChange(effect, rapidoDelta);
+
   let transactionId: string | null = null;
   try {
     const transaction = await tables.createTransaction({ ttl: 60 });
@@ -176,6 +231,7 @@ async function applyLedgerEffect(
       });
       await changeBalance(effect.profileRowId, rapidoDelta, transactionId);
       await tables.updateTransaction({ transactionId, commit: true });
+      if (rapidoDelta < 0) await journalRevocation(effect, rapidoDelta);
       return { applied: true, rapidoDelta, balanceAfter };
     } catch (error) {
       try {
@@ -217,6 +273,7 @@ async function applyLedgerEffect(
     throw error;
   }
 
+  if (rapidoDelta < 0) await journalRevocation(effect, rapidoDelta);
   return { applied: true, rapidoDelta, balanceAfter };
 }
 

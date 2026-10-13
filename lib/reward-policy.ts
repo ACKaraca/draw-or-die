@@ -11,6 +11,7 @@ import {
 import { claimOnce, releaseClaim } from '@/lib/idempotency';
 import { logServerError, logServerInfo } from '@/lib/logger';
 import { creditRapidoPens } from '@/lib/rapido-balance';
+import { creditRapidoThroughLedger } from '@/lib/rapido-ledger-runtime';
 import { RAPIDO_PRECISION_SCALE, toRapidoCents } from '@/lib/rapido-cents';
 
 /**
@@ -217,7 +218,7 @@ export async function grantRewardOnce(params: GrantRewardParams): Promise<Reward
 
   let balanceCents: number;
   try {
-    balanceCents = await creditRewardCents(userId, params.profile, amountCents);
+    balanceCents = await creditRewardCents(userId, params.profile, amountCents, idempotencyKey);
   } catch (error) {
     logServerError('reward.credit', error, logBase);
     await releaseClaim(idempotencyKey);
@@ -253,7 +254,19 @@ async function creditRewardCents(
   userId: string,
   profile: GrantRewardParams['profile'],
   amountCents: number,
+  sourceId: string,
 ): Promise<number> {
+  const journaled = await creditRapidoThroughLedger({
+    userId,
+    profileRowId: profile.row_id,
+    sourceId,
+    bucket: 'promotional',
+    amountCents,
+    knownBalanceCents: toRapidoCents(profile.rapido_pens, profile.rapido_fraction_cents),
+    reason: 'reward',
+  });
+  if (journaled !== null) return journaled;
+
   const wholeRapido = Math.trunc(amountCents / RAPIDO_PRECISION_SCALE);
   const fractionCents = amountCents % RAPIDO_PRECISION_SCALE;
   let pens = profile.rapido_pens;

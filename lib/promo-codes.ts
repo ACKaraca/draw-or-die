@@ -16,6 +16,8 @@ import { isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import { claimOnce, releaseClaim } from '@/lib/idempotency';
 import { logServerError } from '@/lib/logger';
 import { creditRapidoPens } from '@/lib/rapido-balance';
+import { RAPIDO_PRECISION_SCALE, toRapidoCents } from '@/lib/rapido-cents';
+import { creditRapidoThroughLedger } from '@/lib/rapido-ledger-runtime';
 
 export type PromoRewardKind = 'rapido' | 'premium' | 'discount_percent' | 'discount_amount';
 export type PromoTargetScope = 'any' | 'guest' | 'registered' | 'premium' | 'edu' | 'akdeniz';
@@ -405,6 +407,24 @@ async function releasePromoCounter(promoId: string): Promise<void> {
   }
 }
 
+/** Journaled promo credit (idempotent per redemption slot); `null` means use the legacy credit. */
+async function creditPromoThroughLedger(
+  slotKey: string,
+  profile: NormalizedUserProfile,
+  rapido: number,
+): Promise<number | null> {
+  const balanceCents = await creditRapidoThroughLedger({
+    userId: profile.id,
+    profileRowId: profile.row_id,
+    sourceId: slotKey,
+    bucket: 'promotional',
+    amountCents: rapido * RAPIDO_PRECISION_SCALE,
+    knownBalanceCents: toRapidoCents(profile.rapido_pens, profile.rapido_fraction_cents),
+    reason: 'promo_redemption',
+  });
+  return balanceCents === null ? null : Math.trunc(balanceCents / RAPIDO_PRECISION_SCALE);
+}
+
 export async function redeemPromoCode(options: {
   code: string;
   user: AppwriteAuthUser;
@@ -479,7 +499,8 @@ export async function redeemPromoCode(options: {
   try {
     if (promo.rewardKind === 'rapido') {
       rapidoDelta = rewardValue || 1;
-      const nextRapido = await creditRapidoPens(options.user.id, updatedProfile, rapidoDelta);
+      const journaled = await creditPromoThroughLedger(slotKey, updatedProfile, rapidoDelta);
+      const nextRapido = journaled ?? await creditRapidoPens(options.user.id, updatedProfile, rapidoDelta);
       updatedProfile = {
         ...updatedProfile,
         rapido_pens: nextRapido,
@@ -494,23 +515,8 @@ export async function redeemPromoCode(options: {
       rapidoDelta = Math.max(0, premiumBalance - currentBalance);
       const periodEnd = new Date(Date.now() + premiumDays * 24 * 60 * 60 * 1000).toISOString();
 
-      await updateProfileById(options.user.id, {
+      const premiumPatch = {
         is_premium: true,
-        rapido_pens: premiumBalance,
-        subscription_status: 'promo',
-        subscription_current_period_start: nowIso,
-        subscription_current_period_end: periodEnd,
-        subscription_cancel_at_period_end: false,
-        premium_started_at: nowIso,
-        premium_price_cents: 0,
-        premium_currency: promo.rewardCurrency || 'try',
-        premium_interval: promo.rewardInterval || 'promo',
-        premium_promo_code: promo.code,
-      });
-      updatedProfile = {
-        ...updatedProfile,
-        is_premium: true,
-        rapido_pens: premiumBalance,
         subscription_status: 'promo',
         subscription_current_period_start: nowIso,
         subscription_current_period_end: periodEnd,
@@ -521,6 +527,13 @@ export async function redeemPromoCode(options: {
         premium_interval: promo.rewardInterval || 'promo',
         premium_promo_code: promo.code,
       };
+      // Journaled top-up credits the counter atomically; legacy mode sets the balance directly.
+      const journaled = rapidoDelta > 0 ? await creditPromoThroughLedger(slotKey, updatedProfile, rapidoDelta) : null;
+      await updateProfileById(
+        options.user.id,
+        journaled === null ? { ...premiumPatch, rapido_pens: premiumBalance } : premiumPatch,
+      );
+      updatedProfile = { ...updatedProfile, ...premiumPatch, rapido_pens: journaled ?? premiumBalance };
       message = `${premiumDays} gün premium eklendi.`;
     }
   } catch (error) {

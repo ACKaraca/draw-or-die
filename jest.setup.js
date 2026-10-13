@@ -10,6 +10,9 @@ if (typeof global.fetch === 'undefined') {
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
 process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key';
 process.env.NEXT_PUBLIC_STRIPE_PUBLIC_KEY = 'pk_test_123';
+// Unit tests exercise the legacy Rapido counter path unless they opt into the journal
+// (`delete process.env.RAPIDO_LEDGER_MODE`, e.g. lib/rapido-ledger-runtime.test.ts).
+process.env.RAPIDO_LEDGER_MODE = 'off';
 
 // Mock Supabase
 jest.mock('@supabase/supabase-js', () => ({

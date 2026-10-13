@@ -4,21 +4,22 @@ import { logServerError, logServerInfo } from '@/lib/logger';
 import { createProfileRapidoCounter, deductRapidoCents } from '@/lib/rapido-balance';
 import {
   createAppwriteLedgerStore,
-  isLedgerTableMissing,
   isValidOperationId,
   reserve,
   settle,
   voidReservation,
   type RapidoLedgerDeps,
 } from '@/lib/rapido-ledger';
+import {
+  isRapidoLedgerUsable,
+  markRapidoLedgerUnavailableOn,
+  resetRapidoLedgerAvailabilityForTests,
+} from '@/lib/rapido-ledger-runtime';
 
 // Billing lifecycle for one /api/ai-generate operation: reserve before the AI call, settle only an
 // accepted result, void everything else. Falls back to the legacy "charge after success" path when
 // the ledger is switched off (RAPIDO_LEDGER_MODE=off), the profile row id is unknown, or the journal
 // table has not been provisioned yet.
-
-const LEDGER_UNAVAILABLE_COOLDOWN_MS = 5 * 60 * 1000;
-let ledgerUnavailableUntil = 0;
 
 export type AiBillingMode = 'ledger' | 'legacy';
 export type AiBillingShortfallPolicy = 'reject' | 'clamp';
@@ -33,10 +34,6 @@ export function resolveOperationId(raw: unknown): OperationIdResolution {
     return { ok: true, operationId: randomUUID(), isClientSupplied: false };
   }
   return isValidOperationId(raw) ? { ok: true, operationId: raw, isClientSupplied: true } : { ok: false };
-}
-
-function isLedgerSwitchedOn(): boolean {
-  return (process.env.RAPIDO_LEDGER_MODE ?? '').trim().toLowerCase() !== 'off';
 }
 
 export type AiBillingSettleOutcome =
@@ -161,7 +158,7 @@ export async function openAiBilling(params: {
     }),
   });
 
-  if (!params.profileRowId || !isLedgerSwitchedOn() || Date.now() < ledgerUnavailableUntil) {
+  if (!params.profileRowId || !isRapidoLedgerUsable()) {
     return legacy();
   }
 
@@ -179,11 +176,7 @@ export async function openAiBilling(params: {
       amountCents: params.amountCents,
     });
   } catch (error) {
-    if (isLedgerTableMissing(error)) {
-      ledgerUnavailableUntil = Date.now() + LEDGER_UNAVAILABLE_COOLDOWN_MS;
-      logServerInfo('rapido.ledger.unavailable', { requestId: params.requestId, fallback: 'legacy' });
-      return legacy();
-    }
+    if (markRapidoLedgerUnavailableOn(error, { requestId: params.requestId })) return legacy();
     throw error;
   }
 
@@ -207,5 +200,5 @@ export async function openAiBilling(params: {
 
 /** Test hook: forget a cached "ledger table missing" decision. */
 export function resetLedgerAvailabilityForTests(): void {
-  ledgerUnavailableUntil = 0;
+  resetRapidoLedgerAvailabilityForTests();
 }
