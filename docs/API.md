@@ -300,6 +300,46 @@ Collects user feedback.
 
 ---
 
+### GET /api/account/export
+
+Downloads the authenticated user's own data as JSON (`lib/privacy/export.ts`, format `dod-export/2026-10-13.v1`).
+
+- Auth: `Authorization: Bearer <appwrite_jwt>` (401 otherwise).
+- Rate limit: 3 / hour / user (429).
+- Response: `200` JSON with `Cache-Control: no-store` and `Content-Disposition: attachment`.
+  `{ formatVersion, generatedAt, account, data: { profile, analysisHistory, analysisFileSummaries, gallerySubmissions,
+  mentorChats, mentorMessages, aiMemory, billingEvents, promoRedemptions, feedback, confessions, peerReviewsWritten,
+  peerReviewOpenings, portfolios, portfolioPages }, manifest: [{ dataClass, count }], notStoredServerSide }`.
+- Each class copies an explicit column allowlist filtered on the owner column; OTP codes, Stripe ids, raw billing
+  metadata and other users' ids are never exported. Hidden AI memory (`visible_to_user=false`) is included.
+- Any collection failure or a class above 5,000 rows returns `503` — never a silently partial export.
+- Audit: `privacy.export.completed` server log with user id and per-class counts.
+
+---
+
+### GET/POST /api/account/delete
+
+Account deletion via the orchestrator in `lib/privacy/deletion.ts` (contract `dod-deletion/2026-10-13.v1`).
+
+- Auth: `Authorization: Bearer <appwrite_jwt>` (401 otherwise). POST rate limit: 5 / hour / user.
+- `POST` body must be exactly `{ "confirmation": "DELETE_MY_ACCOUNT" }` (400 otherwise).
+- `GET` returns the caller's current request receipt or `{ "request": null }`.
+- Response: `{ request: { status, contractVersion, requestedAt, completedAt, steps[], retentionExceptions[] } }`.
+  `200` when `status = completed`, `202` for `in_progress | partial | blocked`, `503` if the request store is unavailable.
+- Status: `requested → in_progress → partial | blocked → completed`. `partial` = a step failed (retry the POST, finished
+  steps are skipped); `blocked` = a step waits on a dependency or an owner action.
+- Required steps (each must report `done`): `storage_files`, `analysis_history`, `gallery_submissions`, `mentor_chats`,
+  `community_content`, `referral_promo`, `billing_records` (retained under legal hold, 10 y), `stripe_customer`
+  (`manual_required` whenever a Stripe customer exists — owner cancels/redacts in Stripe, then records the receipt with
+  `recordManualStepCompletion`), `profile`, `auth_account`.
+- Storage: server-only Appwrite table `deletion_requests` (env override `APPWRITE_TABLE_DELETION_REQUESTS_ID`), row id
+  derived from a SHA-256 subject hash; no raw user id, email or content is stored. The tombstone (deny scopes +
+  time-bounded retention exceptions) is written before the first destructive step and is never cleared.
+- Downstream deny: `isSubjectDenied(store, userId, scope)` for `ai_processing | memory_retrieval | new_uploads |
+  public_delivery | analytics_linkage`.
+
+---
+
 ## AI Generation Endpoint
 
 ### POST /api/ai-generate

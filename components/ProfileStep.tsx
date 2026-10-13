@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { account } from '@/lib/appwrite';
+import { AccountDataCard } from '@/components/AccountDataCard';
 import { EduVerificationCard } from '@/components/EduVerificationCard';
 import { PromoRedeemCard } from '@/components/PromoRedeemCard';
 import { ReferralCard } from '@/components/ReferralCard';
@@ -670,6 +671,8 @@ export function ProfileStep({ onUpgradeClick, onOpenRapidoShop, onOpenAccountDet
         )}
 
       </div>
+
+      <AccountDataCard />
     </motion.div>
   );
 }

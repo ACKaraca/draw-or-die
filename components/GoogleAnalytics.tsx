@@ -1,5 +1,7 @@
 import Script from 'next/script';
+
 import { COOKIE_CONSENT_STORAGE_KEY } from '@/lib/cookie-consent';
+import { buildAnalyticsBootstrapScript } from '@/lib/privacy/analytics-bootstrap';
 
 const DEFAULT_GA_DESTINATION_IDS = ['GT-5TCMV7L2', 'G-1159TDRHXC', 'G-53LBVDCHC6'] as const;
 
@@ -29,81 +31,20 @@ function resolveDestinationIds(): string[] {
   return [...DEFAULT_GA_DESTINATION_IDS];
 }
 
-const GA_DESTINATION_IDS = resolveDestinationIds();
-const GA_SCRIPT_ID = GA_DESTINATION_IDS.find((id) => id.startsWith('GT-')) ?? GA_DESTINATION_IDS[0] ?? '';
+const GA_BOOTSTRAP_SCRIPT = buildAnalyticsBootstrapScript({
+  consentStorageKey: COOKIE_CONSENT_STORAGE_KEY,
+  destinationIds: resolveDestinationIds(),
+});
 
+// The gtag library itself is injected by the bootstrap only after analytics consent is granted.
 export function GoogleAnalytics() {
-  if (!GA_SCRIPT_ID || GA_DESTINATION_IDS.length === 0) {
+  if (!GA_BOOTSTRAP_SCRIPT) {
     return null;
   }
 
-  const configCommands = GA_DESTINATION_IDS
-    .map((id) => `window.gtag('config', '${id}', { send_page_view: false, anonymize_ip: true });`)
-    .join('\n');
-
   return (
-    <>
-      <Script id="ga-consent-default" strategy="afterInteractive">
-        {`
-          window.dataLayer = window.dataLayer || [];
-          window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
-          var cookieConsentKey = '${COOKIE_CONSENT_STORAGE_KEY}';
-          var readConsentFromCookie = function() {
-            try {
-              var source = document.cookie || '';
-              if (!source) return null;
-              var prefix = encodeURIComponent(cookieConsentKey) + '=';
-              var parts = source.split(';');
-              for (var i = 0; i < parts.length; i += 1) {
-                var item = parts[i].trim();
-                if (item.indexOf(prefix) !== 0) continue;
-                var rawValue = item.slice(prefix.length);
-                return decodeURIComponent(rawValue || '');
-              }
-            } catch (error) {
-              return null;
-            }
-            return null;
-          };
-          window.gtag('consent', 'default', {
-            analytics_storage: 'denied',
-            ad_storage: 'denied',
-            ad_user_data: 'denied',
-            ad_personalization: 'denied',
-            wait_for_update: 500
-          });
-          var persistedConsent = null;
-          try {
-            persistedConsent = window.localStorage.getItem(cookieConsentKey);
-          } catch (error) {
-            // Privacy modes may block localStorage.
-          }
-          if (persistedConsent !== 'accepted' && persistedConsent !== 'rejected') {
-            persistedConsent = readConsentFromCookie();
-          }
-          if (persistedConsent === 'accepted' || persistedConsent === 'rejected') {
-            var consentValue = persistedConsent === 'accepted' ? 'granted' : 'denied';
-            window.gtag('consent', 'update', {
-              analytics_storage: consentValue,
-              ad_storage: consentValue,
-              ad_user_data: consentValue,
-              ad_personalization: consentValue
-            });
-            try {
-              window.localStorage.setItem(cookieConsentKey, persistedConsent);
-            } catch (error) {
-              // No-op.
-            }
-          }
-          window.gtag('js', new Date());
-          ${configCommands}
-        `}
-      </Script>
-      <Script
-        id="ga-library"
-        src={`https://www.googletagmanager.com/gtag/js?id=${GA_SCRIPT_ID}`}
-        strategy="afterInteractive"
-      />
-    </>
+    <Script id="ga-consent-default" strategy="afterInteractive">
+      {GA_BOOTSTRAP_SCRIPT}
+    </Script>
   );
 }

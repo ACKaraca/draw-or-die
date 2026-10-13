@@ -130,6 +130,7 @@ export const APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID = process.env.APPWRITE_TABLE
 export const APPWRITE_TABLE_PORTFOLIOS_ID = process.env.APPWRITE_TABLE_PORTFOLIOS_ID ?? 'portfolios';
 export const APPWRITE_TABLE_PORTFOLIO_PAGES_ID = process.env.APPWRITE_TABLE_PORTFOLIO_PAGES_ID ?? 'portfolio_pages';
 export const APPWRITE_TABLE_CONFESSIONS_ID = process.env.APPWRITE_TABLE_CONFESSIONS_ID ?? 'studio_confessions';
+export const APPWRITE_TABLE_DELETION_REQUESTS_ID = process.env.APPWRITE_TABLE_DELETION_REQUESTS_ID ?? 'deletion_requests';
 
 export function getAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS ?? '';
