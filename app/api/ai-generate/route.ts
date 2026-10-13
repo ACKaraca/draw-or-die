@@ -67,6 +67,7 @@ import {
   updateProfileRowById,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
+import { checkSubjectAllowed } from '@/lib/privacy/subject-guard';
 import {
   normalizeLanguage,
   pickLocalized,
@@ -1892,6 +1893,9 @@ export async function POST(request: NextRequest) {
         401,
       );
     }
+
+    const privacyDenial = await checkSubjectAllowed(user.id, 'ai_processing', headerLangFallback);
+    if (privacyDenial) return respond(privacyDenial.body, privacyDenial.status);
 
     await ensureCoreAppwriteResources();
 

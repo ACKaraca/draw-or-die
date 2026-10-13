@@ -4,6 +4,9 @@
 import { getAuthenticatedUserFromRequest } from '@/lib/appwrite/server';
 import { GALLERY_CONSENT_VERSION, buildGalleryConsent } from '@/lib/gallery-consent';
 import { PROMPT_INJECTION_CORPUS } from '@/__tests__/fixtures/prompt-injection-corpus';
+import { InMemoryDeletionStore } from '@/lib/privacy/__testing__/fake-privacy-port';
+import { createDeletionRequest } from '@/lib/privacy/deletion';
+import { resetSubjectGuardCache } from '@/lib/privacy/subject-guard';
 
 const mockCreateFile = jest.fn();
 const mockDeleteFile = jest.fn();
@@ -35,6 +38,11 @@ jest.mock('@/lib/appwrite/server', () => ({
     updateRow: mockUpdateRow,
     listRows: mockListRows,
   }),
+}));
+
+const mockDeletionStore = new InMemoryDeletionStore();
+jest.mock('@/lib/privacy/deletion-store', () => ({
+  createAppwriteDeletionStore: () => mockDeletionStore,
 }));
 
 jest.mock('@/lib/appwrite/resource-bootstrap', () => ({
@@ -104,6 +112,8 @@ describe('/api/gallery', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockDeletionStore.records.clear();
+    resetSubjectGuardCache();
     process.env.AI_API_KEY = 'test-key';
     global.fetch = fetchMock as unknown as typeof fetch;
     fetchMock.mockReset();
@@ -127,6 +137,30 @@ describe('/api/gallery', () => {
   afterAll(() => {
     global.fetch = originalFetch;
     delete process.env.AI_API_KEY;
+  });
+
+  describe('POST deletion tombstone', () => {
+    it('refuses to publish for a subject with a deletion request and writes nothing', async () => {
+      await mockDeletionStore.save(createDeletionRequest(OWNER.id, null, new Date()));
+      const { POST } = await loadRoute();
+
+      const response = await POST(createRequest({ body: publishBody() }));
+
+      expect(response.status).toBe(410);
+      await expect(response.json()).resolves.toMatchObject({ code: 'ACCOUNT_DELETION_REQUESTED' });
+      expect(mockCreateFile).not.toHaveBeenCalled();
+      expect(mockCreateRow).not.toHaveBeenCalled();
+    });
+
+    it('fails closed when the deletion store is unavailable', async () => {
+      jest.spyOn(mockDeletionStore, 'get').mockRejectedValueOnce(new Error('down'));
+      const { POST } = await loadRoute();
+
+      const response = await POST(createRequest({ body: publishBody() }));
+
+      expect(response.status).toBe(503);
+      expect(mockCreateFile).not.toHaveBeenCalled();
+    });
   });
 
   describe('POST consent boundary', () => {

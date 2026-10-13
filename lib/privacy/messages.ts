@@ -30,4 +30,25 @@ export const PrivacyApiMessages = {
       'Silme talebi şu anda işlenemedi. Birkaç dakika sonra tekrar deneyin; talebiniz kaydedildiyse kaldığı yerden devam eder.',
       'The deletion request could not be processed right now. Try again in a few minutes; a recorded request resumes where it stopped.',
     ),
+  accountDeletionRequested: (lang: SupportedLanguage) =>
+    pickLocalized(
+      lang,
+      'Bu hesap için silme talebi var; yeni veri işlenemez.',
+      'A deletion request exists for this account; no new data can be processed.',
+    ),
+  privacyCheckUnavailable: (lang: SupportedLanguage) =>
+    pickLocalized(
+      lang,
+      'Hesap durumu şu anda doğrulanamadı. Birkaç dakika sonra tekrar deneyin.',
+      'Your account status could not be verified right now. Try again in a few minutes.',
+    ),
+  forbidden: (lang: SupportedLanguage) => pickLocalized(lang, 'Bu işlem için yetkiniz yok.', 'You are not allowed to do this.'),
+  manualStepNotPending: (lang: SupportedLanguage) =>
+    pickLocalized(
+      lang,
+      'Bu silme adımı manuel onay beklemiyor.',
+      'This deletion step is not awaiting a manual receipt.',
+    ),
+  deletionRequestNotFound: (lang: SupportedLanguage) =>
+    pickLocalized(lang, 'Silme talebi bulunamadı.', 'Deletion request not found.'),
 } as const;
