@@ -1,3 +1,4 @@
+/** @jest-environment node */
 const mockGetOrCreateProfile = jest.fn();
 const mockGetFeatureFlag = jest.fn();
 const mockFindProfileByReferralCode = jest.fn();

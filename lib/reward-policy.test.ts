@@ -144,8 +144,6 @@ describe('resolveRewardIdentity', () => {
 
 describe('grantRewardOnce', () => {
   beforeEach(() => {
-    // Legacy counter path; the journaled path is covered in lib/rapido-ledger-runtime.test.ts.
-    process.env.RAPIDO_LEDGER_MODE = 'off';
     jest.clearAllMocks();
     mockLedger.clear();
     mockClaimOnce.mockImplementation(async (key: string) => {
