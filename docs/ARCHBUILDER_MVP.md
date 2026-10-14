@@ -1,5 +1,7 @@
 # ArchBuilder MVP
 
+> **Status: removed / historical.** The ArchBuilder runtime (`/api/archbuilder/*` routes, `lib/archbuilder/*`, and the `archbuilder_*` tables) was removed in commit `c68cee2`. `/archbuilder` is now a product preview page only. This document describes the removed design and is kept for reference; do not treat it as the current API or data contract.
+
 ArchBuilder is a progressive architectural planning flow that transforms project intent into structured planning outputs, then into drawing-ready geometry and export artifacts.
 
 ## User flow

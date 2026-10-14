@@ -1,5 +1,7 @@
 # ArchBuilder Exports
 
+> **Status: removed / historical.** The ArchBuilder runtime (`/api/archbuilder/*` routes, `lib/archbuilder/*`, and the `archbuilder_*` tables) was removed in commit `c68cee2`. `/archbuilder` is now a product preview page only. This document describes the removed design and is kept for reference; do not treat it as the current API or data contract.
+
 ArchBuilder export pipeline is currently DXF-first with explicit IFC gating.
 
 ## Supported formats
