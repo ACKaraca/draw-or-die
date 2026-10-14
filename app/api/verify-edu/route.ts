@@ -9,6 +9,8 @@ import {
   updateProfileById,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
+import { rejectIfHeld } from '@/lib/p0-holds';
+import { getRequestLanguage } from '@/lib/server-i18n';
 
 type AppwriteTarget = {
   $id: string;
@@ -166,6 +168,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
     }
 
+    // P0 hold: no code issue or verification while held. Codes are still stored in plaintext, so
+    // the verifier stays closed until the OTP-secrecy branch (DOD-9) replaces that format.
+    const heldResponse = await rejectIfHeld('edu_verification', getRequestLanguage(request));
+    if (heldResponse) return heldResponse;
+
     await ensureCoreAppwriteResources();
 
     const rl = await checkRateLimit(`verify-edu:${user.id}`, { maxRequests: 3, windowMs: 10 * 60 * 1000 });
@@ -213,7 +220,6 @@ export async function POST(request: NextRequest) {
         : `Dogrulama kodu olusturuldu. ${email} icin manuel kod girerek devam edebilirsiniz.`,
       requiresManualEntry: !deliveredByEmail,
       delivery: deliveredByEmail ? 'email' : 'manual',
-      ...(process.env.NODE_ENV !== 'production' && !deliveredByEmail ? { devOtp: otp } : {}),
     });
   } catch (error) {
     console.error('Verify edu error:', error);
@@ -232,6 +238,11 @@ export async function PUT(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
     }
+
+    // P0 hold: no code issue or verification while held. Codes are still stored in plaintext, so
+    // the verifier stays closed until the OTP-secrecy branch (DOD-9) replaces that format.
+    const heldResponse = await rejectIfHeld('edu_verification', getRequestLanguage(request));
+    if (heldResponse) return heldResponse;
 
     await ensureCoreAppwriteResources();
 

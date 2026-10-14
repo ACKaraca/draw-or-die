@@ -300,6 +300,13 @@ Collects user feedback.
 
 ---
 
+## Containment holds (HTTP 503)
+
+While a P0 containment hold is active, the guarded routes respond `503` with
+`{ "error": "...", "code": "CAPABILITY_ON_HOLD", "hold": "<id>" }` (localized message, `Retry-After: 300`).
+Affected routes and hold ids are listed in [ENVIRONMENT.md](./ENVIRONMENT.md#p0-containment-holds). Clients must
+treat this as a temporary, truthful unavailable state; no data or balance is changed.
+
 ## AI Generation Endpoint
 
 ### POST /api/ai-generate

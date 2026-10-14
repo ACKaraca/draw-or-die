@@ -406,13 +406,19 @@ async function runBootstrapStepsInParallel(
   if (failure) throw failure.reason;
 }
 
+// P0 containment: every file mutation goes through server routes with the admin client, so
+// signed-in users get no direct create/update/delete on the bucket. Public read is unchanged.
+const BUCKET_CLIENT_MUTATION_ACTIONS = ['create(', 'update(', 'delete('];
+
+function hasClientMutationPermission(permissions: unknown): boolean {
+  if (!Array.isArray(permissions)) return false;
+  return permissions.some((permission) =>
+    typeof permission === 'string' && BUCKET_CLIENT_MUTATION_ACTIONS.some((action) => permission.startsWith(action)),
+  );
+}
+
 async function ensureBucket(storage: Storage): Promise<void> {
-  const desiredPermissions = [
-    Permission.read(Role.any()),
-    Permission.create(Role.users()),
-    Permission.update(Role.users()),
-    Permission.delete(Role.users()),
-  ];
+  const desiredPermissions = [Permission.read(Role.any())];
   const desiredMaxFileSize = 35 * 1024 * 1024;
   const desiredExtensions = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
 
@@ -427,7 +433,8 @@ async function ensureBucket(storage: Storage): Promise<void> {
       (typeof existing.maximumFileSize === 'number' ? existing.maximumFileSize : 0) < desiredMaxFileSize
       || missingExtension
       || existing.enabled !== true
-      || existing.fileSecurity !== false;
+      || existing.fileSecurity !== false
+      || hasClientMutationPermission(existing.$permissions);
 
     if (!needsUpdate) {
       return;
@@ -436,9 +443,7 @@ async function ensureBucket(storage: Storage): Promise<void> {
     await storage.updateBucket({
       bucketId: APPWRITE_BUCKET_GALLERY_ID,
       name: existing.name || 'Gallery',
-      permissions: Array.isArray(existing.$permissions) && existing.$permissions.length > 0
-        ? existing.$permissions
-        : desiredPermissions,
+      permissions: desiredPermissions,
       fileSecurity: false,
       enabled: true,
       maximumFileSize: desiredMaxFileSize,

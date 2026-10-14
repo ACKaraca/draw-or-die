@@ -19,7 +19,6 @@ type VerifyEduStartResponse = {
   error?: string;
   requiresManualEntry?: boolean;
   delivery?: 'email' | 'manual';
-  devOtp?: string;
 };
 
 type VerifyEduConfirmResponse = {
@@ -42,7 +41,6 @@ export function EduVerificationCard({
   const [loadingConfirm, setLoadingConfirm] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [devOtpHint, setDevOtpHint] = useState<string | null>(null);
 
   const pendingInfo = useMemo(() => {
     if (!pendingEduEmail) return null;
@@ -59,7 +57,6 @@ export function EduVerificationCard({
     setLoadingStart(true);
     setError(null);
     setMessage(null);
-    setDevOtpHint(null);
 
     try {
       const jwt = await account.createJWT();
@@ -78,9 +75,6 @@ export function EduVerificationCard({
       }
 
       setMessage(payload.message || pickLocalized(language, 'Doğrulama kodu oluşturuldu.', 'Verification code created.'));
-      if (payload.devOtp) {
-        setDevOtpHint(payload.devOtp);
-      }
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -122,7 +116,6 @@ export function EduVerificationCard({
       setMessage(payload.message || pickLocalized(language, 'edu.tr email doğrulandı.', 'edu.tr email verified.'));
       setCode('');
       setEmail('');
-      setDevOtpHint(null);
       await onVerified();
     } catch (requestError) {
       setError(
@@ -228,7 +221,6 @@ export function EduVerificationCard({
 
       {message && <p className="mt-3 text-xs text-emerald-200">{message}</p>}
       {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
-      {devOtpHint && <p className="mt-3 text-xs text-amber-300">{pickLocalized(language, 'Geliştirme modu kodu:', 'Development mode code:')} {devOtpHint}</p>}
     </div>
   );
 }

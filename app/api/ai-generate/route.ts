@@ -6,6 +6,8 @@ import { createHash, randomUUID } from 'crypto';
 import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limit';
 import { RAPIDO_COSTS } from '@/lib/pricing';
 import { isMultiJuryPromoEnabled } from '@/lib/multi-jury-promo';
+import { hasUnsupportedConfiguredModel } from '@/lib/ai-model-policy';
+import { holdUnavailablePayload, isHoldActive } from '@/lib/p0-holds';
 import type { Badge } from '@/types';
 import { logServerError } from '@/lib/logger';
 import {
@@ -2040,6 +2042,18 @@ export async function POST(request: NextRequest) {
         : (costMap[operation] ?? 2);
     const effectiveBaseCost = operation === 'DEFENSE' && defenseTurnCount > 0 ? 0 : baseCost;
     const requiredBaseCostCents = Math.max(0, Math.round(effectiveBaseCost * RAPIDO_PRECISION_SCALE));
+
+    // P0 hold: every operation except the free form helper can bill the wallet (DEFENSE follow-up
+    // turns and AI_MENTOR token billing included), so none may run while the wallet path or the
+    // configured model is unverified. Rejected before any charge or provider call.
+    if (!ZERO_COST_OPERATIONS.has(operation)) {
+      const heldBy = (await isHoldActive('paid_ai_wallet'))
+        ? 'paid_ai_wallet'
+        : ((await isHoldActive('ai_model')) || hasUnsupportedConfiguredModel() ? 'ai_model' : null);
+      if (heldBy) {
+        return respond(holdUnavailablePayload(heldBy, requestLanguage), 503);
+      }
+    }
 
     if (currentRapidoCents < requiredBaseCostCents) {
       return respond(

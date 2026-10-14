@@ -13,6 +13,7 @@ import {
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
+import { rejectIfHeld } from '@/lib/p0-holds';
 
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
@@ -41,6 +42,10 @@ export async function GET(request: NextRequest) {
         { status: 401 },
       );
     }
+
+    // P0 hold: the list delivers other users' gallery records, which carry no consent marker yet.
+    const heldResponse = await rejectIfHeld('gallery_public', lang);
+    if (heldResponse) return heldResponse;
 
     const { searchParams } = new URL(request.url);
     const pageRaw = Number(searchParams.get('page') ?? '1');

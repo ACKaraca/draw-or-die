@@ -71,6 +71,44 @@ These values are controlled by CI/CD and are not application secrets.
 
 Appwrite's injected `APPWRITE_VCS_COMMIT_HASH` and `APPWRITE_SITE_DEPLOYMENT` values take precedence when present.
 
+## P0 Containment Holds
+
+Risky capabilities are blocked server-side until a release record exists in the Appwrite `feature_flags`
+table (`lib/p0-holds.ts`). A missing row, an unreadable table, malformed JSON or a record for another
+environment keeps the hold **active** (fail-closed). Holds are restrictive and reversible; they never delete
+data or change balances. Re-enable a hold only after its permanent branch passes (see
+`docs/enterprise-audit/P0-CONTAINMENT-RUNBOOK.md`).
+
+| Hold id (`flag_key` = `p0_hold_<id>`) | Blocks while active | Still available |
+| --- | --- | --- |
+| `checkout` | `POST /api/checkout` | portal, billing history, cancellation, support |
+| `stripe_effects` | Stripe webhook side effects (event answered `503`, not recorded, so Stripe retries/replays it) | signature verification |
+| `rewards` | `POST /api/referral/apply`, `POST /api/promos/redeem`, early-registration bonus | existing balances |
+| `edu_verification` | `POST`/`PUT /api/verify-edu` | account access |
+| `gallery_public` | public gallery list, `POST /api/gallery`, `RESHARE`, peer-review list/open | owner list (`mine=1`), `ARCHIVE` |
+| `paid_ai_wallet` | every `/api/ai-generate` operation except `AUTO_FILL_FORM` | history, free form helper |
+| `ai_model` | same as above (also blocked while `AI_MODEL`/`AI_MODEL_LOW_COST` is a preview/experimental id) | — |
+
+Release record (row `flag_key: "p0_hold_<id>"`, `enabled: false`, `value_json` below). Every field is
+required and `environment` must equal `VERCEL_ENV` (or `NODE_ENV` when unset):
+
+```json
+{
+  "state": "released",
+  "owner": "incident owner",
+  "reason": "why the hold ends",
+  "environment": "production",
+  "configVersion": "2026-10-14.1",
+  "startedAt": "2026-10-14T09:00:00Z",
+  "reviewAt": "2026-10-15T09:00:00Z",
+  "reenableGate": "permanent branch accepted and verified"
+}
+```
+
+To re-hold, set `enabled: true` or delete the row; the change reaches every instance within ~15 seconds.
+Direct client create/update/delete on the gallery bucket is removed permanently by
+`ensureCoreAppwriteResources` (all file writes already go through server routes).
+
 ## Security Rules
 
 1. **Never** store API keys in source code, commits, chat messages, or screen shares.

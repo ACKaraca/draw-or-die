@@ -3,6 +3,8 @@ import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwr
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { applyReferralReward } from '@/lib/referral';
 import { logServerError } from '@/lib/logger';
+import { rejectIfHeld } from '@/lib/p0-holds';
+import { getRequestLanguage } from '@/lib/server-i18n';
 
 // POST /api/referral/apply
 // Email doğrulaması tamamlandıktan sonra çağrılır.
@@ -13,6 +15,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
     }
+
+    // P0 hold: no new referral grants while rewards are held.
+    const heldResponse = await rejectIfHeld('rewards', getRequestLanguage(request));
+    if (heldResponse) return heldResponse;
 
     await ensureCoreAppwriteResources();
     await getOrCreateProfile(user);

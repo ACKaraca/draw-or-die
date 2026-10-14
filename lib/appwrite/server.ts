@@ -718,7 +718,10 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
   const isAnonymous = !user.email;
   let earlyRegistrationBonus = 0;
 
-  if (!isAnonymous) {
+  // P0 hold: the early-registration bonus is a grant, so it stops while rewards are held.
+  // Imported lazily because lib/p0-holds reads its flags through this module.
+  const { isHoldActive } = await import('@/lib/p0-holds');
+  if (!isAnonymous && !(await isHoldActive('rewards'))) {
     try {
       const registeredCount = await tables.listRows<UserProfileRow>({
         databaseId: APPWRITE_DATABASE_ID,

@@ -23,6 +23,7 @@ import {
 } from '@/lib/ai-provider';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
+import { rejectIfHeld } from '@/lib/p0-holds';
 
 const MAX_PAGE_SIZE = 100;
 const MAX_STORAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -222,6 +223,13 @@ export async function GET(request: NextRequest) {
     const mine = params.get('mine') === '1' || params.get('mine') === 'true';
     const requestedStatus = params.get('status');
 
+    // P0 hold: gallery rows carry no consent marker yet, so public delivery stops entirely.
+    // The owner's own list (`mine`) stays available.
+    if (!mine) {
+      const heldResponse = await rejectIfHeld('gallery_public', getRequestLanguage(request));
+      if (heldResponse) return heldResponse;
+    }
+
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(MAX_PAGE_SIZE, limitRaw)) : 15;
     const offset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : 0;
 
@@ -299,6 +307,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
     }
+
+    // P0 hold: no new gallery writes (auto-approved or public) without a consent marker.
+    const heldResponse = await rejectIfHeld('gallery_public', getRequestLanguage(request));
+    if (heldResponse) return heldResponse;
 
     await ensureCoreAppwriteResources();
 
@@ -514,6 +526,12 @@ export async function PATCH(request: NextRequest) {
 
     if (!submissionId || (action !== 'ARCHIVE' && action !== 'RESHARE')) {
       return NextResponse.json({ error: 'Geçersiz galeri güncelleme isteği.' }, { status: 400 });
+    }
+
+    // P0 hold: re-publishing stops; ARCHIVE stays available so owners can always withdraw a share.
+    if (action === 'RESHARE') {
+      const heldResponse = await rejectIfHeld('gallery_public', getRequestLanguage(request));
+      if (heldResponse) return heldResponse;
     }
 
     const tables = getAdminTables();

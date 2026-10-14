@@ -172,6 +172,43 @@ describe('ensureCoreAppwriteResources', () => {
     );
   });
 
+  it('strips direct client create/update/delete from an existing gallery bucket', async () => {
+    resetMocks();
+    mockStorage.getBucket = jest.fn().mockResolvedValue({
+      name: 'Gallery',
+      allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      maximumFileSize: 35 * 1024 * 1024,
+      enabled: true,
+      fileSecurity: false,
+      $permissions: ['read("any")', 'create("users")', 'update("users")', 'delete("users")'],
+    });
+
+    const { ensureCoreAppwriteResources } = await loadBootstrap();
+    await ensureCoreAppwriteResources();
+
+    expect(mockStorage.updateBucket).toHaveBeenCalledTimes(1);
+    expect(mockStorage.updateBucket).toHaveBeenCalledWith(
+      expect.objectContaining({ permissions: ['read'] }),
+    );
+  });
+
+  it('leaves a read-only gallery bucket untouched', async () => {
+    resetMocks();
+    mockStorage.getBucket = jest.fn().mockResolvedValue({
+      name: 'Gallery',
+      allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+      maximumFileSize: 35 * 1024 * 1024,
+      enabled: true,
+      fileSecurity: false,
+      $permissions: ['read("any")'],
+    });
+
+    const { ensureCoreAppwriteResources } = await loadBootstrap();
+    await ensureCoreAppwriteResources();
+
+    expect(mockStorage.updateBucket).not.toHaveBeenCalled();
+  });
+
   it('reuses a successful check instead of re-validating on the next request', async () => {
     resetMocks();
     const { ensureCoreAppwriteResources } = await loadBootstrap();

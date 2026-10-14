@@ -17,6 +17,7 @@ import { toRapidoCents, splitRapidoCents, toRapidoDisplay, rapidoUnitsToCents } 
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
 import { logServerError } from '@/lib/logger';
+import { rejectIfHeld } from '@/lib/p0-holds';
 
 export async function POST(request: NextRequest) {
   const lang = getRequestLanguage(request);
@@ -31,6 +32,10 @@ export async function POST(request: NextRequest) {
         { status: 401 },
       );
     }
+
+    // P0 hold: opening a peer review exposes the submission to other users.
+    const heldResponse = await rejectIfHeld('gallery_public', lang);
+    if (heldResponse) return heldResponse;
 
     // Anonymous users (no email) cannot open a peer review
     if (!user.email || !user.email.trim()) {

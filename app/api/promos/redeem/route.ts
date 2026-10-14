@@ -4,6 +4,8 @@ import { ensureCommerceAppwriteResources } from '@/lib/appwrite/resource-bootstr
 import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwrite/server';
 import { redeemPromoCode } from '@/lib/promo-codes';
 import { logServerError } from '@/lib/logger';
+import { rejectIfHeld } from '@/lib/p0-holds';
+import { getRequestLanguage } from '@/lib/server-i18n';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,6 +13,10 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
     }
+
+    // P0 hold: promo redemption grants Rapido/premium, so it stops with the other rewards.
+    const heldResponse = await rejectIfHeld('rewards', getRequestLanguage(request));
+    if (heldResponse) return heldResponse;
 
     await ensureCommerceAppwriteResources();
 

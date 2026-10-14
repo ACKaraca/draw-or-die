@@ -7,6 +7,7 @@ import { ensureCommerceAppwriteResources, ensureCoreAppwriteResources } from '@/
 import { validatePromoForCheckout } from '@/lib/promo-codes';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { pickLocalized } from '@/lib/i18n';
+import { rejectIfHeld } from '@/lib/p0-holds';
 
 const MAX_RAPIDO_PURCHASE = 1000;
 
@@ -206,6 +207,10 @@ function applyDiscountToAmount(amountCents: number, promo: { rewardKind: string;
 
 export async function POST(request: NextRequest) {
     try {
+        // P0 hold: no new Checkout while held. Portal, cancellation and refunds use other routes.
+        const heldResponse = await rejectIfHeld('checkout', getRequestLanguage(request));
+        if (heldResponse) return heldResponse;
+
         if (!process.env.STRIPE_SECRET_KEY) {
             return NextResponse.json(
                 { error: 'Stripe yapılandırması eksik. Lütfen destekle iletişime geçin.' },

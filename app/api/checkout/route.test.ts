@@ -2,12 +2,29 @@ import type Stripe from 'stripe';
 import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwrite/server';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { validatePromoForCheckout } from '@/lib/promo-codes';
+import { resetHoldCache } from '@/lib/p0-holds';
 
 const mockCreateSession = jest.fn();
 const mockListPromotionCodes = jest.fn();
 const mockRetrievePromotionCode = jest.fn();
 const mockEnsureCoreAppwriteResources = jest.fn();
 const mockEnsureCommerceAppwriteResources = jest.fn();
+const mockGetFeatureFlag = jest.fn();
+
+// A hold only counts as released with a complete record for the current environment.
+const RELEASED_HOLD_ROW = {
+  enabled: false,
+  value_json: JSON.stringify({
+    state: 'released',
+    owner: 'owner',
+    reason: 'test',
+    environment: process.env.NODE_ENV,
+    configVersion: 'v1',
+    startedAt: '2026-01-01',
+    reviewAt: '2026-01-02',
+    reenableGate: 'DOD-4',
+  }),
+};
 
 jest.mock('next/server', () => ({
   NextResponse: {
@@ -21,6 +38,7 @@ jest.mock('next/server', () => ({
 jest.mock('@/lib/appwrite/server', () => ({
   getAuthenticatedUserFromRequest: jest.fn(),
   getOrCreateProfile: jest.fn(),
+  getFeatureFlag: (...args: unknown[]) => mockGetFeatureFlag(...args),
   getVerifiedEmail: (user: { email: string | null; emailVerified?: boolean }) =>
     (user.emailVerified === true && user.email ? user.email : null),
 }));
@@ -86,6 +104,8 @@ function createRequest(body: unknown, headers?: Record<string, string>) {
 describe('POST /api/checkout', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    resetHoldCache();
+    mockGetFeatureFlag.mockResolvedValue(RELEASED_HOLD_ROW);
     process.env.STRIPE_SECRET_KEY = 'sk_test_checkout_secret';
     process.env.NEXT_PUBLIC_APP_URL = 'https://app.drawor-die.com';
     mockEnsureCoreAppwriteResources.mockResolvedValue(undefined);
@@ -151,6 +171,30 @@ describe('POST /api/checkout', () => {
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({ error: expect.stringContaining('Stripe') })
     );
+  });
+
+  it('rejects new Checkout with 503 while the checkout hold is active', async () => {
+    mockGetFeatureFlag.mockResolvedValue(null);
+    const POST = await loadRoute();
+
+    const response = await POST(createRequest({ mode: 'premium_monthly' }) as never);
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual(
+      expect.objectContaining({ code: 'CAPABILITY_ON_HOLD', hold: 'checkout' }),
+    );
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps the checkout hold active when the flag table cannot be read', async () => {
+    mockGetFeatureFlag.mockRejectedValue(new Error('appwrite down'));
+    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const POST = await loadRoute();
+
+    const response = await POST(createRequest({ mode: 'rapido_pack', quantity: 5 }) as never);
+
+    expect(response.status).toBe(503);
+    expect(mockCreateSession).not.toHaveBeenCalled();
   });
 
   it('returns 401 when the user is not authenticated', async () => {

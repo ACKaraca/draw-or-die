@@ -14,7 +14,8 @@ import {
     type UserProfileRow,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
-import { logServerError } from '@/lib/logger';
+import { logServerError, logServerInfo } from '@/lib/logger';
+import { isHoldActive } from '@/lib/p0-holds';
 import { releaseStripeEvent } from '@/lib/stripe-event-ledger';
 
 let _stripe: Stripe | null = null;
@@ -103,6 +104,17 @@ export async function POST(request: NextRequest) {
         const message = err instanceof Error ? err.message : 'unknown error';
         console.error(`Webhook signature verification failed: ${message}`);
         return NextResponse.json({ error: 'Webhook signature verification failed' }, { status: 400 });
+    }
+
+    // P0 hold: the signed event is verified but no side effect runs and it is NOT recorded as
+    // processed. A non-2xx makes Stripe retry it (and it stays replayable from the Stripe
+    // dashboard), so nothing is lost while effects are paused.
+    if (await isHoldActive('stripe_effects')) {
+        logServerInfo('webhook.stripe.held', { eventId: event.id, eventType: event.type });
+        return NextResponse.json(
+            { error: 'Stripe event processing is paused', code: 'CAPABILITY_ON_HOLD' },
+            { status: 503, headers: { 'Retry-After': '300' } },
+        );
     }
 
     // Idempotency: skip already-processed events

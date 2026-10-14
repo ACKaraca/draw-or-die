@@ -9,6 +9,22 @@ const mockCreateRow = jest.fn();
 const mockIncrementRowColumn = jest.fn();
 const mockListRows = jest.fn();
 const mockDeleteRow = jest.fn();
+const mockGetFeatureFlag = jest.fn();
+
+// A hold only counts as released with a complete record for the current environment.
+const RELEASED_HOLD_ROW = {
+  enabled: false,
+  value_json: JSON.stringify({
+    state: 'released',
+    owner: 'owner',
+    reason: 'test',
+    environment: process.env.NODE_ENV,
+    configVersion: 'v1',
+    startedAt: '2026-01-01',
+    reviewAt: '2026-01-02',
+    reenableGate: 'DOD-4',
+  }),
+};
 
 jest.mock('node-appwrite', () => ({
   Query: {
@@ -52,6 +68,7 @@ jest.mock('@/lib/appwrite/server', () => ({
   APPWRITE_TABLE_PROFILES_ID: 'profiles',
   APPWRITE_TABLE_STRIPE_EVENTS_ID: 'stripe_events',
   markStripeEventProcessed: (...args: unknown[]) => mockMarkStripeEventProcessed(...args),
+  getFeatureFlag: (...args: unknown[]) => mockGetFeatureFlag(...args),
   getOrCreateProfile: (...args: unknown[]) => mockGetOrCreateProfile(...args),
   updateProfileById: (...args: unknown[]) => mockUpdateProfileById(...args),
   findProfileBySubscriptionId: (...args: unknown[]) => mockFindProfileBySubscriptionId(...args),
@@ -89,6 +106,7 @@ describe('POST /api/webhook/stripe', () => {
     process.env.STRIPE_SECRET_KEY = 'STRIPE_TEST_SECRET_KEY_MOCK';
     process.env.STRIPE_WEBHOOK_SECRET = 'whsec_123';
     mockEnsureCoreAppwriteResources.mockResolvedValue(undefined);
+    mockGetFeatureFlag.mockResolvedValue(RELEASED_HOLD_ROW);
     mockMarkStripeEventProcessed.mockResolvedValue(false);
     mockRetrieveSubscription.mockResolvedValue({
       id: 'sub_123',
@@ -117,6 +135,39 @@ describe('POST /api/webhook/stripe', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Missing stripe-signature header',
     });
+  });
+
+  it('keeps a signed event retryable and runs no side effect while the stripe_effects hold is active', async () => {
+    mockGetFeatureFlag.mockResolvedValue(null);
+    jest.spyOn(console, 'info').mockImplementation(() => undefined);
+    mockConstructEvent.mockReturnValue({
+      id: 'evt_held',
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          id: 'cs_held',
+          metadata: { user_id: 'user-1', checkout_mode: 'rapido_pack', rapido_quantity: '5' },
+        },
+      },
+    });
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'sig') as never);
+
+    expect(response.status).toBe(503);
+    expect(mockMarkStripeEventProcessed).not.toHaveBeenCalled();
+    expect(mockGetOrCreateProfile).not.toHaveBeenCalled();
+    expect(mockIncrementRowColumn).not.toHaveBeenCalled();
+    expect(mockUpdateProfileById).not.toHaveBeenCalled();
+  });
+
+  it('still rejects a bad signature with 400 while the hold is active', async () => {
+    mockGetFeatureFlag.mockResolvedValue(null);
+
+    const POST = await loadPost();
+    const response = await POST(makeRequest('body', 'bad-sig') as never);
+
+    expect(response.status).toBe(400);
   });
 
   it('skips duplicate events and returns 200', async () => {
