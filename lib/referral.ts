@@ -3,24 +3,78 @@ import {
   getFeatureFlag,
   findProfileByReferralCode,
   updateProfileById,
-  recordBillingEvent,
   type AppwriteAuthUser,
+  type NormalizedUserProfile,
 } from '@/lib/appwrite/server';
-import { claimOnce, releaseClaim } from '@/lib/idempotency';
-import { logServerError } from '@/lib/logger';
-import { creditRapidoPens } from '@/lib/rapido-balance';
+import { logServerError, logServerInfo } from '@/lib/logger';
+import { rapidoUnitsToCents } from '@/lib/rapido-cents';
+import {
+  checkReferralRelationship,
+  evaluateRewardEligibility,
+  grantRewardOnce,
+  resolveRewardIdentity,
+  type ReferralContext,
+  type ReferralParty,
+  type RewardEligibility,
+  type RewardIneligibleReason,
+} from '@/lib/reward-policy';
 
 const REFERRAL_FLAG_KEY = 'referral_system';
 const DEFAULT_REFERRAL_RAPIDO = 5;
 // Referrals are for genuinely new accounts: old or throwaway (anonymous/unverified) accounts
 // could otherwise be cycled to farm Rapido for the referrer.
 const REFERRAL_LINK_MAX_ACCOUNT_AGE_DAYS = 7;
-const REFERRAL_REWARD_MAX_ACCOUNT_AGE_DAYS = 30;
+const REFERRAL_CHAIN_MAX_DEPTH = 10;
+
+// Relationship and age problems never resolve themselves, so the referral is settled without payout.
+const TERMINAL_REFERRAL_REASONS: ReadonlySet<RewardIneligibleReason> = new Set<RewardIneligibleReason>([
+  'self_referral',
+  'same_email_referral',
+  'referral_cycle',
+  'referrer_missing',
+  'account_too_old',
+]);
 
 function isAccountYoungerThan(user: AppwriteAuthUser, days: number): boolean {
   const createdMs = user.createdAt ? Date.parse(user.createdAt) : Number.NaN;
   if (!Number.isFinite(createdMs)) return false;
   return Date.now() - createdMs <= days * 24 * 60 * 60 * 1000;
+}
+
+function toReferralParty(profile: NormalizedUserProfile, email: string | null): ReferralParty {
+  return {
+    userId: profile.id,
+    email: email ?? profile.email,
+    referralCode: profile.referral_code,
+    referredBy: profile.referred_by,
+  };
+}
+
+function normalizeCode(code: string | null | undefined): string {
+  return (code ?? '').trim().toUpperCase();
+}
+
+/**
+ * Walks the referrer's `referred_by` chain upward (bounded) and reports a cycle when it reaches the
+ * referee's own code or revisits any code (A→B→C→A, or a referee joining a B→C→B loop).
+ * Lookup errors propagate so callers can fail closed.
+ */
+async function hasReferralChainCycle(refereeCode: string | null, referrer: NormalizedUserProfile): Promise<boolean> {
+  const seen = new Set<string>();
+  if (normalizeCode(refereeCode)) seen.add(normalizeCode(refereeCode));
+  let current: NormalizedUserProfile | null = referrer;
+  for (let depth = 0; current && depth < REFERRAL_CHAIN_MAX_DEPTH; depth += 1) {
+    const ownCode = normalizeCode(current.referral_code);
+    if (ownCode) {
+      if (seen.has(ownCode)) return true;
+      seen.add(ownCode);
+    }
+    const parentCode = normalizeCode(current.referred_by);
+    if (!parentCode) return false;
+    if (seen.has(parentCode)) return true;
+    current = await findProfileByReferralCode(parentCode);
+  }
+  return false;
 }
 
 export async function getReferralConfig(): Promise<{ enabled: boolean; rapido: number }> {
@@ -96,6 +150,25 @@ export async function linkReferralToUser(
     return { success: false, error: 'Referral ödülü zaten verildi.' };
   }
 
+  const relationshipIssue = checkReferralRelationship({
+    referee: { ...toReferralParty(userProfile, user.email), referredBy: normalized },
+    referrer: toReferralParty(referrer, referrer.email),
+  });
+  if (relationshipIssue) {
+    logServerInfo('referral.link_rejected', { userId, referrerId: referrer.id, reason: relationshipIssue });
+    return { success: false, error: 'Bu referral kodu bu hesap için kullanılamaz.' };
+  }
+
+  try {
+    if (await hasReferralChainCycle(userProfile.referral_code, referrer)) {
+      logServerInfo('referral.link_rejected', { userId, referrerId: referrer.id, reason: 'referral_cycle' });
+      return { success: false, error: 'Bu referral kodu bu hesap için kullanılamaz.' };
+    }
+  } catch (error) {
+    logServerError('referral.link_chain', error, { userId });
+    return { success: false, error: 'Referral kodu kontrol edilemedi.' };
+  }
+
   await updateProfileById(userId, { referred_by: normalized });
   return { success: true };
 }
@@ -109,8 +182,8 @@ export async function applyReferralReward(
     return { success: true, rewarded: false };
   }
 
-  // Only a verified, recently created account can trigger the reward.
-  if (user.emailVerified !== true || !isAccountYoungerThan(user, REFERRAL_REWARD_MAX_ACCOUNT_AGE_DAYS)) {
+  // Cheap pre-check before any lookup; the authoritative decision is made by the reward policy.
+  if (user.emailVerified !== true || !user.email) {
     return { success: true, rewarded: false };
   }
 
@@ -132,53 +205,79 @@ export async function applyReferralReward(
     return { success: false, rewarded: false, error: 'Referrer bulunamadı.' };
   }
 
-  if (!referrer || referrer.id === userId) {
-    // Referral code no longer valid - mark as rewarded to avoid retry loops
-    await updateProfileById(userId, { referral_rewarded_at: new Date().toISOString() });
+  const referral: ReferralContext = {
+    referee: toReferralParty(userProfile, user.email),
+    referrer: referrer ? toReferralParty(referrer, referrer.email) : null,
+  };
+  let isChainCycle = false;
+  if (referrer) {
+    try {
+      isChainCycle = await hasReferralChainCycle(userProfile.referral_code, referrer);
+    } catch (error) {
+      logServerError('referral.payout_chain', error, { userId });
+      return { success: false, rewarded: false, error: 'Referrer bulunamadı.' };
+    }
+  }
+  const refereeDecision: RewardEligibility = isChainCycle
+    ? { eligible: false, kind: 'referral_new_user', userId, reason: 'referral_cycle' }
+    : evaluateRewardEligibility({ kind: 'referral_new_user', identity: user, referral });
+
+  if (!refereeDecision.eligible || !referrer) {
+    if (!refereeDecision.eligible && TERMINAL_REFERRAL_REASONS.has(refereeDecision.reason)) {
+      // Settle the referral so it is never retried, and keep the reason observable.
+      await updateProfileById(userId, { referral_rewarded_at: new Date().toISOString() });
+      logServerInfo('reward.denied', {
+        kind: 'referral_new_user',
+        userId,
+        sourceId: userId,
+        reason: refereeDecision.reason,
+      });
+    }
     return { success: true, rewarded: false };
   }
 
-  // Parallel calls must not pay twice: only the first claim proceeds.
-  const claimKey = `referral-reward:${userId}`;
-  if (!(await claimOnce(claimKey))) {
-    return { success: true, rewarded: false };
-  }
+  const amountCents = rapidoUnitsToCents(config.rapido);
+  // The referee's grant is the source claim: concurrent calls race on this single ledger key.
+  const refereeGrant = await grantRewardOnce({
+    eligibility: refereeDecision,
+    idempotencyKey: `referral-reward:${userId}`,
+    sourceId: userId,
+    amountCents,
+    profile: userProfile,
+    metadata: { referral_code: userProfile.referred_by, referrer_id: referrer.id },
+  });
 
-  const rapido = config.rapido;
-  let newUserRapidoAfter: number;
-  let referrerRapidoAfter: number;
-  try {
-    await updateProfileById(userId, { referral_rewarded_at: new Date().toISOString() });
-    newUserRapidoAfter = await creditRapidoPens(userId, userProfile, rapido);
-    referrerRapidoAfter = await creditRapidoPens(referrer.id, referrer, rapido);
-  } catch (error) {
-    logServerError('referral.reward', error, { userId, referrerId: referrer.id });
-    await releaseClaim(claimKey);
+  if (refereeGrant.status === 'failed') {
     return { success: false, rewarded: false, error: 'Referral ödülü verilemedi.' };
   }
+  if (refereeGrant.status !== 'granted') {
+    return { success: true, rewarded: false };
+  }
 
-  await Promise.allSettled([
-    recordBillingEvent({
-      userId,
-      eventType: 'referral_reward_new_user',
-      amountCents: 0,
-      currency: 'try',
-      rapidoDelta: rapido,
-      rapidoBalanceAfter: newUserRapidoAfter,
-      metadata: { referral_code: userProfile.referred_by, referrer_id: referrer.id },
-    }),
-    recordBillingEvent({
-      userId: referrer.id,
-      eventType: 'referral_reward_referrer',
-      amountCents: 0,
-      currency: 'try',
-      rapidoDelta: rapido,
-      rapidoBalanceAfter: referrerRapidoAfter,
-      metadata: { referred_user_id: userId, referral_code: userProfile.referred_by },
-    }),
-  ]);
+  try {
+    await updateProfileById(userId, { referral_rewarded_at: new Date().toISOString() });
+  } catch (error) {
+    // The ledger key already blocks a second payout; this marker only short-circuits retries.
+    logServerError('referral.mark_rewarded', error, { userId });
+  }
 
-  return { success: true, rewarded: true, rapido };
+  // The referrer is paid only for its own verified identity; a lookup failure pays nothing.
+  const referrerIdentity = await resolveRewardIdentity(referrer.id);
+  const referrerDecision = evaluateRewardEligibility({
+    kind: 'referral_referrer',
+    identity: referrerIdentity,
+    referral,
+  });
+  await grantRewardOnce({
+    eligibility: referrerDecision,
+    idempotencyKey: `referral-reward-referrer:${userId}`,
+    sourceId: userId,
+    amountCents,
+    profile: referrer,
+    metadata: { referred_user_id: userId, referral_code: userProfile.referred_by },
+  });
+
+  return { success: true, rewarded: true, rapido: config.rapido };
 }
 
 // Verify referral code exists (for validation before signup completes)

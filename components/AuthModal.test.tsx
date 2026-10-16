@@ -92,6 +92,25 @@ describe('AuthModal', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
+  it('links field-level errors to their input', async () => {
+    renderModal();
+    const emailInput = screen.getByLabelText(/e-posta/i);
+    expect(emailInput).not.toHaveAttribute('aria-invalid');
+
+    fireEvent.change(emailInput, { target: { value: 'not-an-email' } });
+    fireEvent.change(screen.getByLabelText(/şifre/i), { target: { value: 'whatever-123' } });
+    await act(async () => {
+      fireEvent.submit(emailInput.closest('form') as HTMLFormElement);
+    });
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Geçerli bir e-posta adresi gir.');
+    expect(emailInput).toHaveAttribute('aria-invalid', 'true');
+    expect(emailInput).toHaveAttribute('aria-describedby', alert.id);
+    expect(emailInput).toHaveAccessibleDescription('Geçerli bir e-posta adresi gir.');
+    expect(screen.getByLabelText(/şifre/i)).not.toHaveAttribute('aria-invalid');
+  });
+
   it('keeps the modal open after sign-up so the verification notice is seen', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

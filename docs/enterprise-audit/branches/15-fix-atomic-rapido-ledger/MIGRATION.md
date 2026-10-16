@@ -24,6 +24,16 @@ source history.
 Keep the legacy counter authoritative. Write proposed ledger entries and compare the derived projection after every
 operation. Alert on mismatch; do not repair automatically.
 
+Journaled writers in this phase: AI reserve/settle/void (`app/api/ai-generate/billing.ts`), Stripe pack purchases
+(`purchased`), Premium allowance top-ups (`allowance`) and pack revocations (`purchased` correction) in
+`lib/stripe-entitlements.ts`, reward and promo credits (`promotional`). All share `lib/rapido-ledger-runtime.ts`
+(`RAPIDO_LEDGER_MODE`, table-missing fallback). `GET /api/cron/rapido-sweep` (Bearer `CRON_SECRET`, every 15 min via
+`vercel.json`) voids expired reservations. Drift check (read-only, exit 2 on drift):
+
+```bash
+node scripts/reconcile-billing.mjs --from <ISO after table provisioning> [--to <ISO>] [--threshold <cents>] [--skip-stripe]
+```
+
 ### 3. Dual authority canary
 
 Use atomic ledger reservation for a small cohort and maintain the legacy counter as a derived compatibility projection.

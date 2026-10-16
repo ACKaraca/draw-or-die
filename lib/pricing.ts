@@ -27,6 +27,8 @@ export const HISTORY_RAPIDO_COSTS = {
 // Rapido rewards (earned, not spent)
 export const RAPIDO_REWARDS = {
     PEER_REVIEW_COMMENT: 0.25, // Bir akran projesine yorum bırakınca kazanılan rapido
+    REGISTRATION_BONUS_INITIAL: 10, // E-posta ile kayıt olunca (profil oluşturulurken)
+    REGISTRATION_BONUS_VERIFIED: 20, // E-posta doğrulanınca, bir kez
 } as const;
 
 // Hidden AI mentor billing (token -> rapido). Billable tokens = prompt + completion per round.
@@ -130,4 +132,5 @@ export const STRIPE_PRICES = {
     },
     RAPIDO_PRODUCT_ID: 'prod_U6U8yxnUXmfYYw',
     MIN_RAPIDO_PURCHASE: 5,
+    MAX_RAPIDO_PURCHASE: 1000,
 } as const;

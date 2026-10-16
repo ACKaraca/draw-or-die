@@ -1,11 +1,12 @@
 import type Stripe from 'stripe';
 import { getAuthenticatedUserFromRequest, getOrCreateProfile } from '@/lib/appwrite/server';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { validatePromoForCheckout } from '@/lib/promo-codes';
+import { releaseCheckoutPromoReservation, reserveCheckoutPromo, validatePromoForCheckout } from '@/lib/promo-codes';
 
 const mockCreateSession = jest.fn();
 const mockListPromotionCodes = jest.fn();
 const mockRetrievePromotionCode = jest.fn();
+const mockListSubscriptions = jest.fn();
 const mockEnsureCoreAppwriteResources = jest.fn();
 const mockEnsureCommerceAppwriteResources = jest.fn();
 
@@ -39,7 +40,11 @@ jest.mock('@/lib/appwrite/resource-bootstrap', () => ({
 
 jest.mock('@/lib/promo-codes', () => ({
   validatePromoForCheckout: jest.fn(),
+  reserveCheckoutPromo: jest.fn(),
+  releaseCheckoutPromoReservation: jest.fn(),
 }));
+
+jest.mock('@/lib/logger', () => ({ logServerError: jest.fn() }));
 
 jest.mock('stripe', () => {
   const StripeMock: any = jest.fn().mockImplementation(() => ({
@@ -51,6 +56,9 @@ jest.mock('stripe', () => {
     promotionCodes: {
       list: mockListPromotionCodes,
       retrieve: mockRetrievePromotionCode,
+    },
+    subscriptions: {
+      list: mockListSubscriptions,
     },
   }));
 
@@ -68,6 +76,53 @@ const mockedGetAuthenticatedUserFromRequest = jest.mocked(getAuthenticatedUserFr
 const mockedGetOrCreateProfile = jest.mocked(getOrCreateProfile);
 const mockedCheckRateLimit = jest.mocked(checkRateLimit);
 const mockedValidatePromoForCheckout = jest.mocked(validatePromoForCheckout);
+const mockedReserveCheckoutPromo = jest.mocked(reserveCheckoutPromo);
+const mockedReleaseCheckoutPromoReservation = jest.mocked(releaseCheckoutPromoReservation);
+
+const BASE_PROFILE = {
+    id: 'user-1',
+    email: 'user@example.com',
+    is_premium: false,
+    rapido_pens: 50,
+    rapido_fraction_cents: 0,
+    progression_score: 0,
+    wall_of_death_count: 0,
+    earned_badges: [],
+    stripe_customer_id: null,
+    stripe_subscription_id: null,
+    subscription_status: null,
+    subscription_current_period_start: null,
+    subscription_current_period_end: null,
+    subscription_cancel_at_period_end: false,
+    premium_started_at: null,
+    premium_price_cents: null,
+    premium_currency: null,
+    premium_interval: null,
+    premium_promo_code: null,
+    edu_verified: false,
+    edu_email: null,
+    edu_verification_code: null,
+    edu_verification_email: null,
+    edu_verification_expires: null,
+    referral_code: null,
+    referred_by: null,
+    referral_rewarded_at: null,
+  } as never as Awaited<ReturnType<typeof getOrCreateProfile>>;
+
+const INTERNAL_PROMO = {
+  valid: true,
+  source: 'internal',
+  promotionCodeId: 'promo-row-1',
+  promoCode: 'STUDIO20',
+  promo: {
+    id: 'promo-row-1',
+    code: 'STUDIO20',
+    rewardKind: 'discount_percent',
+    rewardValue: 20,
+  },
+  coupon: null,
+  summary: '',
+} as never;
 
 async function loadRoute() {
   const mod = await import('@/app/api/checkout/route');
@@ -100,35 +155,7 @@ describe('POST /api/checkout', () => {
       email: 'user@example.com',
       name: 'User',
     });
-    mockedGetOrCreateProfile.mockResolvedValue({
-      id: 'user-1',
-      email: 'user@example.com',
-      is_premium: false,
-      rapido_pens: 50,
-      rapido_fraction_cents: 0,
-      progression_score: 0,
-      wall_of_death_count: 0,
-      earned_badges: [],
-      stripe_customer_id: null,
-      stripe_subscription_id: null,
-      subscription_status: null,
-      subscription_current_period_start: null,
-      subscription_current_period_end: null,
-      subscription_cancel_at_period_end: false,
-      premium_started_at: null,
-      premium_price_cents: null,
-      premium_currency: null,
-      premium_interval: null,
-      premium_promo_code: null,
-      edu_verified: false,
-      edu_email: null,
-      edu_verification_code: null,
-      edu_verification_email: null,
-      edu_verification_expires: null,
-      referral_code: null,
-      referred_by: null,
-      referral_rewarded_at: null,
-    });
+    mockedGetOrCreateProfile.mockResolvedValue(BASE_PROFILE);
     mockedValidatePromoForCheckout.mockResolvedValue({
       valid: false,
       code: 'PROMO_NOT_FOUND',
@@ -137,6 +164,12 @@ describe('POST /api/checkout', () => {
     mockCreateSession.mockResolvedValue({ url: 'https://stripe.test/session' } as Stripe.Checkout.Session);
     mockListPromotionCodes.mockResolvedValue({ data: [] });
     mockRetrievePromotionCode.mockRejectedValue(new Error('No such promotion code'));
+    mockListSubscriptions.mockReset().mockResolvedValue({ data: [] });
+    mockedReserveCheckoutPromo.mockResolvedValue({
+      ok: true,
+      reservation: { reservationId: 'reservation-1', promoId: 'promo-row-1' },
+    });
+    mockedReleaseCheckoutPromoReservation.mockResolvedValue('released');
   });
 
   it('returns 503 when Stripe is not configured', async () => {
@@ -281,10 +314,112 @@ describe('POST /api/checkout', () => {
           promo_code: 'STUDIO20',
           promotion_code_id: 'promo-row-1',
           promo_source: 'internal',
+          promo_reservation_id: 'reservation-1',
+          expected_unit_amount: '63',
         }),
       })
     );
     expect(mockCreateSession.mock.calls[0][0]).not.toHaveProperty('discounts');
+    expect(mockCreateSession.mock.calls[0][0]).toHaveProperty('expires_at');
+    expect(mockedReserveCheckoutPromo).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', mode: 'rapido_pack' }),
+    );
+  });
+
+  it('never applies a Stripe promotion code on top of an internal promo', async () => {
+    mockedValidatePromoForCheckout.mockResolvedValueOnce(INTERNAL_PROMO);
+    const POST = await loadRoute();
+
+    await POST(
+      createRequest({ mode: 'rapido_pack', quantity: 10, promoCode: 'STUDIO20', promotionCodeId: 'promo_stripe_1' }) as never
+    );
+
+    expect(mockRetrievePromotionCode).not.toHaveBeenCalled();
+    const args = mockCreateSession.mock.calls[0][0];
+    expect(args).not.toHaveProperty('discounts');
+    expect(args.allow_promotion_codes).toBe(false);
+  });
+
+  it('rejects an internal promo whose quota is already used up', async () => {
+    mockedValidatePromoForCheckout.mockResolvedValueOnce(INTERNAL_PROMO);
+    mockedReserveCheckoutPromo.mockResolvedValueOnce({ ok: false, code: 'PROMO_EXHAUSTED', error: 'doldu' });
+    const POST = await loadRoute();
+
+    const response = await POST(
+      createRequest({ mode: 'rapido_pack', quantity: 10, promoCode: 'STUDIO20' }) as never
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ code: 'PROMO_EXHAUSTED' }));
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('gives the promo reservation back when the Stripe session cannot be created', async () => {
+    mockedValidatePromoForCheckout.mockResolvedValueOnce(INTERNAL_PROMO);
+    mockCreateSession.mockRejectedValueOnce(new Error('stripe down'));
+    const POST = await loadRoute();
+
+    const response = await POST(
+      createRequest({ mode: 'rapido_pack', quantity: 10, promoCode: 'STUDIO20' }) as never
+    );
+
+    expect(response.status).toBe(500);
+    expect(mockedReleaseCheckoutPromoReservation).toHaveBeenCalledWith('reservation-1');
+  });
+
+  it('reuses the existing Stripe customer instead of creating a new one', async () => {
+    mockedGetOrCreateProfile.mockResolvedValueOnce({
+      ...BASE_PROFILE,
+      stripe_customer_id: 'cus_existing',
+    });
+    const POST = await loadRoute();
+
+    await POST(createRequest({ mode: 'rapido_pack', quantity: 5 }) as never);
+
+    const args = mockCreateSession.mock.calls[0][0];
+    expect(args.customer).toBe('cus_existing');
+    expect(args).not.toHaveProperty('customer_email');
+  });
+
+  it.each([
+    ['the profile already has an active subscription', { is_premium: true, stripe_subscription_id: 'sub_1', subscription_status: 'active' }, []],
+    ['Stripe reports an active subscription for the customer', { stripe_customer_id: 'cus_existing' }, [{ status: 'active' }]],
+    ['Stripe reports a past_due subscription for the customer', { stripe_customer_id: 'cus_existing' }, [{ status: 'past_due' }]],
+  ])('blocks a second subscription when %s', async (_label, profilePatch, subscriptions) => {
+    mockedGetOrCreateProfile.mockResolvedValueOnce({
+      ...BASE_PROFILE,
+      ...profilePatch,
+    });
+    mockListSubscriptions.mockResolvedValueOnce({ data: subscriptions });
+    const POST = await loadRoute();
+
+    const response = await POST(createRequest({ mode: 'premium_monthly' }) as never);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ code: 'SUBSCRIPTION_ALREADY_ACTIVE' }));
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('allows a new subscription when previous ones are canceled', async () => {
+    mockedGetOrCreateProfile.mockResolvedValueOnce({
+      ...BASE_PROFILE,
+      stripe_customer_id: 'cus_existing',
+    });
+    mockListSubscriptions.mockResolvedValueOnce({ data: [{ status: 'canceled' }, { status: 'incomplete_expired' }] });
+    const POST = await loadRoute();
+
+    const response = await POST(createRequest({ mode: 'premium_monthly' }) as never);
+
+    expect(response.status).toBe(200);
+    expect(mockListSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ customer: 'cus_existing', status: 'all' }));
+  });
+
+  it('builds a success URL that only signals the redirect (entitlements come from the webhook)', async () => {
+    const POST = await loadRoute();
+    await POST(createRequest({ mode: 'premium_monthly' }) as never);
+
+    const args = mockCreateSession.mock.calls[0][0];
+    expect(args.success_url).toBe('https://app.drawor-die.com?checkout=success&session_id={CHECKOUT_SESSION_ID}');
   });
 
   it('still rejects an unknown promo code that is not internal', async () => {

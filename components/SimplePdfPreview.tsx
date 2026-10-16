@@ -277,24 +277,27 @@ export function SimplePdfPreview({
             <button
               type="button"
               title={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
+              aria-label={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
               onClick={() => setZoom((z) => clampZoom(z + 0.25))}
-              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <ZoomIn size={12} />
             </button>
             <button
               type="button"
               title={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
+              aria-label={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
               onClick={() => setZoom((z) => clampZoom(z - 0.25))}
-              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <ZoomOut size={12} />
             </button>
             <button
               type="button"
               title={pickLocalized(language, 'Sıfırla', 'Reset')}
+              aria-label={pickLocalized(language, 'Sıfırla', 'Reset')}
               onClick={resetView}
-              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <RotateCcw size={12} />
             </button>
@@ -316,13 +319,13 @@ export function SimplePdfPreview({
         style={{ cursor: zoom > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
       >
         {state.loading ? (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 text-slate-300 font-mono text-xs">
+          <div role="status" className="absolute inset-0 flex items-center justify-center gap-2 text-slate-300 font-mono text-xs">
             <Loader2 size={14} className="animate-spin" /> {pickLocalized(language, 'Yükleniyor...', 'Loading...')}
           </div>
         ) : null}
 
         {state.error ? (
-          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-slate-400 font-mono text-xs">
+          <div role="alert" className="absolute inset-0 flex items-center justify-center px-4 text-center text-slate-400 font-mono text-xs">
             {state.error}
           </div>
         ) : null}
@@ -333,27 +336,30 @@ export function SimplePdfPreview({
             <button
               type="button"
               title={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
+              aria-label={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
               onClick={() => setZoom((z) => clampZoom(z + 0.25))}
-              className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
             >
-              <ZoomIn size={11} />
+              <ZoomIn size={12} />
             </button>
             <button
               type="button"
               title={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
+              aria-label={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
               onClick={() => setZoom((z) => clampZoom(z - 0.25))}
-              className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
             >
-              <ZoomOut size={11} />
+              <ZoomOut size={12} />
             </button>
             {zoom !== 1 ? (
               <button
                 type="button"
                 title={pickLocalized(language, 'Sıfırla', 'Reset')}
+                aria-label={pickLocalized(language, 'Sıfırla', 'Reset')}
                 onClick={resetView}
-                className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
               >
-                <RotateCcw size={11} />
+                <RotateCcw size={12} />
               </button>
             ) : null}
           </div>

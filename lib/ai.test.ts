@@ -63,6 +63,7 @@ describe('generateAIResponse', () => {
     const payload = JSON.parse((mockedFetch.mock.calls[0][1] as { body: string }).body);
     expect(payload).toEqual({
       operation: 'SINGLE_JURY',
+      operationId: expect.stringMatching(/^[A-Za-z0-9_-]{8,64}$/),
       imageBase64: 'abc',
       imageMimeType: 'image/png',
       params: { harshness: 4 },

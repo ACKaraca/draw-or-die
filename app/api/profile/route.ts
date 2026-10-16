@@ -10,9 +10,11 @@ import {
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
 import { logServerError } from '@/lib/logger';
+import { checkSubjectAllowed } from '@/lib/privacy/subject-guard';
 import { normalizeLanguage } from '@/lib/i18n';
 import { getRequestLanguage } from '@/lib/server-i18n';
 import { ApiMessages } from '@/lib/locales/apiMessages';
+import { maybeGrantRegistrationBonus } from '@/lib/registration-bonus';
 
 function isAppwriteServerUnavailable(): boolean {
   return !APPWRITE_SERVER_API_KEY.trim();
@@ -33,8 +35,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: ApiMessages.signInRequired(lang) }, { status: 401 });
     }
 
+    const privacyDenial = await checkSubjectAllowed(user.id, 'account', lang);
+    if (privacyDenial) return NextResponse.json(privacyDenial.body, { status: privacyDenial.status });
+
     await ensureCoreAppwriteResources();
-    const profile = await getOrCreateProfile(user);
+    let profile = await getOrCreateProfile(user);
+    try {
+      const bonus = await maybeGrantRegistrationBonus(user, profile);
+      if (bonus.initial.status === 'granted' || bonus.verified.status === 'granted') {
+        profile = await getOrCreateProfile(user);
+      }
+    } catch (error) {
+      // A reward problem must never block reading the profile.
+      logServerError('api.profile.GET.registrationBonus', error);
+    }
     let referralSignupCount = 0;
 
     if (profile.referral_code) {

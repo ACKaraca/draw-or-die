@@ -6,11 +6,12 @@ import {
   resolveLanguageFromAcceptLanguage,
   type SupportedLanguage,
 } from '@/lib/i18n';
+import { resolveSiteUrl } from '@/lib/site-identity';
 
 import type { Metadata } from 'next';
 
-// `||` (not `??`) so an empty env var still yields a valid URL for metadataBase.
-export const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://drawordie.app';
+// Never a legacy domain; production metadata uses resolveMetadataBase() instead.
+export const SITE_URL = resolveSiteUrl();
 
 // Must match UI_LANGUAGE_STORAGE_KEY in components/RuntimeTextLocalizer.tsx (client module, not importable here).
 const UI_LANGUAGE_COOKIE = 'dod_ui_language';

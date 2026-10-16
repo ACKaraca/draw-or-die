@@ -36,6 +36,7 @@ export function InteractiveImagePreview({
     zoomOut,
     resetView,
     handleWheel,
+    handleKeyDown,
     handleMouseDown,
     handleMouseMove,
     handleMouseUp,
@@ -49,6 +50,12 @@ export function InteractiveImagePreview({
     language,
     'Yakınlaştırmak için tekerlek veya iki parmak kullan. Zoom açıkken sürükleyerek gezinebilirsin.',
     'Use wheel or two fingers to zoom. Drag to pan while zoomed in.',
+  );
+
+  const surfaceLabel = pickLocalized(
+    language,
+    'Görsel önizleme. Yakınlaştırıldığında ok tuşlarıyla gezin; Home veya 0 görünümü sıfırlar.',
+    'Image preview. When zoomed in, use arrow keys to pan; Home or 0 resets the view.',
   );
 
   const headerLabel = fileName || pickLocalized(language, 'Görsel Önizleme', 'Image preview');
@@ -66,24 +73,27 @@ export function InteractiveImagePreview({
             <button
               type="button"
               title={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
+              aria-label={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
               onClick={zoomIn}
-              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <ZoomIn size={12} />
             </button>
             <button
               type="button"
               title={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
+              aria-label={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
               onClick={zoomOut}
-              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <ZoomOut size={12} />
             </button>
             <button
               type="button"
               title={pickLocalized(language, 'Sıfırla', 'Reset')}
+              aria-label={pickLocalized(language, 'Sıfırla', 'Reset')}
               onClick={resetView}
-              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <RotateCcw size={12} />
             </button>
@@ -92,8 +102,12 @@ export function InteractiveImagePreview({
       ) : null}
 
       <div
-        className="relative flex-1 overflow-hidden bg-black/50"
+        role="group"
+        tabIndex={0}
+        aria-label={surfaceLabel}
+        className="relative flex-1 overflow-hidden bg-black/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-neon-red"
         onWheel={handleWheel}
+        onKeyDown={handleKeyDown}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -111,27 +125,30 @@ export function InteractiveImagePreview({
             <button
               type="button"
               title={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
+              aria-label={pickLocalized(language, 'Yakınlaştır', 'Zoom in')}
               onClick={zoomIn}
-              className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
             >
-              <ZoomIn size={11} />
+              <ZoomIn size={12} />
             </button>
             <button
               type="button"
               title={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
+              aria-label={pickLocalized(language, 'Uzaklaştır', 'Zoom out')}
               onClick={zoomOut}
-              className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+              className="p-1.5 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
             >
-              <ZoomOut size={11} />
+              <ZoomOut size={12} />
             </button>
             {zoom !== 1 ? (
               <button
                 type="button"
                 title={pickLocalized(language, 'Sıfırla', 'Reset')}
+                aria-label={pickLocalized(language, 'Sıfırla', 'Reset')}
                 onClick={resetView}
-                className="p-1 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
+                className="p-1.5 rounded hover:bg-white/20 text-slate-300 hover:text-white transition-colors"
               >
-                <RotateCcw size={11} />
+                <RotateCcw size={12} />
               </button>
             ) : null}
           </div>

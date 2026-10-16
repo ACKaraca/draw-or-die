@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
+import { STEP_CONTENT_ID, focusCurrentStepHeading } from '@/components/ui/step-focus';
 import type { StepType } from '@/types';
 import { TIER_DEFAULTS } from '@/lib/pricing';
 
@@ -41,6 +42,9 @@ export function Header({
     const [isGalleryMenuOpen, setIsGalleryMenuOpen] = useState(false);
     const profileMenuRef = useRef<HTMLDivElement | null>(null);
     const galleryMenuRef = useRef<HTMLDivElement | null>(null);
+    const profileToggleRef = useRef<HTMLButtonElement | null>(null);
+    const galleryToggleRef = useRef<HTMLButtonElement | null>(null);
+    const mobileToggleRef = useRef<HTMLButtonElement | null>(null);
 
     const copy = useMemo(() => {
         if (language !== 'tr') {
@@ -73,6 +77,7 @@ export function Header({
                 openMobileMenu: 'Open mobile menu',
                 closeMobileMenu: 'Close mobile menu',
                 mainNavigation: 'Main navigation',
+                skipToContent: 'Skip to content',
                 homeLabel: 'Draw or Die home',
                 authLoading: 'Checking session',
                 premiumShort: 'Premium',
@@ -108,6 +113,7 @@ export function Header({
             openMobileMenu: 'Mobil menüyü aç',
             closeMobileMenu: 'Mobil menüyü kapat',
             mainNavigation: 'Ana gezinme',
+            skipToContent: 'İçeriğe geç',
             homeLabel: 'Draw or Die ana sayfa',
             authLoading: 'Oturum kontrol ediliyor',
             premiumShort: 'Premium',
@@ -168,11 +174,17 @@ export function Header({
         };
 
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                setIsMobileMenuOpen(false);
-                setIsProfileMenuOpen(false);
-                setIsGalleryMenuOpen(false);
-            }
+            if (event.key !== 'Escape') return;
+            // Return focus to the toggle that owns the open menu so keyboard users keep their place.
+            const toggle = isGalleryMenuOpen
+                ? galleryToggleRef.current
+                : isProfileMenuOpen
+                  ? profileToggleRef.current
+                  : mobileToggleRef.current;
+            setIsMobileMenuOpen(false);
+            setIsProfileMenuOpen(false);
+            setIsGalleryMenuOpen(false);
+            toggle?.focus();
         };
 
         window.addEventListener('pointerdown', handlePointerDown);
@@ -185,6 +197,15 @@ export function Header({
 
     return (
         <header className="glass-header fixed top-0 left-0 w-full z-50">
+            <a
+                href={`#${STEP_CONTENT_ID}`}
+                onClick={(event) => {
+                    if (focusCurrentStepHeading()) event.preventDefault();
+                }}
+                className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[80] focus:rounded-lg focus:border focus:border-white/[0.13] focus:bg-bg-1 focus:px-4 focus:py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.1em] text-white"
+            >
+                {copy.skipToContent}
+            </a>
             <div className="h-16 px-4 md:px-6 flex justify-between items-center gap-3">
                 {/* ── Left: Logo + Primary nav ─────────────────────────── */}
                 <div className="flex items-center gap-3 md:gap-7 min-w-0">
@@ -233,20 +254,29 @@ export function Header({
                         </button>
 
                         {/* Gallery dropdown */}
-                        <div className="relative" ref={galleryMenuRef}>
+                        <div
+                            className="relative"
+                            ref={galleryMenuRef}
+                            onBlur={(event) => {
+                                if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+                                    setIsGalleryMenuOpen(false);
+                                }
+                            }}
+                        >
                             <button
+                                ref={galleryToggleRef}
                                 type="button"
                                 onClick={() => setIsGalleryMenuOpen((prev) => !prev)}
                                 className="px-3 py-2 text-cyan-300 hover:text-cyan-200 transition-colors flex items-center gap-1"
-                                aria-haspopup="true"
                                 aria-expanded={isGalleryMenuOpen}
+                                aria-controls={isGalleryMenuOpen ? 'header-gallery-menu' : undefined}
                             >
                                 {copy.navGallery}
                                 <ChevronDown size={11} strokeWidth={2} className={`transition-transform ${isGalleryMenuOpen ? 'rotate-180' : ''}`} />
                             </button>
 
                             {isGalleryMenuOpen && (
-                                <div className="absolute left-0 mt-2 w-60 rounded-xl border border-white/10 bg-[var(--color-bg-1)]/98 backdrop-blur-xl shadow-2xl p-1.5 z-50">
+                                <div id="header-gallery-menu" className="absolute left-0 mt-2 w-60 rounded-xl border border-white/10 bg-[var(--color-bg-1)]/98 backdrop-blur-xl shadow-2xl p-1.5 z-50">
                                     <button
                                         onClick={() => goToGallery('HALL_OF_FAME')}
                                         className="w-full text-left px-3 py-2.5 rounded-lg text-[11px] font-mono uppercase tracking-[0.1em] text-emerald-200 hover:bg-white/5 flex items-center gap-2.5"
@@ -324,14 +354,23 @@ export function Header({
                             </button>
 
                             {/* Profile dropdown */}
-                            <div className="relative hidden md:block" ref={profileMenuRef}>
+                            <div
+                                className="relative hidden md:block"
+                                ref={profileMenuRef}
+                                onBlur={(event) => {
+                                    if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) {
+                                        setIsProfileMenuOpen(false);
+                                    }
+                                }}
+                            >
                                 <button
+                                    ref={profileToggleRef}
                                     type="button"
                                     onClick={() => setIsProfileMenuOpen((prev) => !prev)}
                                     className="flex items-center gap-2 bg-black/40 border border-white/10 px-3 py-1.5 rounded-full backdrop-blur-md text-nowrap hover:border-indigo-400/40 transition-colors"
                                     title={copy.profileMenuTitle}
-                                    aria-haspopup="true"
                                     aria-expanded={isProfileMenuOpen}
+                                    aria-controls={isProfileMenuOpen ? 'header-profile-menu' : undefined}
                                 >
                                     <UserCircle2 size={14} strokeWidth={1.75} className="text-indigo-300" />
                                     <span className="font-mono text-[11px] font-bold text-white max-w-[120px] truncate">
@@ -341,7 +380,7 @@ export function Header({
                                 </button>
 
                                 {isProfileMenuOpen && (
-                                    <div className="absolute right-0 mt-2 w-56 rounded-xl border border-white/10 bg-[var(--color-bg-1)]/98 backdrop-blur-xl shadow-2xl p-1.5 z-50">
+                                    <div id="header-profile-menu" className="absolute right-0 mt-2 w-56 rounded-xl border border-white/10 bg-[var(--color-bg-1)]/98 backdrop-blur-xl shadow-2xl p-1.5 z-50">
                                         <button
                                             onClick={() => goTo('profile')}
                                             className="w-full text-left px-3 py-2.5 rounded-lg text-[11px] font-mono uppercase tracking-[0.1em] text-slate-100 hover:bg-white/5"
@@ -428,12 +467,13 @@ export function Header({
                     )}
 
                     <button
+                        ref={mobileToggleRef}
                         type="button"
                         onClick={() => setIsMobileMenuOpen((prev) => !prev)}
                         className="xl:hidden p-2 rounded-lg border border-white/15 text-slate-200 hover:bg-white/8 transition-colors"
                         aria-label={isMobileMenuOpen ? copy.closeMobileMenu : copy.openMobileMenu}
                         aria-expanded={isMobileMenuOpen}
-                        aria-controls="mobile-menu"
+                        aria-controls={isMobileMenuOpen ? 'mobile-menu' : undefined}
                     >
                         {isMobileMenuOpen ? <X size={16} strokeWidth={2} /> : <Menu size={16} strokeWidth={2} />}
                     </button>

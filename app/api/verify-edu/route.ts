@@ -1,14 +1,36 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { ID, Messaging, MessagingProviderType, Users } from 'node-appwrite';
+
 import { isEduTrEmail } from '@/lib/pricing';
 import { checkRateLimit } from '@/lib/rate-limit';
 import {
+  APPWRITE_DATABASE_ID,
+  APPWRITE_TABLE_PROFILES_ID,
   createAdminClient,
+  getAdminTables,
   getAuthenticatedUserFromRequest,
   getOrCreateProfile,
   updateProfileById,
+  type UserProfileRow,
 } from '@/lib/appwrite/server';
 import { ensureCoreAppwriteResources } from '@/lib/appwrite/resource-bootstrap';
+import { getClientIp } from '@/lib/client-ip';
+import {
+  EDU_OTP_DELIVERY,
+  EDU_OTP_MAX_ATTEMPTS,
+  EDU_OTP_TTL_MS,
+  generateEduChallengeId,
+  generateEduOtp,
+  hashEduOtp,
+  isEduOtpExpired,
+  normalizeEduEmail,
+  verifyEduOtpHash,
+} from '@/lib/edu-otp';
+import { pickLocalized } from '@/lib/i18n';
+import { claimOnce } from '@/lib/idempotency';
+import { logServerError, logServerInfo } from '@/lib/logger';
+import { evaluateRewardEligibility } from '@/lib/reward-policy';
+import { getRequestLanguage } from '@/lib/server-i18n';
 
 type AppwriteTarget = {
   $id: string;
@@ -25,6 +47,25 @@ type AppwriteErrorLike = {
     message?: string;
   };
 };
+
+type RateLimitWindow = { maxRequests: number; windowMs: number };
+
+const START_LIMIT_PER_USER: RateLimitWindow = { maxRequests: 3, windowMs: 10 * 60 * 1000 };
+const START_LIMIT_PER_EMAIL: RateLimitWindow = { maxRequests: 5, windowMs: 60 * 60 * 1000 };
+const START_LIMIT_PER_IP: RateLimitWindow = { maxRequests: 10, windowMs: 10 * 60 * 1000 };
+const CONFIRM_LIMIT_PER_USER: RateLimitWindow = { maxRequests: 5, windowMs: 10 * 60 * 1000 };
+const CONFIRM_LIMIT_PER_IP: RateLimitWindow = { maxRequests: 20, windowMs: 10 * 60 * 1000 };
+
+/** Every OTP field cleared: used on success, on invalidation, and to drop legacy plaintext state. */
+const CLEARED_OTP_STATE = {
+  edu_verification_code: '',
+  edu_otp_hash: '',
+  edu_otp_challenge_id: '',
+  edu_otp_attempts: 0,
+  edu_otp_delivery: '',
+  edu_verification_email: '',
+  edu_verification_expires: null,
+} as const;
 
 function getAppwriteErrorCode(error: unknown): number | undefined {
   const maybe = error as AppwriteErrorLike;
@@ -43,7 +84,7 @@ async function sendEduVerificationEmail(params: {
   email: string;
   otp: string;
   expiresAt: string;
-}): Promise<boolean> {
+}): Promise<void> {
   const providerId =
     process.env.APPWRITE_EDU_EMAIL_PROVIDER_ID?.trim() ||
     process.env.APPWRITE_EMAIL_PROVIDER_ID?.trim() ||
@@ -54,7 +95,8 @@ async function sendEduVerificationEmail(params: {
   const messaging = new Messaging(client);
 
   const normalizedEmail = params.email.trim().toLowerCase();
-  const isEmailProvider = (value?: string) => (value ?? '').toLowerCase() === String(MessagingProviderType.Email).toLowerCase();
+  const isEmailProvider = (value?: string) =>
+    (value ?? '').toLowerCase() === String(MessagingProviderType.Email).toLowerCase();
   const doesProviderMatch = (entry: AppwriteTarget, expectedProviderId?: string) => {
     if (!expectedProviderId) return true;
     if (!entry.providerId) return true;
@@ -126,7 +168,7 @@ async function sendEduVerificationEmail(params: {
 
   const targetId = resolvedTarget?.$id;
   if (!targetId) {
-    throw new Error('Edu verification target olusturulamadi.');
+    throw new Error('Edu verification target could not be created.');
   }
 
   const expireDate = new Date(params.expiresAt).toLocaleString('tr-TR');
@@ -147,140 +189,285 @@ async function sendEduVerificationEmail(params: {
     targets: [targetId],
     html: true,
   });
-
-  return true;
 }
 
-/**
- * POST /api/verify-edu - Initiate .edu.tr email verification
- *
- * Body: { email: "student@university.edu.tr" }
- *
- * Stores a 6-digit OTP on user profile and tries to deliver it via email.
- * If messaging provider is not configured, client falls back to manual OTP flow.
- */
-export async function POST(request: NextRequest) {
+function getMessages(request: NextRequest) {
+  const lang = getRequestLanguage(request);
+  return {
+    signIn: pickLocalized(lang, 'Giriş yapmanız gerekiyor.', 'You must sign in.'),
+    tooMany: pickLocalized(lang, 'Çok fazla deneme. Lütfen biraz bekleyin.', 'Too many attempts. Please wait a while.'),
+    invalidBody: pickLocalized(lang, 'Geçersiz istek gövdesi.', 'Invalid request body.'),
+    emailRequired: pickLocalized(lang, 'Email adresi gereklidir.', 'Email address is required.'),
+    eduOnly: pickLocalized(
+      lang,
+      'Sadece .edu.tr uzantılı email adresleri kabul edilir.',
+      'Only .edu.tr email addresses are accepted.',
+    ),
+    verifiedEmailRequired: pickLocalized(
+      lang,
+      'Öğrenci doğrulaması için önce hesabınızın e-postasını doğrulayın.',
+      'Verify your account email before student verification.',
+    ),
+    deliveryFailed: pickLocalized(
+      lang,
+      'Doğrulama e-postası gönderilemedi. Lütfen daha sonra tekrar deneyin.',
+      'The verification email could not be sent. Please try again later.',
+    ),
+    startFailed: pickLocalized(lang, 'Doğrulama başlatılamadı.', 'Could not start verification.'),
+    sent: (email: string) => pickLocalized(
+      lang,
+      `Doğrulama kodu ${email} adresine gönderildi.`,
+      `A verification code was sent to ${email}.`,
+    ),
+    codeRequired: pickLocalized(lang, 'Doğrulama kodu gereklidir.', 'Verification code is required.'),
+    invalidCode: pickLocalized(
+      lang,
+      'Kod geçersiz veya süresi dolmuş. Gerekirse yeni kod isteyin.',
+      'The code is invalid or expired. Request a new code if needed.',
+    ),
+    attemptsExhausted: pickLocalized(
+      lang,
+      'Çok fazla hatalı deneme. Lütfen yeni bir kod isteyin.',
+      'Too many wrong attempts. Please request a new code.',
+    ),
+    confirmFailed: pickLocalized(lang, 'Doğrulama tamamlanamadı.', 'Could not complete verification.'),
+    verified: pickLocalized(
+      lang,
+      '.edu.tr email doğrulandı! Öğrenci indirimi aktif.',
+      '.edu.tr email verified! Student discount is active.',
+    ),
+  };
+}
+
+async function isRateLimited(windows: Array<[string, RateLimitWindow]>): Promise<boolean> {
+  for (const [key, config] of windows) {
+    const result = await checkRateLimit(key, config);
+    if (!result.allowed) return true;
+  }
+  return false;
+}
+
+function readStringField(body: unknown, field: string): string {
+  if (body === null || typeof body !== 'object') return '';
+  const value = (body as Record<string, unknown>)[field];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+async function invalidateChallenge(userId: string): Promise<void> {
   try {
-    const user = await getAuthenticatedUserFromRequest(request);
-    if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
-    }
-
-    await ensureCoreAppwriteResources();
-
-    const rl = await checkRateLimit(`verify-edu:${user.id}`, { maxRequests: 3, windowMs: 10 * 60 * 1000 });
-    if (!rl.allowed) {
-      return NextResponse.json({ error: 'Çok fazla deneme. 10 dakika bekleyin.' }, { status: 429 });
-    }
-
-    const body = await request.json();
-    const email = typeof body?.email === 'string' ? body.email.trim() : '';
-
-    if (!email) {
-      return NextResponse.json({ error: 'Email adresi gereklidir.' }, { status: 400 });
-    }
-
-    if (!isEduTrEmail(email)) {
-      return NextResponse.json({ error: 'Sadece .edu.tr uzantılı email adresleri kabul edilir.' }, { status: 400 });
-    }
-
-    const otpArray = new Uint32Array(1);
-    crypto.getRandomValues(otpArray);
-    const otp = String(100000 + (otpArray[0] % 900000)).padStart(6, '0');
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-
-    await updateProfileById(user.id, {
-      edu_verification_code: otp,
-      edu_verification_email: email,
-      edu_verification_expires: expiresAt,
-    });
-
-    let deliveredByEmail = false;
-    try {
-      deliveredByEmail = await sendEduVerificationEmail({
-        userId: user.id,
-        email,
-        otp,
-        expiresAt,
-      });
-    } catch (deliveryError) {
-      console.error('Verify edu delivery error:', deliveryError);
-    }
-
-    return NextResponse.json({
-      message: deliveredByEmail
-        ? `Dogrulama kodu ${email} adresine gonderildi.`
-        : `Dogrulama kodu olusturuldu. ${email} icin manuel kod girerek devam edebilirsiniz.`,
-      requiresManualEntry: !deliveredByEmail,
-      delivery: deliveredByEmail ? 'email' : 'manual',
-      ...(process.env.NODE_ENV !== 'production' && !deliveredByEmail ? { devOtp: otp } : {}),
-    });
+    await updateProfileById(userId, CLEARED_OTP_STATE);
   } catch (error) {
-    console.error('Verify edu error:', error);
-    return NextResponse.json({ error: 'Doğrulama başlatılamadı.' }, { status: 500 });
+    logServerError('api.verify-edu.invalidate', error, { userId });
   }
 }
 
 /**
- * PUT /api/verify-edu - Confirm OTP verification
- *
- * Body: { code: "123456" }
+ * Spends one attempt with a bounded atomic increment. Returns false once the challenge has used
+ * all attempts, or when the counter cannot be written (fail closed).
  */
-export async function PUT(request: NextRequest) {
+async function consumeAttempt(rowId: string): Promise<boolean> {
+  try {
+    await getAdminTables().incrementRowColumn<UserProfileRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROFILES_ID,
+      rowId,
+      column: 'edu_otp_attempts',
+      value: 1,
+      max: EDU_OTP_MAX_ATTEMPTS,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * POST /api/verify-edu - Send an .edu.tr verification code
+ *
+ * Body: { email: "student@university.edu.tr" }
+ *
+ * Only a keyed hash of the code is stored, bound to user + email + challenge. The code itself only
+ * ever goes to the mailbox; a failed delivery invalidates the challenge.
+ */
+export async function POST(request: NextRequest) {
+  const messages = getMessages(request);
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
-      return NextResponse.json({ error: 'Giriş yapmanız gerekiyor.' }, { status: 401 });
+      return NextResponse.json({ error: messages.signIn }, { status: 401 });
     }
 
     await ensureCoreAppwriteResources();
 
-    const rl = await checkRateLimit(`verify-edu-confirm:${user.id}`, { maxRequests: 5, windowMs: 10 * 60 * 1000 });
-    if (!rl.allowed) {
-      return NextResponse.json({ error: 'Çok fazla deneme. Lütfen bekleyin.' }, { status: 429 });
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ error: messages.invalidBody }, { status: 400 });
     }
 
-    const body = await request.json();
-    const code = typeof body?.code === 'string' ? body.code.trim() : '';
+    const email = normalizeEduEmail(readStringField(body, 'email'));
+    if (!email) {
+      return NextResponse.json({ error: messages.emailRequired }, { status: 400 });
+    }
+    if (!isEduTrEmail(email)) {
+      return NextResponse.json({ error: messages.eduOnly }, { status: 400 });
+    }
 
-    if (!code) {
-      return NextResponse.json({ error: 'Doğrulama kodu gereklidir.' }, { status: 400 });
+    const eligibility = evaluateRewardEligibility({ kind: 'edu_verification', identity: user });
+    if (!eligibility.eligible) {
+      logServerInfo('reward.denied', { kind: 'edu_verification', userId: user.id, reason: eligibility.reason });
+      return NextResponse.json({ error: messages.verifiedEmailRequired }, { status: 403 });
+    }
+
+    const isLimited = await isRateLimited([
+      [`verify-edu:${user.id}`, START_LIMIT_PER_USER],
+      [`verify-edu-email:${email}`, START_LIMIT_PER_EMAIL],
+      [`verify-edu-ip:${getClientIp(request)}`, START_LIMIT_PER_IP],
+    ]);
+    if (isLimited) {
+      return NextResponse.json({ error: messages.tooMany }, { status: 429 });
+    }
+
+    const otp = generateEduOtp();
+    const challengeId = generateEduChallengeId();
+    const expiresAt = new Date(Date.now() + EDU_OTP_TTL_MS).toISOString();
+
+    // Stored before delivery so the mailed code works on arrival, but unusable until marked `sent`.
+    // A new hash + challenge id supersedes any earlier code; legacy plaintext is cleared here.
+    await updateProfileById(user.id, {
+      edu_verification_code: '',
+      edu_otp_hash: hashEduOtp(otp, { userId: user.id, email, challengeId }),
+      edu_otp_challenge_id: challengeId,
+      edu_otp_attempts: 0,
+      edu_otp_delivery: EDU_OTP_DELIVERY.PENDING,
+      edu_verification_email: email,
+      edu_verification_expires: expiresAt,
+    });
+
+    try {
+      await sendEduVerificationEmail({ userId: user.id, email, otp, expiresAt });
+    } catch (deliveryError) {
+      logServerError('api.verify-edu.delivery', deliveryError, { userId: user.id, challengeId });
+      await invalidateChallenge(user.id);
+      return NextResponse.json({ error: messages.deliveryFailed }, { status: 502 });
+    }
+
+    try {
+      await updateProfileById(user.id, { edu_otp_delivery: EDU_OTP_DELIVERY.SENT });
+    } catch (error) {
+      logServerError('api.verify-edu.mark-sent', error, { userId: user.id, challengeId });
+      return NextResponse.json({ error: messages.deliveryFailed }, { status: 502 });
+    }
+
+    logServerInfo('edu-otp.sent', { userId: user.id, challengeId, expiresAt });
+    return NextResponse.json({
+      message: messages.sent(email),
+      requiresManualEntry: false,
+      delivery: 'email',
+      expiresAt,
+    });
+  } catch (error) {
+    logServerError('api.verify-edu.POST', error);
+    return NextResponse.json({ error: messages.startFailed }, { status: 500 });
+  }
+}
+
+/**
+ * PUT /api/verify-edu - Confirm the emailed code
+ *
+ * Body: { code: "123456" }
+ *
+ * Missing, undelivered, expired, wrong, superseded and replayed codes all get the same response.
+ */
+export async function PUT(request: NextRequest) {
+  const messages = getMessages(request);
+
+  // Shape checks run first: they have no side effects and an empty code never reaches verification.
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: messages.invalidBody }, { status: 400 });
+  }
+  const code = readStringField(body, 'code');
+  if (!code) {
+    return NextResponse.json({ error: messages.codeRequired }, { status: 400 });
+  }
+
+  try {
+    const user = await getAuthenticatedUserFromRequest(request);
+    if (!user) {
+      return NextResponse.json({ error: messages.signIn }, { status: 401 });
+    }
+
+    await ensureCoreAppwriteResources();
+
+    const isLimited = await isRateLimited([
+      [`verify-edu-confirm:${user.id}`, CONFIRM_LIMIT_PER_USER],
+      [`verify-edu-confirm-ip:${getClientIp(request)}`, CONFIRM_LIMIT_PER_IP],
+    ]);
+    if (isLimited) {
+      return NextResponse.json({ error: messages.tooMany }, { status: 429 });
+    }
+
+    const eligibility = evaluateRewardEligibility({ kind: 'edu_verification', identity: user });
+    if (!eligibility.eligible) {
+      logServerInfo('reward.denied', { kind: 'edu_verification', userId: user.id, reason: eligibility.reason });
+      return NextResponse.json({ error: messages.verifiedEmailRequired }, { status: 403 });
     }
 
     const profile = await getOrCreateProfile(user);
+    const invalidResponse = () => NextResponse.json({ error: messages.invalidCode }, { status: 400 });
 
-    if (!profile.edu_verification_code) {
-      return NextResponse.json({ error: 'Doğrulama başlatılmamış.' }, { status: 400 });
+    const storedHash = profile.edu_otp_hash ?? '';
+    const challengeId = profile.edu_otp_challenge_id ?? '';
+    const targetEmail = profile.edu_verification_email ?? '';
+
+    if (!storedHash || !challengeId || !targetEmail) {
+      // Legacy plaintext codes are never compared; drop them so they cannot linger.
+      if (profile.edu_verification_code) await invalidateChallenge(user.id);
+      return invalidResponse();
+    }
+    if (profile.edu_otp_delivery !== EDU_OTP_DELIVERY.SENT) {
+      return invalidResponse();
+    }
+    if (isEduOtpExpired(profile.edu_verification_expires)) {
+      await invalidateChallenge(user.id);
+      logServerInfo('edu-otp.expired', { userId: user.id, challengeId });
+      return invalidResponse();
+    }
+    if (!profile.row_id) {
+      return NextResponse.json({ error: messages.confirmFailed }, { status: 500 });
     }
 
-    if (!profile.edu_verification_expires || new Date(profile.edu_verification_expires) < new Date()) {
-      return NextResponse.json({ error: 'Doğrulama kodunun süresi dolmuş. Yeni kod gönderin.' }, { status: 400 });
+    if (!(await consumeAttempt(profile.row_id))) {
+      await invalidateChallenge(user.id);
+      logServerInfo('edu-otp.attempts_exhausted', { userId: user.id, challengeId });
+      return NextResponse.json({ error: messages.attemptsExhausted }, { status: 429 });
     }
 
-    if (code.length !== profile.edu_verification_code.length) {
-      return NextResponse.json({ error: 'Geçersiz doğrulama kodu.' }, { status: 400 });
+    if (!verifyEduOtpHash(code, storedHash, { userId: user.id, email: targetEmail, challengeId })) {
+      logServerInfo('edu-otp.mismatch', { userId: user.id, challengeId });
+      return invalidResponse();
     }
 
-    let mismatch = 0;
-    for (let i = 0; i < code.length; i++) {
-      mismatch |= code.charCodeAt(i) ^ profile.edu_verification_code.charCodeAt(i);
-    }
-
-    if (mismatch !== 0) {
-      return NextResponse.json({ error: 'Geçersiz doğrulama kodu.' }, { status: 400 });
+    // Single use: of all concurrent requests with the right code, only one claims the challenge.
+    if (!(await claimOnce(`edu-otp-consume:${challengeId}`))) {
+      logServerInfo('edu-otp.replay', { userId: user.id, challengeId });
+      return invalidResponse();
     }
 
     await updateProfileById(user.id, {
+      ...CLEARED_OTP_STATE,
       edu_verified: true,
-      edu_email: profile.edu_verification_email ?? '',
-      edu_verification_code: '',
-      edu_verification_email: '',
-      edu_verification_expires: null,
+      edu_email: targetEmail,
     });
 
-    return NextResponse.json({ message: '.edu.tr email doğrulandı! Öğrenci indirimi aktif.', verified: true });
+    logServerInfo('edu-otp.verified', { userId: user.id, challengeId });
+    return NextResponse.json({ message: messages.verified, verified: true });
   } catch (error) {
-    console.error('Verify edu confirm error:', error);
-    return NextResponse.json({ error: 'Doğrulama tamamlanamadı.' }, { status: 500 });
+    logServerError('api.verify-edu.PUT', error);
+    return NextResponse.json({ error: messages.confirmFailed }, { status: 500 });
   }
 }

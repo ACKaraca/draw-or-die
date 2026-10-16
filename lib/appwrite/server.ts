@@ -1,11 +1,12 @@
 import { createHash, randomBytes } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { Account, Client, ID, Query, Storage, TablesDB } from 'node-appwrite';
+import { Account, Client, ID, Query, Storage, TablesDB, Users } from 'node-appwrite';
 import type { Models } from 'node-appwrite';
 import type { NextRequest } from 'next/server';
 import { getAppwriteErrorDetails, isAppwriteConflict, isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import { normalizeLanguage, type SupportedLanguage } from '@/lib/i18n';
+import { logServerError } from '@/lib/logger';
 import { TIER_DEFAULTS } from '@/lib/pricing';
 
 export const APPWRITE_SERVER_ENDPOINT = process.env.APPWRITE_ENDPOINT ?? 'https://fra.cloud.appwrite.io/v1';
@@ -130,6 +131,9 @@ export const APPWRITE_TABLE_PEER_REVIEW_OPENINGS_ID = process.env.APPWRITE_TABLE
 export const APPWRITE_TABLE_PORTFOLIOS_ID = process.env.APPWRITE_TABLE_PORTFOLIOS_ID ?? 'portfolios';
 export const APPWRITE_TABLE_PORTFOLIO_PAGES_ID = process.env.APPWRITE_TABLE_PORTFOLIO_PAGES_ID ?? 'portfolio_pages';
 export const APPWRITE_TABLE_CONFESSIONS_ID = process.env.APPWRITE_TABLE_CONFESSIONS_ID ?? 'studio_confessions';
+export const APPWRITE_TABLE_DELETION_REQUESTS_ID = process.env.APPWRITE_TABLE_DELETION_REQUESTS_ID ?? 'deletion_requests';
+// Append-only Rapido journal (DOD-23). Provisioned by scripts/rapido-ledger-backfill.mjs, not by runtime bootstrap.
+export const APPWRITE_TABLE_RAPIDO_LEDGER_ID = process.env.APPWRITE_TABLE_RAPIDO_LEDGER_ID ?? 'rapido_ledger_entries';
 
 export function getAdminEmails(): string[] {
   const raw = process.env.ADMIN_EMAILS ?? '';
@@ -152,12 +156,15 @@ export function getVerifiedEmail(user: Pick<AppwriteAuthUser, 'email' | 'emailVe
 export function isVerifiedAdmin(user: Pick<AppwriteAuthUser, 'email' | 'emailVerified'>): boolean {
   return isAdminEmail(getVerifiedEmail(user));
 }
-export const APPWRITE_BUCKET_GALLERY_ID = process.env.APPWRITE_BUCKET_GALLERY_ID ?? 'gallery';
 
-const EARLY_REGISTRATION_BONUS_LIMIT = 100;
-const EARLY_REGISTRATION_BONUS_RAPIDO = 20;
-// New cohort rollout: only registrations after this timestamp are counted.
-const EARLY_REGISTRATION_BONUS_START_AT = process.env.APPWRITE_EARLY_REGISTRATION_BONUS_START_AT_V2 ?? '2026-04-12T00:00:00.000Z';
+/** Owner decision: only this account may moderate public submissions (not the wider ADMIN_EMAILS list). */
+export const GALLERY_MODERATOR_EMAILS: readonly string[] = ['ahmcemkaraca@gmail.com'];
+
+export function isGalleryModerator(user: Pick<AppwriteAuthUser, 'email' | 'emailVerified'>): boolean {
+  const email = getVerifiedEmail(user)?.trim().toLowerCase();
+  return Boolean(email && GALLERY_MODERATOR_EMAILS.includes(email));
+}
+export const APPWRITE_BUCKET_GALLERY_ID = process.env.APPWRITE_BUCKET_GALLERY_ID ?? 'gallery';
 
 export type AppwriteAuthUser = {
   id: string;
@@ -288,6 +295,11 @@ export type UserProfileRow = Models.Row & {
   edu_verification_code?: string;
   edu_verification_email?: string;
   edu_verification_expires?: string;
+  /** Keyed HMAC of the pending edu OTP (see `lib/edu-otp.ts`). Server-only. */
+  edu_otp_hash?: string;
+  edu_otp_challenge_id?: string;
+  edu_otp_attempts?: number;
+  edu_otp_delivery?: string;
   referral_code?: string;
   referred_by?: string;
   referral_rewarded_at?: string;
@@ -348,6 +360,21 @@ export type BillingEventRow = Models.Row & {
   metadata_json?: string;
 };
 
+export type RapidoLedgerEntryRow = Models.Row & {
+  user_id: string;
+  operation_id: string;
+  kind: string;
+  bucket?: string | null;
+  delta_cents: number;
+  amount_cents: number;
+  reason: string;
+  actor: string;
+  approved_by?: string | null;
+  operation?: string | null;
+  lease_expires_at?: string | null;
+  occurred_at: string;
+};
+
 export type PromoCodeRow = Models.Row & {
   code: string;
   title: string;
@@ -379,6 +406,23 @@ export type PromoRedemptionRow = Models.Row & {
   note?: string;
   metadata_json?: string;
   redeemed_at?: string;
+  status?: string;
+  stripe_session_id?: string;
+};
+
+export type StripeEventRow = Models.Row & {
+  event_id: string;
+  processed_at: string;
+  status?: string | null;
+  event_type?: string | null;
+  attempts?: number | null;
+  lease_owner?: string | null;
+  lease_expires_at?: string | null;
+  last_error?: string | null;
+  outcome?: string | null;
+  livemode?: boolean | null;
+  stripe_created_at?: string | null;
+  updated_at?: string | null;
 };
 
 export type FeatureFlagRow = Models.Row & {
@@ -538,6 +582,10 @@ export type NormalizedUserProfile = {
   edu_verification_code: string | null;
   edu_verification_email: string | null;
   edu_verification_expires: string | null;
+  edu_otp_hash?: string | null;
+  edu_otp_challenge_id?: string | null;
+  edu_otp_attempts?: number;
+  edu_otp_delivery?: string | null;
   referral_code: string | null;
   referred_by: string | null;
   referral_rewarded_at: string | null;
@@ -604,6 +652,10 @@ export function normalizeProfileRow(row: UserProfileRow): NormalizedUserProfile 
     edu_verification_code: row.edu_verification_code || null,
     edu_verification_email: row.edu_verification_email || null,
     edu_verification_expires: row.edu_verification_expires || null,
+    edu_otp_hash: row.edu_otp_hash || null,
+    edu_otp_challenge_id: row.edu_otp_challenge_id || null,
+    edu_otp_attempts: Number.isFinite(row.edu_otp_attempts) ? Number(row.edu_otp_attempts) : 0,
+    edu_otp_delivery: row.edu_otp_delivery || null,
     referral_code: row.referral_code || null,
     referred_by: row.referred_by || null,
     referral_rewarded_at: row.referral_rewarded_at || null,
@@ -674,13 +726,71 @@ async function findProfileRowByUserIdWithLegacyFallback(
 }
 
 /**
- * Profile shape that is safe to send to the browser. The pending edu OTP must stay
- * server-side, otherwise anyone could "verify" an .edu.tr address they don't own.
+ * Fields of the profile that may be sent to its owner's browser. This is an allow-list on
+ * purpose: OTP material (plaintext code, hash, challenge id, attempts, delivery state) and
+ * Stripe customer/subscription ids stay server-side, and any column added later stays
+ * private until it is listed here.
  */
-export function toClientProfile(profile: NormalizedUserProfile): Omit<NormalizedUserProfile, 'edu_verification_code'> {
-  const { edu_verification_code: _omitted, ...clientProfile } = profile;
-  void _omitted;
-  return clientProfile;
+export const CLIENT_PROFILE_FIELDS = [
+  'id',
+  'email',
+  'preferred_language',
+  'is_premium',
+  'rapido_pens',
+  'rapido_fraction_cents',
+  'progression_score',
+  'wall_of_death_count',
+  'earned_badges',
+  'subscription_status',
+  'subscription_current_period_start',
+  'subscription_current_period_end',
+  'subscription_cancel_at_period_end',
+  'premium_started_at',
+  'premium_price_cents',
+  'premium_currency',
+  'premium_interval',
+  'premium_promo_code',
+  'edu_verified',
+  'edu_email',
+  'edu_verification_email',
+  'edu_verification_expires',
+  'referral_code',
+  'referred_by',
+  'referral_rewarded_at',
+  'referral_signup_count',
+] as const satisfies ReadonlyArray<keyof NormalizedUserProfile>;
+
+export type ClientProfile = Pick<NormalizedUserProfile, (typeof CLIENT_PROFILE_FIELDS)[number]>;
+
+export function toClientProfile(profile: NormalizedUserProfile): ClientProfile {
+  const clientProfile: Partial<Record<keyof ClientProfile, unknown>> = {};
+  for (const field of CLIENT_PROFILE_FIELDS) {
+    if (profile[field] !== undefined) clientProfile[field] = profile[field];
+  }
+  // A pending address is only meaningful while a delivered challenge is outstanding.
+  if (!profile.edu_otp_hash) {
+    clientProfile.edu_verification_email = null;
+    clientProfile.edu_verification_expires = null;
+  }
+  return clientProfile as ClientProfile;
+}
+
+/** Auth-side identity of any user (server key). Throws on lookup failure so callers fail closed. */
+export async function getAuthUserById(userId: string): Promise<AppwriteAuthUser> {
+  const users = new Users(createAdminClient());
+  const user = await users.get({ userId });
+  return {
+    id: user.$id,
+    email: user.email || null,
+    name: user.name || null,
+    emailVerified: user.emailVerification === true,
+    createdAt: user.registration || user.$createdAt || null,
+  };
+}
+
+/** Ledger key marking a profile created under the current registration-bonus scheme. */
+export function registrationBonusEntitlementKey(userId: string): string {
+  return `registration-bonus-entitled:${userId}`;
 }
 
 export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<NormalizedUserProfile> {
@@ -715,33 +825,19 @@ export async function getOrCreateProfile(user: AppwriteAuthUser): Promise<Normal
     }
   }
 
-  const isAnonymous = !user.email;
-  let earlyRegistrationBonus = 0;
+  // Starting balance only. The registration bonus is a reward granted through
+  // `lib/registration-bonus.ts` → `lib/reward-policy.ts` on the profile load.
+  const initialRapido = user.email ? TIER_DEFAULTS.REGISTERED : TIER_DEFAULTS.ANONYMOUS;
 
-  if (!isAnonymous) {
+  if (user.email) {
+    // Written before the row exists, so any request that sees the profile also sees the
+    // entitlement; profiles created before this marker existed never get the bonus.
     try {
-      const registeredCount = await tables.listRows<UserProfileRow>({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: APPWRITE_TABLE_PROFILES_ID,
-        queries: [
-          Query.notEqual('email', ''),
-          Query.createdAfter(EARLY_REGISTRATION_BONUS_START_AT),
-          Query.limit(1),
-        ],
-        total: true,
-      });
-
-      if (registeredCount.total < EARLY_REGISTRATION_BONUS_LIMIT) {
-        earlyRegistrationBonus = EARLY_REGISTRATION_BONUS_RAPIDO;
-      }
-    } catch {
-      earlyRegistrationBonus = 0;
+      await markStripeEventProcessed(registrationBonusEntitlementKey(user.id));
+    } catch (error) {
+      logServerError('appwrite.profile.registration_bonus_entitlement', error, { userId: user.id });
     }
   }
-
-  const initialRapido = isAnonymous
-    ? TIER_DEFAULTS.ANONYMOUS
-    : TIER_DEFAULTS.REGISTERED + earlyRegistrationBonus;
 
   try {
     const created = await tables.createRow<UserProfileRow>({

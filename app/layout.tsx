@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Inter, Space_Grotesk, JetBrains_Mono } from 'next/font/google';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { Suspense } from 'react';
 import './globals.css';
 import { AuthProvider } from '@/hooks/useAuth';
@@ -11,8 +11,9 @@ import { CookieConsentBanner } from '@/components/CookieConsentBanner';
 import { RuntimeTextLocalizer } from '@/components/RuntimeTextLocalizer';
 import { ReferralCaptureInner } from '@/components/ReferralCapture';
 import { MotionPreferences } from '@/components/ui/MotionPreferences';
-import { SITE_TITLE_TEMPLATE, SITE_URL, resolveServerLanguage } from '@/app/_shared/route-metadata';
+import { SITE_TITLE_TEMPLATE, resolveServerLanguage } from '@/app/_shared/route-metadata';
 import { pickLocalized } from '@/lib/i18n';
+import { buildRobotsMetadata, isProductionRequestHeaders, resolveMetadataBase } from '@/lib/site-identity';
 import {
   COOKIE_CONSENT_STORAGE_KEY,
   normalizeCookieConsentStatus,
@@ -37,7 +38,9 @@ const jetbrainsMono = JetBrains_Mono({
 // og:title / og:description / og:image are intentionally left out: Next fills them per route from
 // each page's title/description and from app/opengraph-image.tsx, and twitter inherits from openGraph.
 export async function generateMetadata(): Promise<Metadata> {
-  const language = await resolveServerLanguage();
+  const [language, headerStore] = await Promise.all([resolveServerLanguage(), headers()]);
+  const isProduction = isProductionRequestHeaders(headerStore);
+  const robots = buildRobotsMetadata(isProduction);
   const defaultTitle = pickLocalized(
     language,
     'Draw or Die | Yapay Zeka Destekli Mimari Jüri',
@@ -55,7 +58,9 @@ export async function generateMetadata(): Promise<Metadata> {
       'Upload your board, face the jury: AI-powered, multi-persona architectural critique for architecture students.',
     ),
     applicationName: 'Draw or Die',
-    metadataBase: new URL(SITE_URL),
+    metadataBase: resolveMetadataBase(isProduction),
+    // Inherited by every route; dev/preview/unknown hosts stay out of search indexes.
+    ...(robots ? { robots } : {}),
     openGraph: {
       type: 'website',
       siteName: 'Draw or Die',

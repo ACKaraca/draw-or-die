@@ -235,6 +235,10 @@ async function setupProfilesTable() {
   await ensureStringColumn(tableId, 'edu_verification_code', 16, false);
   await ensureStringColumn(tableId, 'edu_verification_email', 255, false);
   await ensureDatetimeColumn(tableId, 'edu_verification_expires', false);
+  await ensureStringColumn(tableId, 'edu_otp_hash', 128, false);
+  await ensureStringColumn(tableId, 'edu_otp_challenge_id', 64, false);
+  await ensureIntegerColumn(tableId, 'edu_otp_attempts', false, 0, 0, 1000);
+  await ensureStringColumn(tableId, 'edu_otp_delivery', 16, false);
 
   await ensureIndex(
     tableId,
@@ -280,6 +284,16 @@ async function setupStripeEventsTable() {
 
   await ensureStringColumn(tableId, 'event_id', 128, true);
   await ensureDatetimeColumn(tableId, 'processed_at', true);
+  await ensureStringColumn(tableId, 'status', 16, false);
+  await ensureStringColumn(tableId, 'event_type', 128, false);
+  await ensureIntegerColumn(tableId, 'attempts', false, undefined, 0, 1000000);
+  await ensureStringColumn(tableId, 'lease_owner', 64, false);
+  await ensureDatetimeColumn(tableId, 'lease_expires_at', false);
+  await ensureStringColumn(tableId, 'last_error', 1000, false);
+  await ensureStringColumn(tableId, 'outcome', 255, false);
+  await ensureBooleanColumn(tableId, 'livemode', false);
+  await ensureDatetimeColumn(tableId, 'stripe_created_at', false);
+  await ensureDatetimeColumn(tableId, 'updated_at', false);
 
   await ensureIndex(
     tableId,
@@ -437,6 +451,8 @@ async function setupPromoRedemptionsTable() {
   await ensureStringColumn(tableId, 'note', 255, false);
   await ensureStringColumn(tableId, 'metadata_json', 10000, false);
   await ensureDatetimeColumn(tableId, 'redeemed_at', true);
+  await ensureStringColumn(tableId, 'status', 16, false);
+  await ensureStringColumn(tableId, 'stripe_session_id', 255, false);
 
   await ensureIndex(
     tableId,

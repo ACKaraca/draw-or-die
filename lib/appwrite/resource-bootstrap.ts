@@ -498,6 +498,11 @@ async function setupProfilesTable(tables: TablesDB): Promise<void> {
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_code', 16, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_email', 255, false);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_verification_expires', false);
+  // Edu OTP v1 (keyed hash, single challenge). `edu_verification_code` is legacy plaintext: no longer written.
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_hash', 128, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_challenge_id', 64, false);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_attempts', false, 0, 0, 1_000);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'edu_otp_delivery', 16, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referral_code', 16, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referred_by', 16, false);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROFILES_ID, 'referral_rewarded_at', false);
@@ -555,6 +560,14 @@ async function setupGalleryTable(tables: TablesDB): Promise<void> {
   await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'moderation_reason', 500, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'public_url', 2_048, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'storage_path', 255, false);
+  // Explicit publish consent + revocation + moderator audit (additive, all optional).
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'consent_scope', 32, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'consent_version', 64, false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'consented_at', false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'revoked_at', false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'archived_from_status', 32, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'moderated_by', 64, false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_GALLERY_ID, 'moderated_at', false);
 
   await ensureIndex(
     tables,
@@ -598,6 +611,17 @@ async function setupStripeEventsTable(tables: TablesDB): Promise<void> {
 
   await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'event_id', 128, true);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'processed_at', true);
+  // Processing state for Stripe webhook events (optional: one-time claim rows leave them empty).
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'status', 16, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'event_type', 128, false);
+  await ensureIntegerColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'attempts', false, undefined, 0, 1_000_000);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'lease_owner', 64, false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'lease_expires_at', false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'last_error', 1_000, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'outcome', 255, false);
+  await ensureBooleanColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'livemode', false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'stripe_created_at', false);
+  await ensureDatetimeColumn(tables, APPWRITE_TABLE_STRIPE_EVENTS_ID, 'updated_at', false);
 
   await ensureIndex(
     tables,
@@ -919,6 +943,9 @@ async function setupPromoRedemptionsTable(tables: TablesDB): Promise<void> {
   await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'note', 255, false);
   await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'metadata_json', 10000, false);
   await ensureDatetimeColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'redeemed_at', true);
+  // Checkout reservations: reserved -> redeemed | released. Empty for legacy/redeem rows.
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'status', 16, false);
+  await ensureStringColumn(tables, APPWRITE_TABLE_PROMO_REDEMPTIONS_ID, 'stripe_session_id', 255, false);
 
   await ensureIndex(
     tables,

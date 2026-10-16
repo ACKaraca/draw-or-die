@@ -1,15 +1,23 @@
 import { render } from '@testing-library/react';
 import { GrowthTrackingBoot } from '@/components/GrowthTrackingBoot';
-import { captureUTMFromCurrentUrl, syncAnalyticsConsentFromStorage, trackConversionEvent, trackPageView } from '@/lib/growth-tracking';
+import {
+  captureUTMFromCurrentUrl,
+  hasAnalyticsConsent,
+  syncAnalyticsConsentFromStorage,
+  trackConversionEvent,
+  trackPageView,
+} from '@/lib/growth-tracking';
 
 jest.mock('@/lib/growth-tracking', () => ({
   captureUTMFromCurrentUrl: jest.fn(),
+  hasAnalyticsConsent: jest.fn(),
   syncAnalyticsConsentFromStorage: jest.fn(),
   trackConversionEvent: jest.fn(),
   trackPageView: jest.fn(),
 }));
 
 const mockedCapture = jest.mocked(captureUTMFromCurrentUrl);
+const mockedHasConsent = jest.mocked(hasAnalyticsConsent);
 const mockedSyncConsent = jest.mocked(syncAnalyticsConsentFromStorage);
 const mockedTrack = jest.mocked(trackConversionEvent);
 const mockedTrackPageView = jest.mocked(trackPageView);
@@ -17,6 +25,7 @@ const mockedTrackPageView = jest.mocked(trackPageView);
 describe('GrowthTrackingBoot', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedHasConsent.mockReturnValue(true);
   });
 
   it('tracks initial page view on mount', () => {
@@ -41,6 +50,17 @@ describe('GrowthTrackingBoot', () => {
 
     render(<GrowthTrackingBoot />);
 
+    expect(mockedTrack).not.toHaveBeenCalled();
+  });
+
+  it('persists no campaign data and tracks nothing without analytics consent', () => {
+    mockedHasConsent.mockReturnValue(false);
+
+    render(<GrowthTrackingBoot />);
+
+    expect(mockedSyncConsent).toHaveBeenCalledTimes(1);
+    expect(mockedCapture).not.toHaveBeenCalled();
+    expect(mockedTrackPageView).not.toHaveBeenCalled();
     expect(mockedTrack).not.toHaveBeenCalled();
   });
 });

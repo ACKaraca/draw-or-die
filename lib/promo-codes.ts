@@ -12,9 +12,12 @@ import {
   recordBillingEvent,
   updateProfileById,
 } from '@/lib/appwrite/server';
+import { isAppwriteNotFound } from '@/lib/appwrite/error-utils';
 import { claimOnce, releaseClaim } from '@/lib/idempotency';
 import { logServerError } from '@/lib/logger';
 import { creditRapidoPens } from '@/lib/rapido-balance';
+import { RAPIDO_PRECISION_SCALE, toRapidoCents } from '@/lib/rapido-cents';
+import { creditRapidoThroughLedger } from '@/lib/rapido-ledger-runtime';
 
 export type PromoRewardKind = 'rapido' | 'premium' | 'discount_percent' | 'discount_amount';
 export type PromoTargetScope = 'any' | 'guest' | 'registered' | 'premium' | 'edu' | 'akdeniz';
@@ -178,6 +181,11 @@ async function getInternalPromoByCode(code: string): Promise<NormalizedPromoCode
   return normalizePromoCodeRow(rows.rows[0]);
 }
 
+/** Released checkout reservations do not count as a use; legacy rows have no status. */
+function activeRedemptionQuery(): string {
+  return Query.or([Query.isNull('status'), Query.notEqual('status', 'released')]);
+}
+
 async function getPromoUsageCounts(promo: NormalizedPromoCode, userId: string): Promise<{ totalUses: number; userUses: number }> {
   const tables = getAdminTables();
   const [total, user] = await Promise.all([
@@ -186,6 +194,7 @@ async function getPromoUsageCounts(promo: NormalizedPromoCode, userId: string): 
       tableId: APPWRITE_TABLE_PROMO_REDEMPTIONS_ID,
       queries: [
         Query.equal('promo_code_id', promo.id),
+        activeRedemptionQuery(),
         Query.limit(1),
       ],
       total: true,
@@ -196,6 +205,7 @@ async function getPromoUsageCounts(promo: NormalizedPromoCode, userId: string): 
       queries: [
         Query.equal('promo_code_id', promo.id),
         Query.equal('user_id', userId),
+        activeRedemptionQuery(),
         Query.limit(1),
       ],
       total: true,
@@ -397,6 +407,24 @@ async function releasePromoCounter(promoId: string): Promise<void> {
   }
 }
 
+/** Journaled promo credit (idempotent per redemption slot); `null` means use the legacy credit. */
+async function creditPromoThroughLedger(
+  slotKey: string,
+  profile: NormalizedUserProfile,
+  rapido: number,
+): Promise<number | null> {
+  const balanceCents = await creditRapidoThroughLedger({
+    userId: profile.id,
+    profileRowId: profile.row_id,
+    sourceId: slotKey,
+    bucket: 'promotional',
+    amountCents: rapido * RAPIDO_PRECISION_SCALE,
+    knownBalanceCents: toRapidoCents(profile.rapido_pens, profile.rapido_fraction_cents),
+    reason: 'promo_redemption',
+  });
+  return balanceCents === null ? null : Math.trunc(balanceCents / RAPIDO_PRECISION_SCALE);
+}
+
 export async function redeemPromoCode(options: {
   code: string;
   user: AppwriteAuthUser;
@@ -471,7 +499,8 @@ export async function redeemPromoCode(options: {
   try {
     if (promo.rewardKind === 'rapido') {
       rapidoDelta = rewardValue || 1;
-      const nextRapido = await creditRapidoPens(options.user.id, updatedProfile, rapidoDelta);
+      const journaled = await creditPromoThroughLedger(slotKey, updatedProfile, rapidoDelta);
+      const nextRapido = journaled ?? await creditRapidoPens(options.user.id, updatedProfile, rapidoDelta);
       updatedProfile = {
         ...updatedProfile,
         rapido_pens: nextRapido,
@@ -486,23 +515,8 @@ export async function redeemPromoCode(options: {
       rapidoDelta = Math.max(0, premiumBalance - currentBalance);
       const periodEnd = new Date(Date.now() + premiumDays * 24 * 60 * 60 * 1000).toISOString();
 
-      await updateProfileById(options.user.id, {
+      const premiumPatch = {
         is_premium: true,
-        rapido_pens: premiumBalance,
-        subscription_status: 'promo',
-        subscription_current_period_start: nowIso,
-        subscription_current_period_end: periodEnd,
-        subscription_cancel_at_period_end: false,
-        premium_started_at: nowIso,
-        premium_price_cents: 0,
-        premium_currency: promo.rewardCurrency || 'try',
-        premium_interval: promo.rewardInterval || 'promo',
-        premium_promo_code: promo.code,
-      });
-      updatedProfile = {
-        ...updatedProfile,
-        is_premium: true,
-        rapido_pens: premiumBalance,
         subscription_status: 'promo',
         subscription_current_period_start: nowIso,
         subscription_current_period_end: periodEnd,
@@ -513,6 +527,13 @@ export async function redeemPromoCode(options: {
         premium_interval: promo.rewardInterval || 'promo',
         premium_promo_code: promo.code,
       };
+      // Journaled top-up credits the counter atomically; legacy mode sets the balance directly.
+      const journaled = rapidoDelta > 0 ? await creditPromoThroughLedger(slotKey, updatedProfile, rapidoDelta) : null;
+      await updateProfileById(
+        options.user.id,
+        journaled === null ? { ...premiumPatch, rapido_pens: premiumBalance } : premiumPatch,
+      );
+      updatedProfile = { ...updatedProfile, ...premiumPatch, rapido_pens: journaled ?? premiumBalance };
       message = `${premiumDays} gün premium eklendi.`;
     }
   } catch (error) {
@@ -565,4 +586,162 @@ export async function redeemPromoCode(options: {
     profile: updatedProfile,
     message,
   };
+}
+
+export type CheckoutPromoReservation = {
+  reservationId: string;
+  promoId: string;
+};
+
+export type CheckoutPromoReservationResult =
+  | { ok: true; reservation: CheckoutPromoReservation }
+  | { ok: false; code: 'PROMO_EXHAUSTED' | 'PROMO_USER_LIMIT'; error: string };
+
+type ReservationMetadata = {
+  slotKey?: string;
+  isCounterReserved?: boolean;
+};
+
+/**
+ * Reserves one use of an internal checkout promo before the Stripe session exists, so the
+ * per-user slot and the global counter are consumed atomically even under parallel
+ * requests. The reservation becomes `redeemed` when Stripe confirms payment and is
+ * `released` (slot + counter returned) when the session expires or creation fails.
+ */
+export async function reserveCheckoutPromo(options: {
+  promo: NormalizedPromoCode;
+  userId: string;
+  mode: PromoCheckoutMode;
+}): Promise<CheckoutPromoReservationResult> {
+  const { promo, userId, mode } = options;
+  const counts = await getPromoUsageCounts(promo, userId);
+  if (promo.maxUsesPerUser !== null && counts.userUses >= promo.maxUsesPerUser) {
+    return { ok: false, code: 'PROMO_USER_LIMIT', error: 'Bu kodu zaten maksimum kez kullandın.' };
+  }
+
+  const slotKey = `promo-checkout:${promo.id}:${userId}:${counts.userUses + 1}`;
+  if (!(await claimOnce(slotKey))) {
+    return { ok: false, code: 'PROMO_USER_LIMIT', error: 'Bu kodu zaten maksimum kez kullandın.' };
+  }
+
+  const tables = getAdminTables();
+  let isCounterReserved = false;
+  try {
+    const counter = await tables.incrementRowColumn<PromoCodeRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROMO_CODES_ID,
+      rowId: promo.id,
+      column: 'used_count',
+      value: 1,
+      max: promo.maxTotalUses ?? undefined,
+    });
+    isCounterReserved = true;
+    if (promo.maxTotalUses !== null && Number(counter.used_count) > promo.maxTotalUses) {
+      throw new Error('PROMO_EXHAUSTED');
+    }
+  } catch (error) {
+    if (isCounterReserved) await releasePromoCounter(promo.id);
+    if (promo.maxTotalUses !== null) {
+      await releaseClaim(slotKey);
+      return { ok: false, code: 'PROMO_EXHAUSTED', error: 'Bu kodun tüm kullanım hakkı doldu.' };
+    }
+    isCounterReserved = false;
+    logServerError('promo.checkout.counter', error, { promoId: promo.id });
+  }
+
+  try {
+    const metadata: ReservationMetadata = { slotKey, isCounterReserved };
+    const row = await tables.createRow<PromoRedemptionRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROMO_REDEMPTIONS_ID,
+      rowId: ID.unique(),
+      data: {
+        promo_code_id: promo.id,
+        promo_code: promo.code,
+        user_id: userId,
+        reward_kind: promo.rewardKind,
+        reward_value: Math.max(0, Math.trunc(promo.rewardValue)),
+        reward_currency: promo.rewardCurrency || 'try',
+        checkout_mode: mode,
+        note: 'checkout reservation',
+        metadata_json: JSON.stringify(metadata),
+        redeemed_at: new Date().toISOString(),
+        status: 'reserved',
+        stripe_session_id: '',
+      },
+    });
+    return { ok: true, reservation: { reservationId: row.$id, promoId: promo.id } };
+  } catch (error) {
+    if (isCounterReserved) await releasePromoCounter(promo.id);
+    await releaseClaim(slotKey);
+    throw error;
+  }
+}
+
+async function getReservationRow(reservationId: string): Promise<PromoRedemptionRow | null> {
+  try {
+    return await getAdminTables().getRow<PromoRedemptionRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROMO_REDEMPTIONS_ID,
+      rowId: reservationId,
+    });
+  } catch (error) {
+    if (isAppwriteNotFound(error)) return null;
+    throw error;
+  }
+}
+
+/** Marks a reservation as redeemed after Stripe confirmed the payment. Idempotent. */
+export async function confirmCheckoutPromoReservation(
+  reservationId: string,
+  stripeSessionId: string,
+): Promise<'redeemed' | 'already_redeemed' | 'missing' | 'released'> {
+  const row = await getReservationRow(reservationId);
+  if (!row) return 'missing';
+  if (row.status === 'redeemed') return 'already_redeemed';
+  if (row.status === 'released') {
+    // A paid session whose reservation was given back: keep the history and flag it for review.
+    logServerError('promo.checkout.confirm-released', new Error('Paid checkout used a released promo reservation'), {
+      reservationId,
+      stripeSessionId,
+    });
+    return 'released';
+  }
+
+  await getAdminTables().updateRow<PromoRedemptionRow>({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_TABLE_PROMO_REDEMPTIONS_ID,
+    rowId: reservationId,
+    data: { status: 'redeemed', stripe_session_id: stripeSessionId.substring(0, 255) },
+  });
+  return 'redeemed';
+}
+
+/**
+ * Returns a reserved use (checkout expired or was never created). The release claim makes
+ * the counter decrement happen once even if the release is retried.
+ */
+export async function releaseCheckoutPromoReservation(reservationId: string): Promise<'released' | 'noop'> {
+  const row = await getReservationRow(reservationId);
+  if (!row || row.status !== 'reserved') return 'noop';
+
+  const releaseKey = `promo-release:${reservationId}`;
+  if (!(await claimOnce(releaseKey))) return 'noop';
+
+  const metadata = parseJsonObject(row.metadata_json) as ReservationMetadata;
+  try {
+    await getAdminTables().updateRow<PromoRedemptionRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_TABLE_PROMO_REDEMPTIONS_ID,
+      rowId: reservationId,
+      data: { status: 'released' },
+    });
+  } catch (error) {
+    await releaseClaim(releaseKey);
+    throw error;
+  }
+
+  if (metadata.isCounterReserved) await releasePromoCounter(row.promo_code_id);
+  if (typeof metadata.slotKey === 'string' && metadata.slotKey) await releaseClaim(metadata.slotKey);
+  return 'released';
 }

@@ -8,12 +8,14 @@
  * Keeps page.tsx as a thin orchestrator.
  */
 
+import { useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 
 import { HeroStep } from '@/components/HeroStep';
 import { StepLoadingFallback } from '@/components/StepLoadingFallback';
 import { UploadStep } from '@/components/UploadStep';
+import { STEP_CONTENT_ID, findStepHeading, focusStepHeading, listStepHeadings } from '@/components/ui/step-focus';
 import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 
 import type { DropzoneState } from 'react-dropzone';
@@ -179,181 +181,221 @@ export function StepRouter({
     startRevision,
   } = useDrawOrDieStore();
 
+  const contentRef = useRef<HTMLDivElement>(null);
+  const stopObservingRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => stopObservingRef.current?.(), []);
+
+  // A step change unmounts the focused control, which would drop keyboard/screen-reader users back to <body>.
+  // Exits only happen on step changes. AnimatePresence ("wait") calls this just before it swaps in the incoming
+  // step, so headings present right now belong to the outgoing step and are skipped.
+  const focusIncomingStepHeading = useCallback(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    stopObservingRef.current?.();
+    const outgoingHeadings = new Set<Element>(listStepHeadings(container));
+
+    const tryFocus = (): boolean => {
+      // A dialog that opened with the step (e.g. the guest prompt) owns focus; do not steal it.
+      if (document.activeElement?.closest('[role="dialog"]')) return true;
+      const heading = findStepHeading(container, outgoingHeadings);
+      if (!heading) return false;
+      focusStepHeading(heading);
+      return true;
+    };
+    if (tryFocus() || typeof MutationObserver === 'undefined') return;
+
+    // Lazily loaded steps render their heading after the chunk arrives.
+    const observer = new MutationObserver(() => {
+      if (tryFocus()) stop();
+    });
+    const timeout = window.setTimeout(() => stop(), 5000);
+    function stop() {
+      observer.disconnect();
+      window.clearTimeout(timeout);
+      stopObservingRef.current = null;
+    }
+    stopObservingRef.current = stop;
+    observer.observe(container, { childList: true, subtree: true });
+  }, []);
+
   return (
-    <AnimatePresence mode="wait">
-      {step === 'hero' && <HeroStep key="hero" setStep={setStep} />}
+    <div id={STEP_CONTENT_ID} ref={contentRef} className="contents">
+      <AnimatePresence mode="wait" onExitComplete={focusIncomingStepHeading}>
+        {step === 'hero' && <HeroStep key="hero" setStep={setStep} />}
 
-      {step === 'upload' && (
-        <UploadStep
-          key="upload"
-          getRootProps={getRootProps}
-          getInputProps={getInputProps}
-          isDragActive={isDragActive}
-          previewUrl={previewUrl}
-          mimeType={mimeType}
-          formData={formData}
-          setFormData={setFormData}
-          handleAnalyze={handleAnalyze}
-          handleMultiAnalyze={handleMultiAnalyze}
-          handleAutoConcept={handleAutoConcept}
-          handleMaterialBoard={handleMaterialBoard}
-          handleDesignInsight={handleDesignInsight}
-          image={image}
-          imageBase64={imageBase64}
-          additionalUploads={additionalUploads}
-          pdfText={pdfText}
-          uploadValidationError={uploadValidationError}
-          isRevisionMode={isRevisionMode}
-          isAuthenticated={isAuthenticated}
-          onAuthRequired={onAuthRequired}
-          isPremiumUser={isPremiumUser}
-          rapidoPens={rapidoPens}
-          onUpgradeClick={() => setStep('premium-upgrade')}
-          isAnonymous={isAnonymous}
-          guestDrawingCount={guestDrawingCount}
-          onGuestUpgradeRequired={onAuthRequired}
-          preferredLanguage={preferredLanguage}
-          multiJuryPromoActive={multiJuryPromoActive}
-        />
-      )}
+        {step === 'upload' && (
+          <UploadStep
+            key="upload"
+            getRootProps={getRootProps}
+            getInputProps={getInputProps}
+            isDragActive={isDragActive}
+            previewUrl={previewUrl}
+            mimeType={mimeType}
+            formData={formData}
+            setFormData={setFormData}
+            handleAnalyze={handleAnalyze}
+            handleMultiAnalyze={handleMultiAnalyze}
+            handleAutoConcept={handleAutoConcept}
+            handleMaterialBoard={handleMaterialBoard}
+            handleDesignInsight={handleDesignInsight}
+            image={image}
+            imageBase64={imageBase64}
+            additionalUploads={additionalUploads}
+            pdfText={pdfText}
+            uploadValidationError={uploadValidationError}
+            isRevisionMode={isRevisionMode}
+            isAuthenticated={isAuthenticated}
+            onAuthRequired={onAuthRequired}
+            isPremiumUser={isPremiumUser}
+            rapidoPens={rapidoPens}
+            onUpgradeClick={() => setStep('premium-upgrade')}
+            isAnonymous={isAnonymous}
+            guestDrawingCount={guestDrawingCount}
+            onGuestUpgradeRequired={onAuthRequired}
+            preferredLanguage={preferredLanguage}
+            multiJuryPromoActive={multiJuryPromoActive}
+          />
+        )}
 
-      {step === 'archbuilder' && (
-        <ArchBuilderStep
-          key="archbuilder"
-          onAuthRequired={onAuthRequired}
-        />
-      )}
+        {step === 'archbuilder' && (
+          <ArchBuilderStep
+            key="archbuilder"
+            onAuthRequired={onAuthRequired}
+          />
+        )}
 
-      {step === 'analyzing' && <AnalyzingStep key="analyzing" />}
-      {step === 'multi-analyzing' && <MultiAnalyzingStep key="multi-analyzing" />}
-      {step === 'premium-analyzing' && <PremiumAnalyzingStep key="premium-analyzing" />}
+        {step === 'analyzing' && <AnalyzingStep key="analyzing" />}
+        {step === 'multi-analyzing' && <MultiAnalyzingStep key="multi-analyzing" />}
+        {step === 'premium-analyzing' && <PremiumAnalyzingStep key="premium-analyzing" />}
 
-      {step === 'result' && (
-        <ResultStep
-          key="result"
-          previewUrl={previewUrl}
-          mimeType={mimeType}
-          handleNewProject={startNewProject}
-          handleRevision={startRevision}
-          previousProject={previousProject}
-          critique={critique}
-          lastProgression={lastProgression}
-          formData={formData}
-          isPremiumUser={isPremiumUser}
-          galleryConsent={galleryConsent}
-          galleryPlacement={galleryPlacement}
-          handleGalleryConsent={handleGalleryConsent}
-          handlePremium={handlePremium}
-          isDefending={isDefending}
-          setIsDefending={setIsDefending}
-          defenseTurnCount={defenseTurnCount}
-          defenseMessages={defenseMessages}
-          isDefenseLoading={isDefenseLoading}
-          defenseInput={defenseInput}
-          setDefenseInput={setDefenseInput}
-          handleDefenseSubmit={handleDefenseSubmit}
-          isAnonymous={isAnonymous}
-          guestDrawingCount={guestDrawingCount}
-          showGuestUpgradePrompt={showGuestUpgradePrompt}
-          setShowGuestUpgradePrompt={setShowGuestUpgradePrompt}
-          setGuestDrawingCount={setGuestDrawingCount}
-          onUpgradeClick={() => setStep('premium-upgrade')}
-          onAuthRequired={onAuthRequired}
-          handlePreserveAnalysis={handlePreserveAnalysis}
-          handleShareToCommunity={handleShareToCommunity}
-          handleAutoConcept={handleAutoConcept}
-          handleDesignInsight={handleDesignInsight}
-          latestAnalysisKind={latestAnalysisKind}
-        />
-      )}
+        {step === 'result' && (
+          <ResultStep
+            key="result"
+            previewUrl={previewUrl}
+            mimeType={mimeType}
+            handleNewProject={startNewProject}
+            handleRevision={startRevision}
+            previousProject={previousProject}
+            critique={critique}
+            lastProgression={lastProgression}
+            formData={formData}
+            isPremiumUser={isPremiumUser}
+            galleryConsent={galleryConsent}
+            galleryPlacement={galleryPlacement}
+            handleGalleryConsent={handleGalleryConsent}
+            handlePremium={handlePremium}
+            isDefending={isDefending}
+            setIsDefending={setIsDefending}
+            defenseTurnCount={defenseTurnCount}
+            defenseMessages={defenseMessages}
+            isDefenseLoading={isDefenseLoading}
+            defenseInput={defenseInput}
+            setDefenseInput={setDefenseInput}
+            handleDefenseSubmit={handleDefenseSubmit}
+            isAnonymous={isAnonymous}
+            guestDrawingCount={guestDrawingCount}
+            showGuestUpgradePrompt={showGuestUpgradePrompt}
+            setShowGuestUpgradePrompt={setShowGuestUpgradePrompt}
+            setGuestDrawingCount={setGuestDrawingCount}
+            onUpgradeClick={() => setStep('premium-upgrade')}
+            onAuthRequired={onAuthRequired}
+            handlePreserveAnalysis={handlePreserveAnalysis}
+            handleShareToCommunity={handleShareToCommunity}
+            handleAutoConcept={handleAutoConcept}
+            handleDesignInsight={handleDesignInsight}
+            latestAnalysisKind={latestAnalysisKind}
+          />
+        )}
 
-      {step === 'premium' && premiumData && (
-        <PremiumResultStep
-          key="premium"
-          premiumData={premiumData}
-          previewUrl={previewUrl}
-          mimeType={mimeType}
-          selectedFlawIndex={selectedFlawIndex}
-          setSelectedFlawIndex={setSelectedFlawIndex}
-          handleNewProject={startNewProject}
-          isPremiumUser={isPremiumUser}
-          isDefending={isDefending}
-          setIsDefending={setIsDefending}
-          defenseTurnCount={defenseTurnCount}
-          defenseMessages={defenseMessages}
-          isDefenseLoading={isDefenseLoading}
-          defenseInput={defenseInput}
-          setDefenseInput={setDefenseInput}
-          handleDefenseSubmit={handleDefenseSubmit}
-          previousProject={previousProject}
-          handlePreserveAnalysis={handlePreserveAnalysis}
-          handleShareToCommunity={handleShareToCommunity}
-        />
-      )}
+        {step === 'premium' && premiumData && (
+          <PremiumResultStep
+            key="premium"
+            premiumData={premiumData}
+            previewUrl={previewUrl}
+            mimeType={mimeType}
+            selectedFlawIndex={selectedFlawIndex}
+            setSelectedFlawIndex={setSelectedFlawIndex}
+            handleNewProject={startNewProject}
+            isPremiumUser={isPremiumUser}
+            isDefending={isDefending}
+            setIsDefending={setIsDefending}
+            defenseTurnCount={defenseTurnCount}
+            defenseMessages={defenseMessages}
+            isDefenseLoading={isDefenseLoading}
+            defenseInput={defenseInput}
+            setDefenseInput={setDefenseInput}
+            handleDefenseSubmit={handleDefenseSubmit}
+            previousProject={previousProject}
+            handlePreserveAnalysis={handlePreserveAnalysis}
+            handleShareToCommunity={handleShareToCommunity}
+          />
+        )}
 
-      {step === 'multi-result' && multiData && (
-        <MultiResultStep
-          key="multi-result"
-          multiData={multiData}
-          previewUrl={previewUrl}
-          mimeType={mimeType}
-          handleNewProject={startNewProject}
-          handlePremium={handlePremium}
-          handlePreserveAnalysis={handlePreserveAnalysis}
-          handleShareToCommunity={handleShareToCommunity}
-        />
-      )}
+        {step === 'multi-result' && multiData && (
+          <MultiResultStep
+            key="multi-result"
+            multiData={multiData}
+            previewUrl={previewUrl}
+            mimeType={mimeType}
+            handleNewProject={startNewProject}
+            handlePremium={handlePremium}
+            handlePreserveAnalysis={handlePreserveAnalysis}
+            handleShareToCommunity={handleShareToCommunity}
+          />
+        )}
 
-      {step === 'gallery' && (
-        <GalleryStep
-          key="gallery"
-          currentGallery={currentGallery}
-          setCurrentGallery={setCurrentGallery}
-          galleryItems={galleryItems}
-        />
-      )}
+        {step === 'gallery' && (
+          <GalleryStep
+            key="gallery"
+            currentGallery={currentGallery}
+            setCurrentGallery={setCurrentGallery}
+            galleryItems={galleryItems}
+          />
+        )}
 
-      {step === 'ai-mentor' && (
-        <AIMentorStep
-          key="ai-mentor"
-          isAuthenticated={isAuthenticated}
-          userId={userId}
-          isAnonymous={isAnonymous}
-          isPremiumUser={isPremiumUser}
-          progressionScore={progressionScore}
-          earnedBadges={earnedBadges}
-          onNavigateStudioDesk={() => setStep('upload')}
-          onUpgradeClick={() => setStep('premium-upgrade')}
-          preferredLanguage={preferredLanguage}
-        />
-      )}
+        {step === 'ai-mentor' && (
+          <AIMentorStep
+            key="ai-mentor"
+            isAuthenticated={isAuthenticated}
+            userId={userId}
+            isAnonymous={isAnonymous}
+            isPremiumUser={isPremiumUser}
+            progressionScore={progressionScore}
+            earnedBadges={earnedBadges}
+            onNavigateStudioDesk={() => setStep('upload')}
+            onUpgradeClick={() => setStep('premium-upgrade')}
+            preferredLanguage={preferredLanguage}
+          />
+        )}
 
-      {step === 'history' && <HistoryStep key="history" />}
+        {step === 'history' && <HistoryStep key="history" />}
 
-      {step === 'profile' && (
-        <ProfileStep
-          key="profile"
-          onUpgradeClick={() => setStep('premium-upgrade')}
-          onOpenRapidoShop={() => setStep('rapido-shop')}
-          onOpenAccountDetails={() => setStep('account-details')}
-          onOpenHistory={() => setStep('history')}
-          onAuthRequired={onAuthRequired}
-        />
-      )}
+        {step === 'profile' && (
+          <ProfileStep
+            key="profile"
+            onUpgradeClick={() => setStep('premium-upgrade')}
+            onOpenRapidoShop={() => setStep('rapido-shop')}
+            onOpenAccountDetails={() => setStep('account-details')}
+            onOpenHistory={() => setStep('history')}
+            onAuthRequired={onAuthRequired}
+          />
+        )}
 
-      {step === 'premium-upgrade' && <PremiumUpgradeStep key="premium-upgrade" setStep={setStep} />}
+        {step === 'premium-upgrade' && <PremiumUpgradeStep key="premium-upgrade" setStep={setStep} />}
 
-      {step === 'rapido-shop' && <PremiumUpgradeStep key="rapido-shop" setStep={setStep} initialTab="rapido" />}
+        {step === 'rapido-shop' && <PremiumUpgradeStep key="rapido-shop" setStep={setStep} initialTab="rapido" />}
 
-      {step === 'account-details' && (
-        <AccountDetailsStep
-          key="account-details"
-          onBack={() => setStep('profile')}
-          onOpenRapidoShop={() => setStep('rapido-shop')}
-          onOpenPremiumShop={() => setStep('premium-upgrade')}
-          onAuthRequired={onAuthRequired}
-        />
-      )}
-    </AnimatePresence>
+        {step === 'account-details' && (
+          <AccountDetailsStep
+            key="account-details"
+            onBack={() => setStep('profile')}
+            onOpenRapidoShop={() => setStep('rapido-shop')}
+            onOpenPremiumShop={() => setStep('premium-upgrade')}
+            onAuthRequired={onAuthRequired}
+          />
+        )}
+      </AnimatePresence>
+    </div>
   );
 }

@@ -20,7 +20,6 @@ import { NewProjectButton } from '@/components/NewProjectButton';
 import { PreserveAnalysisButton } from '@/components/PreserveAnalysisButton';
 import { useLanguage } from '@/components/RuntimeTextLocalizer';
 import { pickLocalized, type SupportedLanguage } from '@/lib/i18n';
-import { useDrawOrDieStore } from '@/stores/drawOrDieStore';
 
 import type { DefenseMessage, PremiumData } from '@/types';
 
@@ -109,7 +108,7 @@ export function PremiumResultStep({
   const [showCompare, setShowCompare] = useState(false);
   const [exportingScale, setExportingScale] = useState<number | null>(null);
   const language = useLanguage();
-  const addToast = useDrawOrDieStore((state) => state.addToast);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const pages = useMemo<DisplayPage[]>(() => {
     const sheetLabel = (page: number) => `${pickLocalized(language, 'Pafta', 'Sheet')} ${page}`;
@@ -189,6 +188,7 @@ export function PremiumResultStep({
   const handleExport = async (scale = 1) => {
     if (!exportRef.current || exportingScale !== null) return;
     setExportingScale(scale);
+    setExportError(null);
 
     try {
       const { default: html2canvas } = await import('html2canvas');
@@ -202,9 +202,12 @@ export function PremiumResultStep({
       link.href = dataUrl;
       link.click();
     } catch {
-      addToast(
-        pickLocalized(language, 'Dışa aktarma başarısız oldu. Lütfen tekrar dene.', 'Export failed. Please try again.'),
-        'error',
+      setExportError(
+        pickLocalized(
+          language,
+          'Pafta görseli oluşturulamadı. Sayfayı yenileyip indirmeyi tekrar dene.',
+          'The sheet image could not be created. Refresh the page and try the download again.',
+        ),
       );
     } finally {
       setExportingScale(null);
@@ -214,8 +217,8 @@ export function PremiumResultStep({
   return (
     <motion.div
       key="premium"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
       className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-8"
     >
       <div className="flex flex-col gap-4 lg:sticky lg:top-24 h-fit">
@@ -262,6 +265,15 @@ export function PremiumResultStep({
             </button>
           </div>
         </div>
+
+        {exportError ? (
+          <div role="alert" className="rounded-lg border border-red-500/25 bg-red-500/8 p-4">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-red-300">
+              {pickLocalized(language, 'Dışa aktarma başarısız', 'Export failed')}
+            </p>
+            <p className="mt-1 text-sm text-red-200">{exportError}</p>
+          </div>
+        ) : null}
 
         <div className="rounded-xl border border-white/10 bg-[#111827] px-3 py-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-slate-300">

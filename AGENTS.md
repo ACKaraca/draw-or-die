@@ -9,7 +9,6 @@ Authoritative instructions for all AI coding agents (Claude, Codex, Copilot, Cur
 **Draw or Die** — AI architectural jury simulator. User uploads drawing/PDF, gets multi-persona critique at chosen harshness, lands in Hall of Fame or Wall of Death.
 
 - Prod: `https://drawordie.app` (branch: `main`)
-- Dev:  `https://dev.drawordie.app` (branch: `dev-main`)
 - Appwrite project: `draw-or-die` (fra.cloud.appwrite.io)
 - Repo: `ACKaraca/draw-or-die` (only remote — no fork)
 
@@ -17,41 +16,19 @@ Authoritative instructions for all AI coding agents (Claude, Codex, Copilot, Cur
 
 ## 2. Branch & Release Strategy (CRITICAL)
 
+`main` is the only long-lived branch. There is no `dev-main` / integration branch.
 
-| Branch                       | Site                | Purpose                                               | Version bumps                 |
-| ---------------------------- | ------------------- | ----------------------------------------------------- | ----------------------------- |
-| `main`                       | `drawordie.app`     | Production. Major releases only.                      | `V.1 → V.2` (major)           |
-| `dev-main`                   | `dev.drawordie.app` | Active development, default workspace.                | `V.x.1 → V.x.2` (minor/patch) |
-| `feat/`*, `fix/*`, `chore/*` | preview             | Short-lived, branched from `dev-main`, merged via PR. | —                             |
-
+| Branch                       | Site            | Purpose                                         |
+| ---------------------------- | --------------- | ----------------------------------------------- |
+| `main`                       | `drawordie.app` | Production and the single integration branch.   |
+| `feat/*`, `fix/*`, `chore/*` | preview         | Short-lived, branched from `main`, merged via PR. |
 
 ### Working Rules
 
-- **Default to `dev-main` for ~90% of work.** Only touch `main` for big-picture releases or hotfixes the owner explicitly approves.
-- Never push directly to `main`. Always go via PR from `dev-main` or a release branch.
+- Branch from the latest `main` and open the PR against `main`.
+- Never push directly to `main`. Always go via PR.
 - Branch names: kebab-case, prefixed (`feat/`, `fix/`, `chore/`, `refactor/`, `docs/`).
 - Commits: Conventional Commits (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `perf:`, `ci:`).
-
-### 🚨 Version-Bump Nudge (MANDATORY OUTPUT BLOCK)
-
-At the **end of every response** that touches `dev-main` or any branch downstream of it, count uncommitted+unmerged work since last `main` merge. If **any** of the following is true, append the block below to your reply:
-
-- ≥ 8 commits on `dev-main` since last sync to `main`, OR
-- ≥ 3 net-new user-facing features, OR
-- ≥ 1 breaking schema/API change.
-
-Block format (use exactly, with emojis, in Turkish):
-
-```
----
-✨🚀 **VERSİYON GÜNCELLEMESİ ÖNERİLİR** 🚀✨
-📊 dev-main üzerinde {N} commit / {M} özellik birikti.
-🎯 Önerim: `V.x → V.(x+1)` olarak `main`'e merge etmeye hazır olabilir.
-👉 Onaylarsan PR'ı açayım mı?
----
-```
-
-Do **not** show this block on `main` work, doc-only edits, or trivial fixes. Never inflate counts to trigger it.
 
 ---
 
@@ -292,7 +269,7 @@ If any command fails → fix before declaring done. Never silence a lint rule wi
 ## 16. PR Checklist (paste into PR body)
 
 ```
-- [ ] Branched from `dev-main` (or `main` for hotfix)
+- [ ] Branched from latest `main`
 - [ ] `npm run lint` ✓
 - [ ] `npm run typecheck` ✓
 - [ ] `npm run test` ✓
@@ -328,7 +305,7 @@ The owner adds new domain files when a recurring topic starts producing inconsis
    5. **References** — links back to `AGENTS.md` and to other related `AGENTS_*.md` files.
 4. **Tone:** terse, declarative, English. Use tables, code blocks, ✅/❌ rows. No filler prose.
 5. **Register it in `AGENTS.md`:** add a one-row entry to the table above with the file name + when to read it + 1-line summary. The master file is how agents discover domain files — never leave a domain file unregistered.
-6. **Master ↔ domain split:** keep cross-cutting rules (branching, security, language policy, version-bump nudge, ADHD protocol) in `AGENTS.md`. Move deep, file-specific or topic-specific rules into the domain file. Master should remain ~300 lines, domain files can be longer.
+6. **Master ↔ domain split:** keep cross-cutting rules (branching, security, language policy, ADHD protocol) in `AGENTS.md`. Move deep, file-specific or topic-specific rules into the domain file. Master should remain ~300 lines, domain files can be longer.
 7. **Conflict resolution:** if `AGENTS.md` and an `AGENTS_*.md` disagree, the **domain file wins** for its scope (it is more specific). For everything else, master wins.
 8. **Versioning:** when you make a non-trivial change to a domain file, append a 1-line note to its bottom under a `## Changelog` section (date + summary). Do not maintain a global changelog.
 

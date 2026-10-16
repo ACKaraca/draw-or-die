@@ -23,10 +23,17 @@ Creates a Stripe Checkout session.
 { "url": "https://checkout.stripe.com/..." }
 ```
 
+The existing Stripe customer (`profiles.stripe_customer_id`) is reused. An internal promo use is reserved atomically
+before the session is created (`promo_redemptions.status = reserved`), becomes `redeemed` when the webhook confirms
+payment, and is `released` on `checkout.session.expired` or if session creation fails. The success redirect
+(`?checkout=success`) grants nothing; the client only re-reads the profile.
+
 **Errors:**
 - `401` — Authentication required
 - `400` — Invalid checkout mode
 - `400` — `INVALID_RAPIDO_QUANTITY` (quantity not an integer between 5 and 1000)
+- `400` — `PROMO_EXHAUSTED` / `PROMO_USER_LIMIT` (internal promo quota already reserved)
+- `409` — `SUBSCRIPTION_ALREADY_ACTIVE` (premium modes: the user/Stripe customer already has an active, trialing, past_due, unpaid or incomplete subscription)
 - `429` — Rate limit exceeded
 - `503` — Stripe not configured (`STRIPE_SECRET_KEY` missing)
 - `500` — Unexpected checkout error
@@ -39,40 +46,115 @@ Stripe webhook endpoint. Configure the URL in the Stripe Dashboard.
 
 **Headers:** `stripe-signature` (Stripe signature header)
 
-**Processed events:**
-- `checkout.session.completed` — Premium activation or Rapido top-up
-- `customer.subscription.deleted` — Premium cancellation
-- `invoice.payment_failed` — Marks the subscription `past_due`
-- `invoice.paid` (`billing_reason = subscription_cycle`) — Renewal: tops the balance up to the monthly Premium allowance (`TIER_DEFAULTS.PREMIUM`) and records a `premium_renewal` billing event. Yearly plans renew yearly, so they get this top-up once per year.
+**Processing:** each event is claimed in `stripe_events` (`processing → succeeded | ignored | rejected`, or `failed`
+with `attempts`/`last_error`). A live lease blocks parallel workers; a failed or stale event is taken over by the next
+delivery. Rapido/ledger effects are idempotent per source id (`checkout:<session>`, `invoice:<invoice>`,
+`refund:<refund>`, `dispute:<dispute>:<stage>`) and written atomically with the balance change.
 
-**Notes:**
-- Idempotency is enforced via the `stripe_events` table (duplicate events are skipped).
-- Returns `400` if signature verification fails.
+**Processed events:**
+- `checkout.session.completed` / `checkout.session.async_payment_succeeded` — validated against `lib/pricing.ts`
+  (product/price, unit amount, currency, quantity, mode, payment status); then Rapido pack credit or Premium
+  activation + allowance top-up to `TIER_DEFAULTS.PREMIUM`. Mismatches are recorded as `rejected` and grant nothing.
+- `checkout.session.expired` / `checkout.session.async_payment_failed` — releases an internal promo reservation.
+- `customer.subscription.*` and `invoice.payment_failed` — re-read the subscription from Stripe and project its current
+  status (`active`/`trialing` on a known Premium price = premium), so out-of-order events converge.
+- `invoice.paid` (`billing_reason = subscription_cycle`) — renewal: tops the balance up to the monthly Premium allowance
+  once per invoice and records `premium_renewal`. Yearly plans renew yearly, so they get this top-up once per year.
+- `charge.refunded` — Rapido pack: revokes the refunded share per refund (clamped at 0, `rapido_pack_refund`).
+  Subscription payment: recorded as `premium_refund` only; access follows the subscription status.
+- `charge.dispute.created` / `charge.dispute.closed` — recorded; a lost dispute on a Rapido pack revokes the disputed share.
+- Anything else — acknowledged and recorded as `ignored`.
+
+**Responses:** `200` processed/duplicate/ignored/rejected · `400` bad signature · `409` another worker holds the lease ·
+`500` handler failed (event kept as `failed`, Stripe retries) · `503` paused (`STRIPE_WEBHOOK_PAUSED`) or event store unavailable.
+
+### POST /api/webhook/stripe/replay
+
+Admin-only (verified admin email). Body: `{ "eventIds"?: string[], "dryRun"?: boolean, "includeRejected"?: boolean }`.
+Dry-run by default: without ids it lists stored `failed` events; with ids it shows stored state plus the Stripe event.
+`dryRun: false` requires explicit ids (max 25), re-fetches each event from Stripe and runs it through the same processor.
+CLI wrapper: `scripts/replay-stripe-events.mjs`.
 
 ---
 
-### POST /api/gallery
+### GET/POST/PATCH /api/gallery
 
-Submit a project to the public gallery or fetch gallery items.
+Explicit, recorded, revocable publishing to Hall of Fame / Wall of Death / Community.
+Approval state is **server-owned** (`lib/gallery-moderation-policy.ts`); nothing is ever published automatically.
 
-**Auth:** Valid Appwrite JWT required for submissions.
+**Auth:** Valid Appwrite JWT required for POST/PATCH. Guest (anonymous, no email) accounts get `403 GUEST_PUBLISH_BLOCKED`.
 
-**GET** — Returns paginated gallery items filtered by `gallery_type` (`HALL_OF_FAME | WALL_OF_DEATH | COMMUNITY`).
+**GET** — Public feed returns only `status = approved` rows that are not revoked (`revoked_at` empty), filtered by
+`type` (`HALL_OF_FAME | WALL_OF_DEATH | COMMUNITY`). `mine=1` (auth) returns the caller's own rows, optionally by `status`.
 
-**POST Body:**
+**POST Body** (only sent from an explicit "Allow" / "Share" click):
 ```json
 {
-  "imageBase64": "string",
-  "critiqueData": {},
-  "galleryType": "HALL_OF_FAME" | "WALL_OF_DEATH",
-  "title": "string"
+  "title": "string",
+  "juryQuote": "string",
+  "galleryType": "HALL_OF_FAME" | "WALL_OF_DEATH" | "COMMUNITY",
+  "imageBase64": "string (JPG/PNG/WEBP, magic bytes checked, <= 5MB)",
+  "mimeType": "image/jpeg",
+  "analysisKind": "SINGLE_JURY",
+  "consent": { "granted": true, "version": "<GALLERY_CONSENT_VERSION>", "scope": "<same as galleryType>" }
 }
 ```
+Client fields such as `autoApproved`, `approved`, `status`, `moderationStatus` are **ignored** (logged as
+`ignoredClientApprovalFields`).
 
-**Errors:**
-- `401` — Authentication required
-- `403` — Submission not eligible
-- `429` — Rate limit exceeded
+Order of operations: auth → durable owner → payload + consent validation → image validation → moderation → storage write → row write.
+No storage or DB write happens before consent is verified; a moderation rejection never reaches storage.
+
+Moderation decision (same policy for Hall/Wall/Community and Confessions):
+- **`AI_MODERATION_MODE` unset/`off` (default):** no model call; every new submission is stored `pending` with
+  `moderation_reason = "manual_review"` and waits for the moderator. The rules below apply only with `on`.
+- `approved` only for a strict model verdict `{ "approved": true, "category": "SAFE" }` AND no prompt-injection markers
+  in title/text.
+- `pending` for missing key, network/non-2xx, unparsable output, any other shape, or injection suspicion.
+- `rejected` (`422 COMMUNITY_MODERATION_REJECTED` / `GALLERY_MODERATION_REJECTED`) for `approved: false`.
+
+**Success:** `{ item, submissionId, moderationPendingReview, code? }` where `code` is `COMMUNITY_PENDING_REVIEW` or
+`GALLERY_PENDING_REVIEW` when pending.
+
+**Errors:** `400 GALLERY_CONSENT_REQUIRED | GALLERY_CONSENT_SCOPE_MISMATCH | INVALID_GALLERY_PAYLOAD | INVALID_IMAGE_PAYLOAD`,
+`409 GALLERY_CONSENT_VERSION_MISMATCH`, `413 GALLERY_IMAGE_TOO_LARGE`, `415 UNSUPPORTED_IMAGE_TYPE`, `500 GALLERY_WRITE_FAILED`.
+
+**PATCH Body:** `{ "submissionId": "string", "action": "ARCHIVE" | "RESHARE", "consent"?: {...} }` (owner only)
+- `ARCHIVE` revokes consent: allowed from `approved` or `pending`; sets `status=archived`, `revoked_at`,
+  `archived_from_status`.
+- `RESHARE` requires fresh `consent`; restores `approved` only if the row was `approved` before revocation, otherwise
+  `pending` (legacy rows without `archived_from_status` go to `pending`).
+
+#### Gallery row attributes added (additive, optional — created by `ensureCoreAppwriteResources`)
+
+| Attribute | Type | Purpose |
+|---|---|---|
+| `consent_scope` | string(32) | Gallery type the user consented to |
+| `consent_version` | string(64) | `GALLERY_CONSENT_VERSION` shown at consent time |
+| `consented_at` | datetime | Server time of explicit consent |
+| `revoked_at` | datetime | Set when the owner archives (revokes) |
+| `archived_from_status` | string(32) | Status before revocation (`approved`/`pending`) |
+| `moderated_by` | string(64) | Admin user id of the moderator decision |
+| `moderated_at` | datetime | Time of moderator decision |
+
+New status value: `rejected` (moderator rejection; row kept as evidence, image removed).
+
+---
+
+### GET/POST /api/gallery/moderation
+
+Moderator review queue for gallery submissions and confessions. **Auth:** only the verified-email account in
+`GALLERY_MODERATOR_EMAILS` (`isGalleryModerator`, `lib/appwrite/server.ts`). Everyone else, including unauthenticated
+callers, gets `404 { "error": "Not found" }` so the endpoint's existence is hidden; the attempt is still audited.
+UI: unlinked `/admin/moderation` page (renders the normal 404 until this API answers 200).
+
+- **GET** — oldest-first `pending` rows: `{ items, total, confessions, confessionsTotal }`. Gallery items carry
+  `id, title, jury, type, createdAt, moderationReason, consentVersion, consentedAt, storagePath, imageUrl`;
+  confessions carry `id, text, createdAt, moderationReason, imageUrl` (public bucket preview/view URLs).
+- **POST** `{ "submissionId": "string", "action": "APPROVE" | "REJECT", "kind"?: "gallery" | "confession", "note"?: "string" }`
+  — `kind` defaults to `gallery`. Only `pending` rows (`409 INVALID_GALLERY_STATUS` otherwise). REJECT keeps the row
+  and removes its stored image (idempotent cleanup). Every attempt is audited via `api.gallery.moderation.audit` logs
+  (actor, action, kind, from/to status).
 
 ---
 
@@ -149,18 +231,42 @@ Read or send messages in an AI Mentor chat session.
 
 ### POST /api/verify-edu
 
-Initiates educational email verification by sending a confirmation email.
+Emails a 6-digit code to an `.edu.tr` mailbox. The code is never returned to the client or logged.
 
-**Auth:** Valid Appwrite JWT required.
+**Auth:** Valid Appwrite JWT required; the account email must be verified (shared reward policy, `lib/reward-policy.ts`).
 
 **Body:**
 ```json
-{ "edu_email": "string" }
+{ "email": "student@university.edu.tr" }
 ```
 
+**Response (200):** `{ "message": string, "delivery": "email", "requiresManualEntry": false, "expiresAt": string }`
+
 **Errors:**
-- `400` — Not a recognized `.edu` or `.edu.tr` address
-- `409` — Already verified
+- `400` — Missing / non-`.edu.tr` address, invalid body
+- `401` — Not signed in
+- `403` — Anonymous account or unverified account email
+- `429` — Rate limited (3 / 10 min per user, 5 / h per target email, 10 / 10 min per IP)
+- `502` — Email delivery failed; the challenge is invalidated (nothing usable is left behind)
+
+**Storage (profiles table, server-only):** `edu_otp_hash` (HMAC-SHA256 over purpose + user id + normalized
+email + challenge id + code, keyed by `EDU_OTP_HMAC_SECRET`), `edu_otp_challenge_id`, `edu_otp_attempts`
+(max 5, atomic bounded increment), `edu_otp_delivery` (`pending` → `sent`; only `sent` codes are accepted),
+`edu_verification_email`, `edu_verification_expires` (15 min). The legacy plaintext column
+`edu_verification_code` is no longer written, is cleared on the next write, and is never compared.
+
+### PUT /api/verify-edu
+
+Confirms the emailed code. **Body:** `{ "code": "123456" }` → `200 { "verified": true, "message": string }`.
+
+Missing, undelivered, expired, superseded, wrong and replayed codes all return the same `400`. The fifth failed
+attempt invalidates the challenge (`429`). A challenge is consumed at most once (ledger key
+`edu-otp-consume:<challengeId>`), even under concurrent requests. Rate limit: 5 / 10 min per user, 20 / 10 min per IP.
+
+### Profile responses (`GET`/`PATCH /api/profile`)
+
+Serialized with the allow-list `CLIENT_PROFILE_FIELDS` (`lib/appwrite/server.ts`). OTP material, Stripe customer /
+subscription ids and the profile row id are never returned; new columns stay private until added to the list.
 
 ---
 
@@ -300,6 +406,64 @@ Collects user feedback.
 
 ---
 
+### GET /api/account/export
+
+Downloads the authenticated user's own data as JSON (`lib/privacy/export.ts`, format `dod-export/2026-10-13.v1`).
+
+- Auth: `Authorization: Bearer <appwrite_jwt>` (401 otherwise).
+- Rate limit: 3 / hour / user (429).
+- Response: `200` JSON with `Cache-Control: no-store` and `Content-Disposition: attachment`.
+  `{ formatVersion, generatedAt, account, data: { profile, analysisHistory, analysisFileSummaries, gallerySubmissions,
+  mentorChats, mentorMessages, aiMemory, billingEvents, promoRedemptions, feedback, confessions, peerReviewsWritten,
+  peerReviewOpenings, portfolios, portfolioPages }, manifest: [{ dataClass, count }], notStoredServerSide }`.
+- Each class copies an explicit column allowlist filtered on the owner column; OTP codes, Stripe ids, raw billing
+  metadata and other users' ids are never exported. Hidden AI memory (`visible_to_user=false`) is included.
+- Any collection failure or a class above 5,000 rows returns `503` — never a silently partial export.
+- Audit: `privacy.export.completed` server log with user id and per-class counts.
+
+---
+
+### GET/POST /api/account/delete
+
+Account deletion via the orchestrator in `lib/privacy/deletion.ts` (contract `dod-deletion/2026-10-13.v1`).
+
+- Auth: `Authorization: Bearer <appwrite_jwt>` (401 otherwise). POST rate limit: 5 / hour / user.
+- `POST` body must be exactly `{ "confirmation": "DELETE_MY_ACCOUNT" }` (400 otherwise).
+- `GET` returns the caller's current request receipt or `{ "request": null }`.
+- Response: `{ request: { status, contractVersion, requestedAt, completedAt, steps[], retentionExceptions[] } }`.
+  `200` when `status = completed`, `202` for `in_progress | partial | blocked`, `503` if the request store is unavailable.
+- Status: `requested → in_progress → partial | blocked → completed`. `partial` = a step failed (retry the POST, finished
+  steps are skipped); `blocked` = a step waits on a dependency or an owner action.
+- Required steps (each must report `done`): `storage_files`, `analysis_history`, `gallery_submissions`, `mentor_chats`,
+  `community_content`, `referral_promo`, `billing_records` (retained under legal hold, 10 y), `stripe_customer`
+  (`manual_required` whenever a Stripe customer exists — owner cancels/redacts in Stripe, then records the receipt via
+  `POST /api/account/delete/manual-step`), `profile`, `auth_account`.
+- Storage: server-only Appwrite table `deletion_requests` (env override `APPWRITE_TABLE_DELETION_REQUESTS_ID`), row id
+  derived from a SHA-256 subject hash; no raw user id, email or content is stored. The tombstone (deny scopes +
+  time-bounded retention exceptions) is written before the first destructive step and is never cleared.
+- Downstream deny: `isSubjectDenied(store, userId, scope)` for `ai_processing | memory_retrieval | new_uploads |
+  public_delivery | analytics_linkage`.
+- Enforced by `checkSubjectAllowed(userId, scope, lang)` (`lib/privacy/subject-guard.ts`) right after auth in
+  `POST /api/ai-generate` (`ai_processing`), `POST /api/gallery` (`new_uploads`) and `GET /api/profile` (`account`:
+  any request blocks profile creation). Denied → `410 { error, code: "ACCOUNT_DELETION_REQUESTED" }`; store lookup
+  error → fail closed with `503 { error, code: "PRIVACY_CHECK_UNAVAILABLE" }`. Denials are cached per instance
+  (tombstones are permanent); allowances are not cached.
+
+### POST /api/account/delete/manual-step
+
+Owner receipt for a deletion step completed by hand (today only the Stripe customer redaction).
+
+- Auth: verified admin only (`isVerifiedAdmin`: admin email + verified); 403 otherwise.
+- Body: `{ "subjectUserId": "<appwrite user id>" | "requestId": "<64-hex subject hash>", "step": "stripe_customer",
+  "note": "<1–500 chars>" }` — exactly one of `subjectUserId` / `requestId` (400 otherwise).
+- Calls `recordManualStepCompletion`; clears the stored Stripe reference and recomputes the request status.
+- Response: `200 { request: <receipt>, alreadyRecorded: boolean }` (idempotent: an already `done` step returns
+  `alreadyRecorded: true` without writing), `404` unknown request, `409 { code: "STEP_NOT_AWAITING_MANUAL_RECEIPT" }`
+  when the step is not `manual_required`, `503` store unavailable.
+- Audit: `privacy.deletion.manual_receipt.admin` log with subject hash, step, operator id and note.
+
+---
+
 ## AI Generation Endpoint
 
 ### POST /api/ai-generate
@@ -312,6 +476,7 @@ Core AI jury analysis endpoint. Handles authentication, Rapido deduction, LLM pr
 ```json
 {
   "operation": "SINGLE_JURY" | "PREMIUM_RESCUE" | "REVISION_SAME" | "REVISION_DIFFERENT" | "MULTI_JURY" | "MULTI_JURY_REVISION" | "DEFENSE" | "AI_MENTOR" | "AUTO_CONCEPT" | "MATERIAL_BOARD" | "DRAWING_CONSISTENCY" | "CIRCULATION_ADJACENCY" | "ACCESSIBILITY_EGRESS" | "SKILL_ROADMAP",
+  "operationId": "optional idempotency key, 8-64 chars [A-Za-z0-9_-]; generated server-side when absent",
   "imageBase64": "base64_encoded_image_data",
   "imageMimeType": "image/jpeg" | "image/png" | "application/pdf",
   "params": {
@@ -338,7 +503,8 @@ Core AI jury analysis endpoint. Handles authentication, Rapido deduction, LLM pr
 4. Applies rate limits per bucket: `analysis` (paid jury/insight operations), `assist` (`AUTO_FILL_FORM`), `chat` (`AI_MENTOR`, `DEFENSE`).
 5. Constructs prompt based on `operation`, `params.harshness`, and persona IDs. Uploaded files are always sent to the model; earlier summaries of the same file are added as context.
 6. Calls the LLM through `lib/ai-completion.ts` with a strict JSON schema (`lib/ai-response-formats.ts`), a 100 s budget and one retry on transient provider errors.
-7. Deducts Rapido atomically (`lib/rapido-balance.ts`) and writes `game_state` in parallel, then returns the result. File-cache and memory-snippet rows are written after the response is sent.
+7. Right before the first LLM call, reserves the base cost for `operationId` in the append-only Rapido journal (`lib/rapido-ledger.ts`, atomic counter debit). Client disconnect (`request.signal`) aborts the provider call.
+8. An accepted result settles the reservation exactly once (extra cost such as `REVISION_DIFFERENT` or metered mentor tokens is debited atomically) and writes `game_state`. Every other exit — validation error, invalid/refused/truncated output, provider failure, timeout, cancellation — voids the reservation: zero Rapido. File-cache and memory-snippet rows are written after the response is sent.
 
 Design insight operations return `{ "critique": "string", "score": number }`. `ACCESSIBILITY_EGRESS` is an advisory visual pre-check, not a code-compliance certification. `SKILL_ROADMAP` combines `currentCritique` with the authenticated user's recent analysis-memory snippets.
 
@@ -359,7 +525,11 @@ Design insight operations return `{ "critique": "string", "score": number }`. `A
 **Errors:**
 - `401` — Invalid or missing JWT
 - `402` — Insufficient Rapido (`INSUFFICIENT_RAPIDO`)
+- `400` — Malformed `operationId` (`INVALID_OPERATION_ID`)
 - `403` — Premium required (`PREMIUM_REQUIRED`)
+- `409` — `operationId` already used: `OPERATION_ALREADY_COMPLETED` (settled, not charged again) or `OPERATION_IN_PROGRESS` (open or voided — send a new id)
+- `422` — Provider safety refusal (`AI_REFUSED`); Rapido is not charged
+- `499` — Client cancelled the request (`REQUEST_CANCELLED`); Rapido is not charged
 - `429` — Rate limit exceeded (`RATE_LIMITED`, includes `waitSeconds`)
 - `502` — AI provider failure (`AI_PROVIDER_FAILURE`) or unusable model output (`INVALID_AI_RESULT`); Rapido is not charged
 - `503` — `AI_API_KEY` not configured, or provider credits restricted (`AI_PROVIDER_CREDITS_REQUIRED`)

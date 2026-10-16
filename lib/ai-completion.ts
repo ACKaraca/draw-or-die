@@ -15,6 +15,10 @@ const DEFAULT_AI_MODEL_FALLBACKS = 'google/gemini-2.5-flash-lite';
 
 // Stays below the client's 120s timeout so users get a real error instead of a hung request.
 const AI_PROVIDER_TOTAL_BUDGET_MS = 100_000;
+const AI_PROVIDER_MIN_ATTEMPT_MS = 1_000;
+// Per-attempt output cap; with AI_PROVIDER_MAX_ATTEMPTS this bounds the output a single operation can buy.
+const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+const MAX_OUTPUT_TOKENS_CEILING = 65_536;
 const AI_PROVIDER_MIN_RETRY_BUDGET_MS = 25_000;
 const AI_PROVIDER_MAX_ATTEMPTS = 2;
 const AI_PROVIDER_RETRY_DELAY_MS = 600;
@@ -270,10 +274,78 @@ type ProviderFailureError = Error & {
 export type CallAIMeta = {
   operation: string;
   requestId: string;
+  /** Idempotency key of the billed operation, for log correlation with the Rapido ledger. */
+  operationId?: string;
+  /** Caller cancellation (e.g. `request.signal` on client disconnect). Stops the call and any retry. */
+  signal?: AbortSignal;
+  /** Total budget across all attempts; clamped to the default 100s budget. */
+  deadlineMs?: number;
 };
+
+/** Thrown when the caller's signal aborted the operation. Never retried; never billable. */
+export class AiRequestCancelledError extends Error {
+  constructor(message = 'AI request cancelled by the caller') {
+    super(message);
+    this.name = 'AiRequestCancelledError';
+  }
+}
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError');
+}
+
+function resolveMaxOutputTokens(): number {
+  const raw = Number(readCleanEnv('AI_MAX_OUTPUT_TOKENS'));
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_MAX_OUTPUT_TOKENS;
+  return Math.min(MAX_OUTPUT_TOKENS_CEILING, Math.floor(raw));
+}
+
+type AttemptSignal = {
+  signal: AbortSignal;
+  didTimeOut: () => boolean;
+  dispose: () => void;
+};
+
+// One controller per attempt: aborts on the operation deadline OR on caller cancellation.
+// Manual wiring instead of AbortSignal.any/timeout so it works in every runtime and with fake timers.
+function createAttemptSignal(deadline: number, callerSignal?: AbortSignal): AttemptSignal {
+  const controller = new AbortController();
+  let hasTimedOut = false;
+  const timer = setTimeout(() => {
+    hasTimedOut = true;
+    controller.abort();
+  }, Math.max(AI_PROVIDER_MIN_ATTEMPT_MS, deadline - Date.now()));
+  const onCallerAbort = () => controller.abort();
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort();
+    else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    didTimeOut: () => hasTimedOut,
+    dispose: () => {
+      clearTimeout(timer);
+      callerSignal?.removeEventListener('abort', onCallerAbort);
+    },
+  };
+}
+
+function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new AiRequestCancelledError());
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new AiRequestCancelledError());
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function resolveRetryDelayMs(response: Response | null): number {
@@ -328,8 +400,15 @@ export async function callAI(
   });
 
   const { href: validatedBaseUrl, hostname: aiHostname } = resolveAiBaseUrl(cfg.baseUrl);
+  const callerSignal = meta.signal;
+  if (callerSignal?.aborted) throw new AiRequestCancelledError();
   const requestStartedAt = Date.now();
-  const deadline = requestStartedAt + AI_PROVIDER_TOTAL_BUDGET_MS;
+  const budgetMs = Math.min(
+    AI_PROVIDER_TOTAL_BUDGET_MS,
+    Math.max(AI_PROVIDER_MIN_ATTEMPT_MS, meta.deadlineMs ?? AI_PROVIDER_TOTAL_BUDGET_MS),
+  );
+  const deadline = requestStartedAt + budgetMs;
+  const maxOutputTokens = resolveMaxOutputTokens();
   const endpoint = `${validatedBaseUrl}/chat/completions`;
   const isVercelGateway = aiHostname === 'ai-gateway.vercel.sh';
   const isGoogleDirect = aiHostname === 'generativelanguage.googleapis.com';
@@ -343,6 +422,7 @@ export async function callAI(
     const requestBody: Record<string, unknown> = {
       model,
       messages: [{ role: 'user', content }],
+      max_tokens: maxOutputTokens,
     };
     if (effectiveResponseFormat) {
       requestBody.response_format = effectiveResponseFormat;
@@ -372,7 +452,7 @@ export async function callAI(
     apiKeyFingerprint: fingerprintApiKey(cfg.apiKey),
   });
 
-  const executeProviderRequest = async (model: string): Promise<Response> => {
+  const executeProviderRequest = async (model: string, attemptSignal: AbortSignal): Promise<Response> => {
     attemptedModels.push(model);
     const requestBodyJson = JSON.stringify(buildRequestBody(model));
     return fetch(endpoint, {
@@ -382,7 +462,7 @@ export async function callAI(
         Authorization: `Bearer ${cfg.apiKey}`,
       },
       body: requestBodyJson,
-      signal: AbortSignal.timeout(Math.max(1_000, deadline - Date.now())),
+      signal: attemptSignal,
     });
   };
 
@@ -454,8 +534,11 @@ export async function callAI(
     return providerError;
   };
 
-  const buildNetworkFailureError = (error: unknown, modelUsed: string): ProviderFailureError => {
-    const timedOut = isAbortError(error);
+  const buildNetworkFailureError = (
+    error: unknown,
+    modelUsed: string,
+    timedOut = isAbortError(error),
+  ): ProviderFailureError => {
     const providerError = new Error(
       timedOut
         ? `AI provider timed out after ${Date.now() - requestStartedAt}ms`
@@ -475,68 +558,119 @@ export async function callAI(
     return providerError;
   };
 
-  const hasRetryBudget = () => deadline - Date.now() > AI_PROVIDER_MIN_RETRY_BUDGET_MS;
-  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const buildTerminalFailureError = (
+    modelUsed: string,
+    failureStage: 'refusal' | 'output_truncated',
+    providerStatus: number,
+  ): ProviderFailureError => {
+    const providerError = new Error(
+      failureStage === 'refusal' ? 'AI provider refused the request' : 'AI output hit the token cap',
+    ) as ProviderFailureError;
+    providerError.isProviderFailure = true;
+    providerError.providerStatus = providerStatus;
+    providerError.providerDebug = {
+      ...buildProviderDebugBase(modelUsed),
+      durationMs: Date.now() - requestStartedAt,
+      failureStage,
+      maxOutputTokens,
+      attemptedModels: [...attemptedModels],
+      primaryModel: cfg.model,
+    };
+    return providerError;
+  };
+
+  // A retry is allowed only if it still fits the deadline after its back-off delay.
+  const canAffordRetry = (delayMs: number) => deadline - Date.now() - delayMs > AI_PROVIDER_MIN_RETRY_BUDGET_MS;
+  const throwIfCancelled = () => {
+    if (callerSignal?.aborted) throw new AiRequestCancelledError();
+  };
 
   let model = cfg.model;
   for (let attempt = 0; ; attempt += 1) {
-    const canRetry = attempt < AI_PROVIDER_MAX_ATTEMPTS - 1 && hasRetryBudget();
+    const hasAttemptsLeft = attempt < AI_PROVIDER_MAX_ATTEMPTS - 1;
+    throwIfCancelled();
 
-    let res: Response;
-    try {
-      res = await executeProviderRequest(model);
-    } catch (error) {
-      // Timeouts are not retried: the budget is already spent and the client is waiting.
-      if (canRetry && !isAbortError(error)) {
-        model = fallbackModel ?? model;
-        await sleep(AI_PROVIDER_RETRY_DELAY_MS);
-        continue;
-      }
-      throw buildNetworkFailureError(error, model);
-    }
-
-    if (!res.ok) {
-      const failure = await parseFailedProviderResponse(res);
-      const isCreditRestricted = shouldRetryWithModelFallback({
-        aiHostname,
-        providerStatus: res.status,
-        parsedProviderError: failure.parsedProviderError,
-      });
-      const isTransient = RETRYABLE_PROVIDER_STATUSES.has(res.status);
-
-      if (canRetry && ((isCreditRestricted && fallbackModel && fallbackModel !== model) || isTransient)) {
-        if (isTransient) await sleep(resolveRetryDelayMs(res));
-        model = fallbackModel ?? model;
-        continue;
-      }
-
-      throw buildProviderFailureError({
-        response: res,
-        modelUsed: model,
-        providerRequestId: failure.providerRequestId,
-        parsedProviderError: failure.parsedProviderError,
-      });
-    }
-
+    const attemptSignal = createAttemptSignal(deadline, callerSignal);
     let data: unknown;
     try {
-      data = await res.json();
-    } catch (error) {
-      if (canRetry) {
-        model = fallbackModel ?? model;
-        continue;
+      let res: Response;
+      try {
+        res = await executeProviderRequest(model, attemptSignal.signal);
+      } catch (error) {
+        throwIfCancelled();
+        const timedOut = attemptSignal.didTimeOut() || isAbortError(error);
+        // Timeouts are not retried: the budget is already spent and the client is waiting.
+        if (!timedOut && hasAttemptsLeft && canAffordRetry(AI_PROVIDER_RETRY_DELAY_MS)) {
+          await abortableSleep(AI_PROVIDER_RETRY_DELAY_MS, callerSignal);
+          model = fallbackModel ?? model;
+          continue;
+        }
+        throw buildNetworkFailureError(error, model, timedOut);
       }
-      throw buildNetworkFailureError(error, model);
+
+      if (!res.ok) {
+        const failure = await parseFailedProviderResponse(res);
+        throwIfCancelled();
+        const isCreditRestricted = shouldRetryWithModelFallback({
+          aiHostname,
+          providerStatus: res.status,
+          parsedProviderError: failure.parsedProviderError,
+        });
+        // Only 408/425/429/5xx are transient; other 4xx (auth, validation, policy) fail fast.
+        const isTransient = RETRYABLE_PROVIDER_STATUSES.has(res.status);
+        const retryDelayMs = isTransient ? resolveRetryDelayMs(res) : 0;
+        const canSwitchModel = Boolean(isCreditRestricted && fallbackModel && fallbackModel !== model);
+
+        if (hasAttemptsLeft && canAffordRetry(retryDelayMs) && (canSwitchModel || isTransient)) {
+          if (retryDelayMs > 0) await abortableSleep(retryDelayMs, callerSignal);
+          model = fallbackModel ?? model;
+          continue;
+        }
+
+        throw buildProviderFailureError({
+          response: res,
+          modelUsed: model,
+          providerRequestId: failure.providerRequestId,
+          parsedProviderError: failure.parsedProviderError,
+        });
+      }
+
+      try {
+        data = await res.json();
+      } catch (error) {
+        throwIfCancelled();
+        const timedOut = attemptSignal.didTimeOut();
+        if (!timedOut && hasAttemptsLeft && canAffordRetry(0)) {
+          model = fallbackModel ?? model;
+          continue;
+        }
+        throw buildNetworkFailureError(error, model, timedOut);
+      }
+    } finally {
+      attemptSignal.dispose();
     }
+    throwIfCancelled();
 
     const payload = toRecord(data);
     const choices = Array.isArray(payload?.choices) ? payload.choices : [];
-    const message = toRecord(toRecord(choices[0])?.message);
+    const firstChoice = toRecord(choices[0]);
+    const message = toRecord(firstChoice?.message);
     const messageContent = typeof message?.content === 'string' ? message.content : '';
+    const finishReason = typeof firstChoice?.finish_reason === 'string' ? firstChoice.finish_reason : null;
+    const refusal = typeof message?.refusal === 'string' && message.refusal.trim() ? message.refusal : null;
     const usage = parseUsageFromAiResponse(data);
+
+    // Safety refusals and truncated output are deterministic for the same input: never retried.
+    if (finishReason === 'content_filter' || (refusal && !messageContent.trim())) {
+      throw buildTerminalFailureError(model, 'refusal', 422);
+    }
+    if (finishReason === 'length') {
+      throw buildTerminalFailureError(model, 'output_truncated', 502);
+    }
 
     logServerInfo('api.ai-generate.usage', {
       requestId: meta.requestId,
+      operationId: meta.operationId ?? null,
       operation: meta.operation,
       model: typeof payload?.model === 'string' ? payload.model : model,
       attempts: attemptedModels.length,
