@@ -1,3 +1,5 @@
+import { randomInt } from 'node:crypto';
+
 export type FakeRow = Record<string, unknown> & { $id: string };
 export type FakeCall = { method: string; tableId: string };
 
@@ -28,7 +30,7 @@ export class FakeTables {
   }
 
   private async yieldRandomly(): Promise<void> {
-    const hops = Math.floor(Math.random() * 4);
+    const hops = randomInt(4);
     for (let i = 0; i < hops; i += 1) await Promise.resolve();
   }
 

@@ -382,6 +382,19 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   const messages = getMessages(request);
+
+  // Shape checks run first: they have no side effects and an empty code never reaches verification.
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: messages.invalidBody }, { status: 400 });
+  }
+  const code = readStringField(body, 'code');
+  if (!code) {
+    return NextResponse.json({ error: messages.codeRequired }, { status: 400 });
+  }
+
   try {
     const user = await getAuthenticatedUserFromRequest(request);
     if (!user) {
@@ -396,18 +409,6 @@ export async function PUT(request: NextRequest) {
     ]);
     if (isLimited) {
       return NextResponse.json({ error: messages.tooMany }, { status: 429 });
-    }
-
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return NextResponse.json({ error: messages.invalidBody }, { status: 400 });
-    }
-
-    const code = readStringField(body, 'code');
-    if (!code) {
-      return NextResponse.json({ error: messages.codeRequired }, { status: 400 });
     }
 
     const eligibility = evaluateRewardEligibility({ kind: 'edu_verification', identity: user });

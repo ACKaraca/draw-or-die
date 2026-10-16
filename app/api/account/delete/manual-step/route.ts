@@ -22,15 +22,17 @@ type ParsedBody = { subjectHash: string; step: (typeof MANUAL_STEPS)[number]; no
 function parseBody(body: unknown): ParsedBody | null {
   if (!body || typeof body !== 'object') return null;
   const { subjectUserId, requestId, step, note } = body as Record<string, unknown>;
-  if (!MANUAL_STEPS.includes(step as ParsedBody['step'])) return null;
+  // Take the step from the allow-list itself so no request string is ever used as a property name.
+  const manualStep = MANUAL_STEPS.find((id) => id === step);
+  if (!manualStep) return null;
   if (typeof note !== 'string' || !note.trim() || note.length > NOTE_MAX) return null;
 
   // requestId is the subject hash shown in deletion logs; exactly one identifier is accepted.
   if (typeof requestId === 'string' && subjectUserId === undefined && SUBJECT_HASH_PATTERN.test(requestId)) {
-    return { subjectHash: requestId, step: step as ParsedBody['step'], note: note.trim() };
+    return { subjectHash: requestId, step: manualStep, note: note.trim() };
   }
   if (typeof subjectUserId === 'string' && requestId === undefined && USER_ID_PATTERN.test(subjectUserId)) {
-    return { subjectHash: computeSubjectHash(subjectUserId), step: step as ParsedBody['step'], note: note.trim() };
+    return { subjectHash: computeSubjectHash(subjectUserId), step: manualStep, note: note.trim() };
   }
   return null;
 }

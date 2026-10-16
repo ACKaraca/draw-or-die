@@ -313,8 +313,8 @@ async function creditFractionCents(
         max: RAPIDO_PRECISION_SCALE - 1,
       });
       return read(row);
-    } catch (error) {
-      lastError = error;
+    } catch {
+      // The fraction would overflow (or the write raced): fall through to the carry path.
     }
     try {
       await tables.decrementRowColumn<UserProfileRow>({

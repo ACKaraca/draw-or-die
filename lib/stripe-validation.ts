@@ -38,8 +38,8 @@ export function resolveExpectedLivemode(): boolean | null {
   if (explicit === 'false') return false;
 
   const key = readEnv('STRIPE_SECRET_KEY');
-  if (key.startsWith('sk_live_') || key.startsWith('rk_live_')) return true;
-  if (key.startsWith('sk_test_') || key.startsWith('rk_test_')) return false;
+  if (/^[rs]k_live_/.test(key)) return true;
+  if (/^[rs]k_test_/.test(key)) return false;
   return null;
 }
 

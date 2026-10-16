@@ -37,7 +37,10 @@ async function main() {
   });
 
   const payload = await response.json().catch(() => ({}));
-  console.log(JSON.stringify({ httpStatus: response.status, mode: args.execute ? 'EXECUTE' : 'DRY-RUN', ...payload }, null, 2));
+  // JSON.stringify escapes control characters, so server-provided strings cannot forge extra output lines.
+  process.stdout.write(
+    `${JSON.stringify({ httpStatus: response.status, mode: args.execute ? 'EXECUTE' : 'DRY-RUN', ...payload }, null, 2)}\n`,
+  );
   if (!response.ok) process.exit(1);
 }
 
